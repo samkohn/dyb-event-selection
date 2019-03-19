@@ -15,13 +15,15 @@ def unsigned_int_value():
 def float_value():
     return array('f', [0])
 
-def assign_value(buf_value, ttree, branch_name, type_cast=None, index=0):
+def fetch_value(ttree, branch_name, type_cast=None):
     try:
         new_value = getattr(ttree, branch_name)
-        buf_value[index] = new_value
     except TypeError:
         new_value = fetch_annoying_value(ttree, branch_name, type_cast)
-        buf_value[index] = new_value
+    return new_value
+
+def assign_value(buf_value, new_value, index=0):
+    buf_value[index] = new_value
 
 def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
@@ -85,22 +87,29 @@ def main():
         adSimple.LoadTree(entry_number)
         adSimple.GetEntry(entry_number)
 
-        assign_value(buf.triggerNumber, calibStats, 'triggerNumber')
-        assign_value(buf.timeStamp_seconds, calibStats, 'context.mTimeStamp.mSec', int)
-        assign_value(buf.timeStamp_nanoseconds, calibStats, 'context.mTimeStamp.mNanoSec', int)
-        assign_value(buf.detector, calibStats, 'context.mDetId', int)
-        assign_value(buf.site, adSimple, 'context.mSite', int)
-        assign_value(buf.triggerType, adSimple, 'triggerType', int)
-        assign_value(buf.nHit, calibStats, 'nHit')
-        assign_value(buf.fQuad, calibStats, 'Quadrant')
-        assign_value(buf.fMax, calibStats, 'MaxQ')
-        assign_value(buf.fPSD_t1, calibStats, 'time_PSD')
-        assign_value(buf.fPSD_t2, calibStats, 'time_PSD1')
-        assign_value(buf.f2inch_maxQ, calibStats, 'MaxQ_2inchPMT')
-        assign_value(buf.energy, adSimple, 'energy', float)
-        assign_value(buf.x, adSimple, 'x', float)
-        assign_value(buf.y, adSimple, 'y', float)
-        assign_value(buf.z, adSimple, 'z', float)
+        assign_value(buf.triggerNumber, fetch_value(calibStats,
+            'triggerNumber'))
+        assign_value(buf.timeStamp_seconds, fetch_value(calibStats,
+            'context.mTimeStamp.mSec', int))
+        assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
+            'context.mTimeStamp.mNanoSec', int))
+        assign_value(buf.detector, fetch_value(calibStats,
+            'context.mDetId', int))
+        assign_value(buf.site, fetch_value(adSimple, 'context.mSite',
+            int))
+        assign_value(buf.triggerType, fetch_value(adSimple,
+            'triggerType', int))
+        assign_value(buf.nHit, fetch_value(calibStats, 'nHit'))
+        assign_value(buf.fQuad, fetch_value(calibStats, 'Quadrant'))
+        assign_value(buf.fMax, fetch_value(calibStats, 'MaxQ'))
+        assign_value(buf.fPSD_t1, fetch_value(calibStats, 'time_PSD'))
+        assign_value(buf.fPSD_t2, fetch_value(calibStats, 'time_PSD1'))
+        assign_value(buf.f2inch_maxQ, fetch_value(calibStats,
+            'MaxQ_2inchPMT'))
+        assign_value(buf.energy, fetch_value(adSimple, 'energy', float))
+        assign_value(buf.x, fetch_value(adSimple, 'x', float))
+        assign_value(buf.y, fetch_value(adSimple, 'y', float))
+        assign_value(buf.z, vetch_value(adSimple, 'z', float))
         outdata.Fill()
 
     outfile.Write()

@@ -29,6 +29,8 @@ Data format notes
 
 ### Tags
 
+ - Flasher
+ - 2-inch flasher
  - Muon
    - WP Muon
    - AD Muon
@@ -52,6 +54,8 @@ Data format notes
 
 ### Processed data
 
+ - flasher ID fID
+ - flasher PSD ID fPSD
  - number of muons within previous 5s
  - [time to each muon within previous 5s]
  - time to previous WP muon

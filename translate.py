@@ -45,6 +45,7 @@ def main():
     buf.site = int_value()
     buf.triggerType = unsigned_int_value()
     buf.nHit = int_value()
+    buf.charge = float_value()
     buf.fQuad = float_value()
     buf.fMax = float_value()
     buf.fPSD_t1 = float_value()
@@ -66,6 +67,7 @@ def main():
     outdata.Branch('site', buf.site, 'site/I')
     outdata.Branch('triggerType', buf.triggerType, 'triggerType/i')
     outdata.Branch('nHit', buf.nHit, 'nHit/I')
+    outdata.Branch('charge', buf.charge, 'charge/F')
     outdata.Branch('fQuad', buf.fQuad, 'fQuad/F')
     outdata.Branch('fMax', buf.fMax, 'fMax/F')
     outdata.Branch('fPSD_t1', buf.fPSD_t1, 'fPSD_t1/F')
@@ -100,6 +102,8 @@ def main():
         assign_value(buf.triggerType, fetch_value(adSimple,
             'triggerType', int))
         assign_value(buf.nHit, fetch_value(calibStats, 'nHit'))
+        assign_value(buf.charge, fetch_value(calibStats,
+            'NominalCharge', float))
         assign_value(buf.fQuad, fetch_value(calibStats, 'Quadrant'))
         assign_value(buf.fMax, fetch_value(calibStats, 'MaxQ'))
         assign_value(buf.fPSD_t1, fetch_value(calibStats, 'time_PSD'))

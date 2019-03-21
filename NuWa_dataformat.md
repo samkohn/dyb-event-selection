@@ -16,6 +16,7 @@ Metadata:
 Physics data:
 - Trigger time (context.mTimeStamp)
 - NHit (nHit)
+- Event Charge (PE) (NominalCharge)
 - fQuad (Quadrant)
 - fMax (MaxQ)
 - Flasher PSD t1 (time\_PSD)

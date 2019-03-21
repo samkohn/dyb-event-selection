@@ -19,6 +19,7 @@ Data format notes
  - Reconstructed position
  - Trigger time
  - NHit (number of hit PMTs)
+ - NominalCharge (number of photoelectrons)
  - Maximum charge on any 2-inch PMT
  - Flasher PSD t1 (200ns/400ns)
  - Flasher PSD t2 (150ns/400ns)

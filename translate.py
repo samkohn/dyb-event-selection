@@ -17,7 +17,7 @@ def float_value():
 
 def fetch_value(ttree, branch_name, type_cast=None):
     try:
-        new_value = getattr(ttree, branch_name)
+        new_value = type_cast(getattr(ttree, branch_name))
     except TypeError:
         new_value = fetch_annoying_value(ttree, branch_name, type_cast)
     return new_value
@@ -90,7 +90,7 @@ def main():
         adSimple.GetEntry(entry_number)
 
         assign_value(buf.triggerNumber, fetch_value(calibStats,
-            'triggerNumber'))
+            'triggerNumber', int))
         assign_value(buf.timeStamp_seconds, fetch_value(calibStats,
             'context.mTimeStamp.mSec', int))
         assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
@@ -101,19 +101,19 @@ def main():
             int))
         assign_value(buf.triggerType, fetch_value(adSimple,
             'triggerType', int))
-        assign_value(buf.nHit, fetch_value(calibStats, 'nHit'))
+        assign_value(buf.nHit, fetch_value(calibStats, 'nHit', int))
         assign_value(buf.charge, fetch_value(calibStats,
             'NominalCharge', float))
-        assign_value(buf.fQuad, fetch_value(calibStats, 'Quadrant'))
-        assign_value(buf.fMax, fetch_value(calibStats, 'MaxQ'))
-        assign_value(buf.fPSD_t1, fetch_value(calibStats, 'time_PSD'))
-        assign_value(buf.fPSD_t2, fetch_value(calibStats, 'time_PSD1'))
+        assign_value(buf.fQuad, fetch_value(calibStats, 'Quadrant', float))
+        assign_value(buf.fMax, fetch_value(calibStats, 'MaxQ', float))
+        assign_value(buf.fPSD_t1, fetch_value(calibStats, 'time_PSD', float))
+        assign_value(buf.fPSD_t2, fetch_value(calibStats, 'time_PSD1', float))
         assign_value(buf.f2inch_maxQ, fetch_value(calibStats,
-            'MaxQ_2inchPMT'))
+            'MaxQ_2inchPMT', float))
         assign_value(buf.energy, fetch_value(adSimple, 'energy', float))
         assign_value(buf.x, fetch_value(adSimple, 'x', float))
         assign_value(buf.y, fetch_value(adSimple, 'y', float))
-        assign_value(buf.z, vetch_value(adSimple, 'z', float))
+        assign_value(buf.z, fetch_value(adSimple, 'z', float))
         outdata.Fill()
 
     outfile.Write()

@@ -5,7 +5,7 @@ Process the basic data by computing various cuts, quantities and tags.
 from __future__ import print_function
 from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
-from muons import isWSMuon, isADMuon
+from muons import isWSMuon, isADMuon, isShowerMuon
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, unsigned_int_value)
 

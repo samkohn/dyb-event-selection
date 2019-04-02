@@ -92,8 +92,8 @@ def main():
             recent_shower_muons[detector].append(timestamp)
 
         # Remove muons that happened greater than MUON_COUNT_TIME ago
-        while (timestamp - recent_shower_muons[detector][0] >
-                MUON_COUNT_TIME):
+        while len(recent_shower_muons) > 0 and (timestamp
+                - recent_shower_muons[detector][0] > MUON_COUNT_TIME):
             recent_shower_muons[detector].popleft()
 
         assign_value(buf.dt_previous_WSMuon, timestamp -

@@ -10,6 +10,8 @@ class TreeBuffer():
 
 def int_value():
     return array('i', [0])
+def long_value():
+    return array('l', [0])
 def unsigned_int_value():
     return array('I', [0])
 def float_value():
@@ -41,6 +43,7 @@ def main():
     buf.triggerNumber = int_value()
     buf.timeStamp_seconds = int_value()
     buf.timeStamp_nanoseconds = int_value()
+    buf.timeStamp = long_value()
     buf.detector = int_value()
     buf.site = int_value()
     buf.triggerType = unsigned_int_value()
@@ -63,6 +66,7 @@ def main():
             'timeStamp_seconds/I')
     outdata.Branch('timestamp_nanoseconds', buf.timeStamp_nanoseconds,
             'timeStamp_nanoseconds/I')
+    outdata.Branch('timeStamp', buf.timeStamp, 'timeStamp/L')
     outdata.Branch('detector', buf.detector, 'detector/I')
     outdata.Branch('site', buf.site, 'site/I')
     outdata.Branch('triggerType', buf.triggerType, 'triggerType/i')
@@ -95,6 +99,8 @@ def main():
             'context.mTimeStamp.mSec', int))
         assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
             'context.mTimeStamp.mNanoSec', int))
+        assign_value(buf.timeStamp, buf.timeStamp_seconds[0]*(10**9) +
+                buf.timeStamp_nanoseconds[0])
         assign_value(buf.detector, fetch_value(calibStats,
             'context.mDetId', int))
         assign_value(buf.site, fetch_value(adSimple, 'context.mSite',

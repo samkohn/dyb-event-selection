@@ -30,6 +30,7 @@ def main():
     buf.dt_previous_ADMuon = long_value()
     buf.dt_previous_ShowerMuon = long_value()
     buf.num_ShowerMuons_5sec = unsigned_int_value()
+    buf.dts_ShowerMuons_5sec = long_value(20)
 
     outdata.Branch('fID', buf.fID, 'fID/F')
     outdata.Branch('fPSD', buf.fPSD, 'fPSD/F')
@@ -46,6 +47,8 @@ def main():
             'dt_previous_ShowerMuon/L')
     outdata.Branch('num_ShowerMuons_5sec', buf.num_ShowerMuons_5sec,
             'num_ShowerMuons_5sec/i')
+    outdata.Branch('dts_ShowerMuons_5sec', buf.dts_showerMuons_5sec,
+            'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
 
     last_WSMuon_time = 0
     last_ADMuon_time = {n:0 for n in range(9)}
@@ -96,6 +99,9 @@ def main():
                 - recent_shower_muons[detector][0] > MUON_COUNT_TIME):
             recent_shower_muons[detector].popleft()
 
+        recent_dts = [timestamp - muon_time for muon_time in
+                recent_shower_muons[detector]]
+
         assign_value(buf.dt_previous_WSMuon, timestamp -
                 last_WSMuon_time)
         assign_value(buf.dt_previous_ADMuon, timestamp -
@@ -104,6 +110,8 @@ def main():
                 last_ShowerMuon_time[detector])
         assign_value(buf.num_ShowerMuons_5sec,
                 len(recent_shower_muons[detector]))
+        assign_value(buf.dts_ShowerMuons_5sec, recent_dts, slice(0,
+                len(recent_dts)))
 
         outdata.Fill()
 

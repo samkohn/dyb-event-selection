@@ -3,6 +3,9 @@ Process the basic data by computing various cuts, quantities and tags.
 
 '''
 from __future__ import print_function
+
+from collections import deque
+
 from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
 from muons import isWSMuon, isADMuon, isShowerMuon
@@ -23,6 +26,10 @@ def main():
     buf.tag_WSMuon = unsigned_int_value()
     buf.tag_ADMuon = unsigned_int_value()
     buf.tag_ShowerMuon = unsigned_int_value()
+    buf.dt_previous_WSMuon = unsigned_int_value()
+    buf.dt_previous_ADMuon = unsigned_int_value()
+    buf.dt_previous_ShowerMuon = unsigned_int_value()
+    buf.num_ShowerMuons_5sec = unsigned_int_value()
 
     outdata.Branch('fID', buf.fID, 'fID/F')
     outdata.Branch('fPSD', buf.fPSD, 'fPSD/F')
@@ -31,11 +38,26 @@ def main():
     outdata.Branch('tag_ADMuon', buf.tag_ADMuon, 'tag_ADMuon/i')
     outdata.Branch('tag_ShowerMuon', buf.tag_ShowerMuon,
             'tag_ShowerMuon/i')
+    outdata.Branch('dt_previous_WSMuon', buf.dt_previous_WSMuon,
+            'dt_previous_WSMuon/i')
+    outdata.Branch('dt_previous_ADMuon', buf.dt_previous_ADMuon,
+            'dt_previous_ADMuon/i')
+    outdata.Branch('dt_previous_ShowerMuon', buf.dt_previous_ShowerMuon,
+            'dt_previous_ShowerMuon/i')
+    outdata.Branch('num_ShowerMuons_5sec', buf.num_ShowerMuons_5sec,
+            'num_ShowerMuons_5sec/i')
+
+    last_WSMuon_time = 0
+    last_ADMuon_time = {n:0 for n in range(9)}
+    last_ShowerMuon_time = {n:0 for n in range(9)}
+    MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
+    recent_shower_muons = {n:deque() for n in range(9)}
 
     for event_number in xrange(indata.GetEntries()):
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
 
+        timestamp = fetch_value(indata, 'timeStamp', int)
         detector = fetch_value(indata, 'detector', int)
         nHit = fetch_value(indata, 'nHit', int)
         charge = fetch_value(indata, 'charge', float)
@@ -60,6 +82,28 @@ def main():
         except:
             print(fMax, fQuad, fPSD_t1, fPSD_t2)
             raise
+
+        if event_isWSMuon:
+            last_WSMuon_time = timestamp
+        if event_isADMuon:
+            last_ADMuon_time[detector] = timestamp
+        if event_isShowerMuon:
+            last_ShowerMuon_time[detector] = timestamp
+            recent_shower_muons[detector].append(timestamp)
+
+        # Remove muons that happened greater than MUON_COUNT_TIME ago
+        while (timestamp - recent_shower_muons[detector][0] >
+                MUON_COUNT_TIME):
+            recent_shower_muons[detector].popleft()
+
+        assign_value(buf.dt_previous_WSMuon, timestamp -
+                last_WSMuon_time)
+        assign_value(buf.dt_previous_ADMuon, timestamp -
+                last_ADMuon_time[detector])
+        assign_value(buf.dt_previous_ShowerMuon, timestamp -
+                last_ShowerMuon_time[detector])
+        assign_value(buf.num_ShowerMuons_5sec,
+                len(recent_shower_muons[detector]))
 
         outdata.Fill()
 

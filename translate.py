@@ -8,14 +8,14 @@ from ROOT import TTree, TFile
 class TreeBuffer():
     pass
 
-def int_value():
-    return array('i', [0])
-def long_value():
-    return array('l', [0])
-def unsigned_int_value():
-    return array('I', [0])
-def float_value():
-    return array('f', [0])
+def int_value(length=1):
+    return array('i', [0]*length)
+def long_value(length=1):
+    return array('l', [0]*length)
+def unsigned_int_value(length=1):
+    return array('I', [0]*length)
+def float_value(length=1):
+    return array('f', [0]*length)
 
 def fetch_value(ttree, branch_name, type_cast=None):
     try:

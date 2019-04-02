@@ -10,7 +10,7 @@ from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
 from muons import isWSMuon, isADMuon, isShowerMuon
 from translate import (TreeBuffer, float_value, assign_value,
-        fetch_value, unsigned_int_value)
+        fetch_value, unsigned_int_value, long_value)
 
 def main():
 
@@ -26,9 +26,9 @@ def main():
     buf.tag_WSMuon = unsigned_int_value()
     buf.tag_ADMuon = unsigned_int_value()
     buf.tag_ShowerMuon = unsigned_int_value()
-    buf.dt_previous_WSMuon = unsigned_int_value()
-    buf.dt_previous_ADMuon = unsigned_int_value()
-    buf.dt_previous_ShowerMuon = unsigned_int_value()
+    buf.dt_previous_WSMuon = long_value()
+    buf.dt_previous_ADMuon = long_value()
+    buf.dt_previous_ShowerMuon = long_value()
     buf.num_ShowerMuons_5sec = unsigned_int_value()
 
     outdata.Branch('fID', buf.fID, 'fID/F')
@@ -39,11 +39,11 @@ def main():
     outdata.Branch('tag_ShowerMuon', buf.tag_ShowerMuon,
             'tag_ShowerMuon/i')
     outdata.Branch('dt_previous_WSMuon', buf.dt_previous_WSMuon,
-            'dt_previous_WSMuon/i')
+            'dt_previous_WSMuon/L')
     outdata.Branch('dt_previous_ADMuon', buf.dt_previous_ADMuon,
-            'dt_previous_ADMuon/i')
+            'dt_previous_ADMuon/L')
     outdata.Branch('dt_previous_ShowerMuon', buf.dt_previous_ShowerMuon,
-            'dt_previous_ShowerMuon/i')
+            'dt_previous_ShowerMuon/L')
     outdata.Branch('num_ShowerMuons_5sec', buf.num_ShowerMuons_5sec,
             'num_ShowerMuons_5sec/i')
 
@@ -92,7 +92,7 @@ def main():
             recent_shower_muons[detector].append(timestamp)
 
         # Remove muons that happened greater than MUON_COUNT_TIME ago
-        while len(recent_shower_muons) > 0 and (timestamp
+        while len(recent_shower_muons[detector]) > 0 and (timestamp
                 - recent_shower_muons[detector][0] > MUON_COUNT_TIME):
             recent_shower_muons[detector].popleft()
 

@@ -18,5 +18,5 @@ def fPSD(f_t1, f_t2):
         t2_term = 1.8*pow(1-f_t2, 2)
         return log10(t1_term + t2_term)
 
-def isFlasher(event_fID, event_fPSD):
-    return (event_fID >= 0 or event_fPSD >= 0)
+def isFlasher(event_fID, event_fPSD, f2inch_maxQ):
+    return (event_fID >= 0 or event_fPSD >= 0 or f2inch_maxQ > 100)

@@ -68,13 +68,14 @@ def main():
         fQuad = fetch_value(indata, 'fQuad', float)
         fPSD_t1 = fetch_value(indata, 'fPSD_t1', float)
         fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
+        f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
 
         try:
             event_fID = fID(fMax, fQuad)
             assign_value(buf.fID, event_fID)
             event_fPSD = fPSD(fPSD_t1, fPSD_t2)
             assign_value(buf.fPSD, event_fPSD)
-            event_isFlasher = isFlasher(event_fID, event_fPSD)
+            event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
             assign_value(buf.tag_flasher, event_isFlasher)
             event_isWSMuon = isWSMuon(detector, nHit)
             assign_value(buf.tag_WSMuon, event_isWSMuon)

@@ -5,8 +5,40 @@ Translate a Daya Bay recon.*.root file into a simpler .root file.
 from array import array
 from ROOT import TTree, TFile
 
-class TreeBuffer():
-    pass
+class TreeBuffer(object):
+    def copyTo(self, other):
+        '''
+        Copy the values in this TreeBuffer to an existing TreeBuffer set
+        up with the same array attributes.
+
+        '''
+        for attr, value in self.__dict__.items():
+            otherArray = getattr(other, attr)
+            for i, entry in enumerate(value):
+                otherArray[i] = entry
+
+    def clone(self):
+        '''
+        Create a new independent TreeBuffer with the same array
+        attributes and values.
+
+        '''
+        new = TreeBuffer()
+        for attr, value in self.__dict__.items():
+            setattr(new, attr, value[:])
+        return new
+
+    def clone_type(self):
+        '''
+        Create a new TreeBuffer with the same array attributes
+        containing values of 0.
+
+        '''
+        new = TreeBuffer()
+        for attr, value in self.__dict__.items():
+            setattr(other, attr, array(value.typecode,
+                [0]*len(value)))
+        return new
 
 def int_value(length=1):
     return array('i', [0]*length)

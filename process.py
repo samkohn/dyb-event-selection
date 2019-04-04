@@ -10,7 +10,7 @@ from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
 import muons
 from translate import (TreeBuffer, float_value, assign_value,
-        fetch_value, unsigned_int_value, long_value)
+        fetch_value, int_value, unsigned_int_value, long_value)
 
 def main():
 
@@ -81,8 +81,9 @@ def main():
         assign_value(buf.noTree_timestamp, timestamp)
         detector = fetch_value(indata, 'detector', int)
         assign_value(buf.noTree_detector, detector)
-        nHit = fetch_value(indata, 'nHit', int)
+        site = fetch_value(indata, 'site', int)
         assign_value(buf.noTree_site, site)
+        nHit = fetch_value(indata, 'nHit', int)
         charge = fetch_value(indata, 'charge', float)
         fMax = fetch_value(indata, 'fMax', float)
         fQuad = fetch_value(indata, 'fQuad', float)
@@ -111,9 +112,9 @@ def main():
             last_WSMuon_time = timestamp
             next_cache = []
             for cached_event in event_cache:
-                if cached_event.noTree_site == site:
+                if cached_event.noTree_site[0] == site:
                     assign_value(cached_event.dt_next_WSMuon,
-                            cached_event.timestamp[0] - timestamp)
+                            timestamp - cached_event.noTree_timestamp[0])
                     assign_value(cached_event.tag_WSMuonVeto,
                             muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                                 cached_event.dt_next_WSMuon[0]))
@@ -162,7 +163,6 @@ def main():
         assign_value(cached_event.tag_WSMuonVeto, 2)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
-    print(len(event_cache))
     event_cache = []
 
     infile.Write()

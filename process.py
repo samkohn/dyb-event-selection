@@ -65,6 +65,7 @@ def main():
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
 
+    event_cache = []
     last_WSMuon_time = 0
     last_ADMuon_time = {n:0 for n in range(9)}
     last_ShowerMuon_time = {n:0 for n in range(9)}
@@ -108,6 +109,19 @@ def main():
 
         if event_isWSMuon:
             last_WSMuon_time = timestamp
+            next_cache = []
+            for cached_event in event_cache:
+                if cached_event.noTree_site == site:
+                    assign_value(cached_event.dt_next_WSMuon,
+                            cached_event.timestamp[0] - timestamp)
+                    assign_value(cached_event.tag_WSMuonVeto,
+                            muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
+                                cached_event.dt_next_WSMuon[0]))
+                    cached_event.copyTo(fill_buf)
+                    outdata.Fill()
+                else:
+                    next_cache.append(cached_event)
+            event_cache = next_cache
         if event_isADMuon:
             last_ADMuon_time[detector] = timestamp
         if event_isShowerMuon:
@@ -140,7 +154,16 @@ def main():
                 muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
         buf.copyTo(fill_buf)
+
+        event_cache.append(buf)
+        #outdata.Fill()
+    for cached_event in event_cache:
+        assign_value(cached_event.dt_next_WSMuon, -1)
+        assign_value(cached_event.tag_WSMuonVeto, 2)
+        cached_event.copyTo(fill_buf)
         outdata.Fill()
+    print(len(event_cache))
+    event_cache = []
 
     infile.Write()
     infile.Close()

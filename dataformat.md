@@ -65,3 +65,6 @@ Data format notes
  - time to next AD muon
  - time to previous AD shower muon
  - time to next AD shower muon
+ - number of prompt-like signals in previous 400us
+ - time to previous prompt-like signal
+ - time to next delayed-like signal

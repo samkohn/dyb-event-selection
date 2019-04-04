@@ -8,7 +8,7 @@ from collections import deque
 
 from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
-from muons import isWSMuon, isADMuon, isShowerMuon
+import muons
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, unsigned_int_value, long_value)
 
@@ -26,6 +26,9 @@ def main():
     buf.tag_WSMuon = unsigned_int_value()
     buf.tag_ADMuon = unsigned_int_value()
     buf.tag_ShowerMuon = unsigned_int_value()
+    # buf.tag_WSMuonVeto = unsigned_int_value()
+    buf.tag_ADMuonVeto = unsigned_int_value()
+    buf.tag_ShowerMuonVeto = unsigned_int_value()
     buf.dt_previous_WSMuon = long_value()
     buf.dt_previous_ADMuon = long_value()
     buf.dt_previous_ShowerMuon = long_value()
@@ -39,6 +42,12 @@ def main():
     outdata.Branch('tag_ADMuon', buf.tag_ADMuon, 'tag_ADMuon/i')
     outdata.Branch('tag_ShowerMuon', buf.tag_ShowerMuon,
             'tag_ShowerMuon/i')
+    # outdata.Branch('tag_WSMuonVeto', buf.tag_WSMuonVeto,
+            # 'tag_WSMuonVeto/i')
+    outdata.Branch('tag_ADMuonVeto', buf.tag_ADMuonVeto,
+            'tag_ADMuonVeto/i')
+    outdata.Branch('tag_ShowerMuonVeto', buf.tag_ShowerMuonVeto,
+            'tag_ShowerMuonVeto/i')
     outdata.Branch('dt_previous_WSMuon', buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
     outdata.Branch('dt_previous_ADMuon', buf.dt_previous_ADMuon,
@@ -77,11 +86,11 @@ def main():
             assign_value(buf.fPSD, event_fPSD)
             event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
             assign_value(buf.tag_flasher, event_isFlasher)
-            event_isWSMuon = isWSMuon(detector, nHit)
+            event_isWSMuon = muons.isWSMuon(detector, nHit)
             assign_value(buf.tag_WSMuon, event_isWSMuon)
-            event_isADMuon = isADMuon(charge)
+            event_isADMuon = muons.isADMuon(charge)
             assign_value(buf.tag_ADMuon, event_isADMuon)
-            event_isShowerMuon = isShowerMuon(charge)
+            event_isShowerMuon = muons.isShowerMuon(charge)
             assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
         except:
             print(fMax, fQuad, fPSD_t1, fPSD_t2)
@@ -113,6 +122,12 @@ def main():
                 len(recent_shower_muons[detector]))
         for i, dt in enumerate(recent_dts):
             assign_value(buf.dts_ShowerMuons_5sec, dt, i)
+
+        # Compute muon vetoes
+        assign_value(buf.tag_ADMuonVeto,
+                muons.isVetoedByADMuon(buf.dt_previous_ADMuon[0]))
+        assign_value(buf.tag_ShowerMuonVeto,
+                muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
         outdata.Fill()
 

@@ -36,7 +36,7 @@ class TreeBuffer(object):
         '''
         new = TreeBuffer()
         for attr, value in self.__dict__.items():
-            setattr(other, attr, array(value.typecode,
+            setattr(new, attr, array(value.typecode,
                 [0]*len(value)))
         return new
 

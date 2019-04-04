@@ -19,44 +19,50 @@ def main():
     indata = infile.Get('data')
     outdata = TTree('computed', 'Computed quantities by Sam Kohn')
 
-    buf = TreeBuffer()
-    buf.fID = float_value()
-    buf.fPSD = float_value()
-    buf.tag_flasher = unsigned_int_value()
-    buf.tag_WSMuon = unsigned_int_value()
-    buf.tag_ADMuon = unsigned_int_value()
-    buf.tag_ShowerMuon = unsigned_int_value()
-    # buf.tag_WSMuonVeto = unsigned_int_value()
-    buf.tag_ADMuonVeto = unsigned_int_value()
-    buf.tag_ShowerMuonVeto = unsigned_int_value()
-    buf.dt_previous_WSMuon = long_value()
-    buf.dt_previous_ADMuon = long_value()
-    buf.dt_previous_ShowerMuon = long_value()
-    buf.num_ShowerMuons_5sec = unsigned_int_value()
-    buf.dts_ShowerMuons_5sec = long_value(20)
+    fill_buf = TreeBuffer()
+    fill_buf.noTree_timestamp = long_value()
+    fill_buf.noTree_detector = int_value()
+    fill_buf.noTree_site = int_value()
+    fill_buf.fID = float_value()
+    fill_buf.fPSD = float_value()
+    fill_buf.tag_flasher = unsigned_int_value()
+    fill_buf.tag_WSMuon = unsigned_int_value()
+    fill_buf.tag_ADMuon = unsigned_int_value()
+    fill_buf.tag_ShowerMuon = unsigned_int_value()
+    fill_buf.tag_WSMuonVeto = unsigned_int_value()
+    fill_buf.tag_ADMuonVeto = unsigned_int_value()
+    fill_buf.tag_ShowerMuonVeto = unsigned_int_value()
+    fill_buf.dt_previous_WSMuon = long_value()
+    fill_buf.dt_next_WSMuon = long_value()
+    fill_buf.dt_previous_ADMuon = long_value()
+    fill_buf.dt_previous_ShowerMuon = long_value()
+    fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
+    fill_buf.dts_ShowerMuons_5sec = long_value(20)
 
-    outdata.Branch('fID', buf.fID, 'fID/F')
-    outdata.Branch('fPSD', buf.fPSD, 'fPSD/F')
-    outdata.Branch('tag_flasher', buf.tag_flasher, 'tag_flasher/i')
-    outdata.Branch('tag_WSMuon', buf.tag_WSMuon, 'tag_WSMuon/i')
-    outdata.Branch('tag_ADMuon', buf.tag_ADMuon, 'tag_ADMuon/i')
-    outdata.Branch('tag_ShowerMuon', buf.tag_ShowerMuon,
+    outdata.Branch('fID', fill_buf.fID, 'fID/F')
+    outdata.Branch('fPSD', fill_buf.fPSD, 'fPSD/F')
+    outdata.Branch('tag_flasher', fill_buf.tag_flasher, 'tag_flasher/i')
+    outdata.Branch('tag_WSMuon', fill_buf.tag_WSMuon, 'tag_WSMuon/i')
+    outdata.Branch('tag_ADMuon', fill_buf.tag_ADMuon, 'tag_ADMuon/i')
+    outdata.Branch('tag_ShowerMuon', fill_buf.tag_ShowerMuon,
             'tag_ShowerMuon/i')
-    # outdata.Branch('tag_WSMuonVeto', buf.tag_WSMuonVeto,
-            # 'tag_WSMuonVeto/i')
-    outdata.Branch('tag_ADMuonVeto', buf.tag_ADMuonVeto,
+    outdata.Branch('tag_WSMuonVeto', fill_buf.tag_WSMuonVeto,
+            'tag_WSMuonVeto/i')
+    outdata.Branch('tag_ADMuonVeto', fill_buf.tag_ADMuonVeto,
             'tag_ADMuonVeto/i')
-    outdata.Branch('tag_ShowerMuonVeto', buf.tag_ShowerMuonVeto,
+    outdata.Branch('tag_ShowerMuonVeto', fill_buf.tag_ShowerMuonVeto,
             'tag_ShowerMuonVeto/i')
-    outdata.Branch('dt_previous_WSMuon', buf.dt_previous_WSMuon,
+    outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
-    outdata.Branch('dt_previous_ADMuon', buf.dt_previous_ADMuon,
+    outdata.Branch('dt_next_WSMuon', fill_buf.dt_next_WSMuon,
+            'dt_next_WSMuon/L')
+    outdata.Branch('dt_previous_ADMuon', fill_buf.dt_previous_ADMuon,
             'dt_previous_ADMuon/L')
-    outdata.Branch('dt_previous_ShowerMuon', buf.dt_previous_ShowerMuon,
+    outdata.Branch('dt_previous_ShowerMuon', fill_buf.dt_previous_ShowerMuon,
             'dt_previous_ShowerMuon/L')
-    outdata.Branch('num_ShowerMuons_5sec', buf.num_ShowerMuons_5sec,
+    outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
             'num_ShowerMuons_5sec/i')
-    outdata.Branch('dts_ShowerMuons_5sec', buf.dts_ShowerMuons_5sec,
+    outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
 
     last_WSMuon_time = 0
@@ -68,10 +74,14 @@ def main():
     for event_number in xrange(indata.GetEntries()):
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
+        buf = fill_buf.clone_type()
 
         timestamp = fetch_value(indata, 'timeStamp', int)
+        assign_value(buf.noTree_timestamp, timestamp)
         detector = fetch_value(indata, 'detector', int)
+        assign_value(buf.noTree_detector, detector)
         nHit = fetch_value(indata, 'nHit', int)
+        assign_value(buf.noTree_site, site)
         charge = fetch_value(indata, 'charge', float)
         fMax = fetch_value(indata, 'fMax', float)
         fQuad = fetch_value(indata, 'fQuad', float)
@@ -129,6 +139,7 @@ def main():
         assign_value(buf.tag_ShowerMuonVeto,
                 muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
+        buf.copyTo(fill_buf)
         outdata.Fill()
 
     infile.Write()

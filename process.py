@@ -16,7 +16,7 @@ from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
 def done_with_cache(buf):
-    if buf.isFlasher[0] != 0:
+    if buf.tag_flasher[0] != 0:
         return True
     if buf.dt_next_WSMuon[0] != 0:
         return True

@@ -13,6 +13,8 @@ from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
 def done_with_cache(buf):
+    if buf.isFlasher[0] != 0:
+        return True
     if buf.dt_next_WSMuon[0] != 0:
         return True
     return False
@@ -96,22 +98,21 @@ def main():
         fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
         f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
 
-        try:
-            event_fID = fID(fMax, fQuad)
-            assign_value(buf.fID, event_fID)
-            event_fPSD = fPSD(fPSD_t1, fPSD_t2)
-            assign_value(buf.fPSD, event_fPSD)
-            event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
-            assign_value(buf.tag_flasher, event_isFlasher)
-            event_isWSMuon = muons.isWSMuon(detector, nHit)
-            assign_value(buf.tag_WSMuon, event_isWSMuon)
-            event_isADMuon = muons.isADMuon(charge)
-            assign_value(buf.tag_ADMuon, event_isADMuon)
-            event_isShowerMuon = muons.isShowerMuon(charge)
-            assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
-        except:
-            print(fMax, fQuad, fPSD_t1, fPSD_t2)
-            raise
+        event_fID = fID(fMax, fQuad)
+        assign_value(buf.fID, event_fID)
+        event_fPSD = fPSD(fPSD_t1, fPSD_t2)
+        assign_value(buf.fPSD, event_fPSD)
+        event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
+        assign_value(buf.tag_flasher, event_isFlasher)
+        if event_isFlasher:
+            event_cache.append(buf)
+            continue
+        event_isWSMuon = muons.isWSMuon(detector, nHit)
+        assign_value(buf.tag_WSMuon, event_isWSMuon)
+        event_isADMuon = muons.isADMuon(charge)
+        assign_value(buf.tag_ADMuon, event_isADMuon)
+        event_isShowerMuon = muons.isShowerMuon(charge)
+        assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
 
         if event_isWSMuon:
             last_WSMuon_time = timestamp

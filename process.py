@@ -5,6 +5,9 @@ Process the basic data by computing various cuts, quantities and tags.
 from __future__ import print_function
 
 from collections import deque
+import time
+import argparse
+import logging
 
 from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
@@ -19,7 +22,7 @@ def done_with_cache(buf):
         return True
     return False
 
-def main():
+def main(debug):
 
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
@@ -80,6 +83,7 @@ def main():
     recent_shower_muons = {n:deque() for n in range(9)}
 
     for event_number in xrange(indata.GetEntries()):
+        logging.debug('event cache size: %d', len(event_cache))
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
         buf = fill_buf.clone_type()
@@ -115,6 +119,7 @@ def main():
         assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
 
         if event_isWSMuon:
+            logging.debug("isWSMuon")
             last_WSMuon_time = timestamp
             for cached_event in event_cache:
                 if cached_event.noTree_site[0] == site:
@@ -165,9 +170,12 @@ def main():
         while all_done_with_cache and num_to_delete < cache_size:
             cached_event = event_cache[num_to_delete]
             if done_with_cache(cached_event):
+                logging.debug('event is done with cache')
                 num_to_delete += 1
             else:
+                logging.debug('event is not done with cache')
                 all_done_with_cache = False
+        logging.debug('deleting %d events', num_to_delete)
         # Remove the oldest events from the cache and fill them into the
         # new TTree
         for _ in range(num_to_delete):
@@ -176,6 +184,8 @@ def main():
             outdata.Fill()
 
         event_cache.append(buf)
+        if debug:
+            time.sleep(1)
         #outdata.Fill()
     for cached_event in event_cache:
         assign_value(cached_event.dt_next_WSMuon, -1)
@@ -188,4 +198,9 @@ def main():
     infile.Close()
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-d', '--debug', action='store_true')
+    args = parser.parse_args()
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    main(args.debug)

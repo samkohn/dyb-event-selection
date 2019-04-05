@@ -12,6 +12,11 @@ import muons
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
+def done_with_cache(buf):
+    if buf.dt_next_WSMuon != 0:
+        return True
+    return False
+
 def main():
 
     filename = 'out.root'
@@ -65,7 +70,7 @@ def main():
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
 
-    event_cache = []
+    event_cache = deque()
     last_WSMuon_time = 0
     last_ADMuon_time = {n:0 for n in range(9)}
     last_ShowerMuon_time = {n:0 for n in range(9)}
@@ -110,7 +115,6 @@ def main():
 
         if event_isWSMuon:
             last_WSMuon_time = timestamp
-            next_cache = []
             for cached_event in event_cache:
                 if cached_event.noTree_site[0] == site:
                     assign_value(cached_event.dt_next_WSMuon,
@@ -118,11 +122,6 @@ def main():
                     assign_value(cached_event.tag_WSMuonVeto,
                             muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                                 cached_event.dt_next_WSMuon[0]))
-                    cached_event.copyTo(fill_buf)
-                    outdata.Fill()
-                else:
-                    next_cache.append(cached_event)
-            event_cache = next_cache
         if event_isADMuon:
             last_ADMuon_time[detector] = timestamp
         if event_isShowerMuon:
@@ -154,7 +153,24 @@ def main():
         assign_value(buf.tag_ShowerMuonVeto,
                 muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
-        buf.copyTo(fill_buf)
+        # Determine which of the oldest events are ready to go into the
+        # new TTree. It is possible (due to different ADs) that the
+        # oldest event might not be ready but another event might be. In
+        # that case, to preserve event order, we will wait for the
+        # oldest event to be ready anyways.
+        num_to_delete = 0
+        all_done_with_cache = True
+        while all_done_with_cache:
+            if done_with_cache(cached_event):
+                num_to_delete += 1
+            else:
+                all_done_with_cache = False
+        # Remove the oldest events from the cache and fill them into the
+        # new TTree
+        for _ in range(num_to_delete):
+            cached_event = event_cache.popleft()
+            cached_event.copyTo(fill_buf)
+            outdata.Fill()
 
         event_cache.append(buf)
         #outdata.Fill()

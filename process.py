@@ -13,7 +13,7 @@ from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
 def done_with_cache(buf):
-    if buf.dt_next_WSMuon != 0:
+    if buf.dt_next_WSMuon[0] != 0:
         return True
     return False
 
@@ -160,7 +160,9 @@ def main():
         # oldest event to be ready anyways.
         num_to_delete = 0
         all_done_with_cache = True
-        while all_done_with_cache:
+        cache_size = len(event_cache)
+        while all_done_with_cache and num_to_delete < cache_size:
+            cached_event = event_cache[num_to_delete]
             if done_with_cache(cached_event):
                 num_to_delete += 1
             else:

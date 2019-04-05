@@ -108,7 +108,11 @@ def main(debug):
         assign_value(buf.fPSD, event_fPSD)
         event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
         assign_value(buf.tag_flasher, event_isFlasher)
-        if !event_isFlasher:
+        if event_isFlasher:
+            event_isWSMuon = False
+            event_isADMuon = False
+            event_isShowerMuon = False
+        else:
             event_isWSMuon = muons.isWSMuon(detector, nHit)
             assign_value(buf.tag_WSMuon, event_isWSMuon)
             event_isADMuon = muons.isADMuon(charge)

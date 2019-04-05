@@ -108,15 +108,13 @@ def main(debug):
         assign_value(buf.fPSD, event_fPSD)
         event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
         assign_value(buf.tag_flasher, event_isFlasher)
-        if event_isFlasher:
-            event_cache.append(buf)
-            continue
-        event_isWSMuon = muons.isWSMuon(detector, nHit)
-        assign_value(buf.tag_WSMuon, event_isWSMuon)
-        event_isADMuon = muons.isADMuon(charge)
-        assign_value(buf.tag_ADMuon, event_isADMuon)
-        event_isShowerMuon = muons.isShowerMuon(charge)
-        assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
+        if !event_isFlasher:
+            event_isWSMuon = muons.isWSMuon(detector, nHit)
+            assign_value(buf.tag_WSMuon, event_isWSMuon)
+            event_isADMuon = muons.isADMuon(charge)
+            assign_value(buf.tag_ADMuon, event_isADMuon)
+            event_isShowerMuon = muons.isShowerMuon(charge)
+            assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
 
         if event_isWSMuon:
             logging.debug("isWSMuon")

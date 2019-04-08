@@ -77,6 +77,8 @@ def main(debug):
             'dt_previous_ADMuon/L')
     outdata.Branch('dt_previous_ShowerMuon', fill_buf.dt_previous_ShowerMuon,
             'dt_previous_ShowerMuon/L')
+    outdata.Branch('dt_previous_PromptLike',
+            fill_buf.dt_previous_PromptLike, 'dt_previous_PromptLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
             'num_ShowerMuons_5sec/i')
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,

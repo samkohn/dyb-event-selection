@@ -26,12 +26,12 @@ def isShowerMuon(event_charge):
     return event_charge > _SHOWER_MUON_THRESHOLD
 
 def isVetoedByWSMuon(dt_last_ws, dt_next_ws):
-    return (dt_last_ws > _WSMUON_VETO_LAST_NS
-            and dt_next_ws > _WSMUON_VETO_NEXT_NS)
+    return (dt_last_ws < _WSMUON_VETO_LAST_NS
+            or dt_next_ws < _WSMUON_VETO_NEXT_NS)
 
 def isVetoedByADMuon(dt_last_ad):
-    return (dt_last_ad > _ADMUON_VETO_LAST_NS)
+    return (dt_last_ad < _ADMUON_VETO_LAST_NS)
 
 def isVetoedByShowerMuon(dt_last_shower):
-    return (dt_last_shower > _SHOWER_MUON_VETO_LAST_NS)
+    return (dt_last_shower < _SHOWER_MUON_VETO_LAST_NS)
 

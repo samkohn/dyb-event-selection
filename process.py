@@ -137,24 +137,6 @@ def main(debug):
         event_isPromptLike = isPromptLike(detector, energy)
         assign_value(buf.tag_PromptLike, event_isPromptLike)
 
-        if event_isWSMuon:
-            logging.debug("isWSMuon")
-            last_WSMuon_time = timestamp
-            for cached_event in event_cache:
-                if cached_event.noTree_site[0] == site:
-                    assign_value(cached_event.dt_next_WSMuon,
-                            timestamp - cached_event.noTree_timestamp[0])
-                    assign_value(cached_event.tag_WSMuonVeto,
-                            muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
-                                cached_event.dt_next_WSMuon[0]))
-        if event_isADMuon:
-            last_ADMuon_time[detector] = timestamp
-        if event_isShowerMuon:
-            last_ShowerMuon_time[detector] = timestamp
-            recent_shower_muons[detector].append(timestamp)
-        if event_isPromptLike and not event_isFlasher:
-            last_PromptLike_time[detector] = timestamp
-            recent_promptlikes[detector].append(timestamp)
 
         # Remove muons that happened greater than MUON_COUNT_TIME ago
         while len(recent_shower_muons[detector]) > 0 and (timestamp
@@ -193,6 +175,29 @@ def main(debug):
                 muons.isVetoedByADMuon(buf.dt_previous_ADMuon[0]))
         assign_value(buf.tag_ShowerMuonVeto,
                 muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
+
+        # Update the dt_previous_* and dt_next_* values
+        #
+        # Ths comes after values are assigned to the buffer because we
+        # don't want dt_previous_* to be 0.
+        if event_isWSMuon:
+            logging.debug("isWSMuon")
+            last_WSMuon_time = timestamp
+            for cached_event in event_cache:
+                if cached_event.noTree_site[0] == site:
+                    assign_value(cached_event.dt_next_WSMuon,
+                            timestamp - cached_event.noTree_timestamp[0])
+                    assign_value(cached_event.tag_WSMuonVeto,
+                            muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
+                                cached_event.dt_next_WSMuon[0]))
+        if event_isADMuon:
+            last_ADMuon_time[detector] = timestamp
+        if event_isShowerMuon:
+            last_ShowerMuon_time[detector] = timestamp
+            recent_shower_muons[detector].append(timestamp)
+        if event_isPromptLike and not event_isFlasher:
+            last_PromptLike_time[detector] = timestamp
+            recent_promptlikes[detector].append(timestamp)
 
         # Determine which of the oldest events are ready to go into the
         # new TTree. It is possible (due to different ADs) that the

@@ -13,15 +13,17 @@ from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
 import muons
 from prompts import isPromptLike
+from delayeds import isDelayedLike
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
 def done_with_cache(buf):
-    if buf.tag_flasher[0] != 0:
-        return True
-    if buf.dt_next_WSMuon[0] != 0:
-        return True
-    return False
+    flasher_done = buf.tag_flasher[0] != 0
+    found_next_WSMuon =  buf.dt_next_WSMuon[0] != 0
+    found_next_DelayedLike = buf.dt_next_DelayedLike[0] != 0
+    return (flasher_done
+            or (found_next_WSMuon
+                and found_next_DelayedLike))
 
 def main(debug):
 
@@ -44,11 +46,13 @@ def main(debug):
     fill_buf.tag_ADMuonVeto = unsigned_int_value()
     fill_buf.tag_ShowerMuonVeto = unsigned_int_value()
     fill_buf.tag_PromptLike = unsigned_int_value()
+    fill_buf.tag_DelayedLike = unsigned_int_value()
     fill_buf.dt_previous_WSMuon = long_value()
     fill_buf.dt_next_WSMuon = long_value()
     fill_buf.dt_previous_ADMuon = long_value()
     fill_buf.dt_previous_ShowerMuon = long_value()
     fill_buf.dt_previous_PromptLike = long_value()
+    fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
     fill_buf.num_PromptLikes_400us = unsigned_int_value()
@@ -69,6 +73,8 @@ def main(debug):
             'tag_ShowerMuonVeto/i')
     outdata.Branch('tag_PromptLike', fill_buf.tag_PromptLike,
             'tag_PromptLike/i')
+    outdata.Branch('tag_DelayedLike', fill_buf.tag_DelayedLike,
+            'tag_DelayedLike/i')
     outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
     outdata.Branch('dt_next_WSMuon', fill_buf.dt_next_WSMuon,
@@ -79,6 +85,8 @@ def main(debug):
             'dt_previous_ShowerMuon/L')
     outdata.Branch('dt_previous_PromptLike',
             fill_buf.dt_previous_PromptLike, 'dt_previous_PromptLike/L')
+    outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
+            'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
             'num_ShowerMuons_5sec/i')
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
@@ -139,6 +147,8 @@ def main(debug):
             assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
         event_isPromptLike = isPromptLike(detector, energy)
         assign_value(buf.tag_PromptLike, event_isPromptLike)
+        event_isDelayedLike = isDelayedLike(detector, energy)
+        assign_value(buf.tag_DelayedLike, event_isDelayedLike)
 
 
         # Remove muons that happened greater than MUON_COUNT_TIME ago
@@ -201,6 +211,12 @@ def main(debug):
         if event_isPromptLike and not event_isFlasher:
             last_PromptLike_time[detector] = timestamp
             recent_promptlikes[detector].append(timestamp)
+        if event_isDelayedLike and not event_isFlasher:
+            for cached_event in event_cache:
+                if cached_event.noTree_detector[0] == detector:
+                    assign_value(cached_event.dt_next_DelayedLike,
+                            timestamp
+                            - cached_event.noTree_timestamp[0])
 
         # Determine which of the oldest events are ready to go into the
         # new TTree. It is possible (due to different ADs) that the
@@ -233,6 +249,7 @@ def main(debug):
     for cached_event in event_cache:
         assign_value(cached_event.dt_next_WSMuon, -1)
         assign_value(cached_event.tag_WSMuonVeto, 2)
+        assign_value(cached_event.dt_next_DelayedLike, -1)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
     event_cache = []

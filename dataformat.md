@@ -62,10 +62,8 @@ Data format notes
  - [X] time to previous WP muon
  - [X] time to next WP muon
  - [X] time to previous AD muon
- - [] time to next AD muon
  - [X] time to previous AD shower muon
- - [] time to next AD shower muon
  - [X] number of prompt-like signals in previous 400us
  - [X] {time to each prompt-like signal in previous 400us}
  - [X] time to previous prompt-like signal
- - [] time to next delayed-like signal
+ - [X] time to next delayed-like signal

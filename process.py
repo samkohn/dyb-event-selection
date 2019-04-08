@@ -10,6 +10,7 @@ import argparse
 import logging
 
 from ROOT import TFile, TTree
+from common import *
 from flashers import fID, fPSD, isFlasher
 import muons
 from prompts import isPromptLike
@@ -19,8 +20,10 @@ from translate import (TreeBuffer, float_value, assign_value,
 
 def done_with_cache(buf):
     flasher_done = buf.tag_flasher[0] != 0
-    found_next_WSMuon =  buf.dt_next_WSMuon[0] != 0
-    found_next_DelayedLike = buf.dt_next_DelayedLike[0] != 0
+    found_next_WSMuon = buf.dt_next_WSMuon[0] != 0
+    detector = buf.noTree_detector[0]
+    found_next_DelayedLike = (detector not in AD_DETECTORS
+            or buf.dt_next_DelayedLike[0] != 0)
     return (flasher_done
             or (found_next_WSMuon
                 and found_next_DelayedLike))
@@ -141,9 +144,9 @@ def main(debug):
         else:
             event_isWSMuon = muons.isWSMuon(detector, nHit)
             assign_value(buf.tag_WSMuon, event_isWSMuon)
-            event_isADMuon = muons.isADMuon(charge)
+            event_isADMuon = muons.isADMuon(detector, charge)
             assign_value(buf.tag_ADMuon, event_isADMuon)
-            event_isShowerMuon = muons.isShowerMuon(charge)
+            event_isShowerMuon = muons.isShowerMuon(detector, charge)
             assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
         event_isPromptLike = isPromptLike(detector, energy)
         assign_value(buf.tag_PromptLike, event_isPromptLike)

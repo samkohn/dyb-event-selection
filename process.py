@@ -116,6 +116,7 @@ def main(debug):
         fPSD_t1 = fetch_value(indata, 'fPSD_t1', float)
         fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
         f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
+        energy = fetch_value(indata, 'energy', float)
 
         event_fID = fID(fMax, fQuad)
         assign_value(buf.fID, event_fID)

@@ -55,16 +55,17 @@ Data format notes
 
 ### Processed data
 
- - flasher ID fID
- - flasher PSD ID fPSD
- - number of muons within previous 5s
- - [time to each muon within previous 5s]
- - time to previous WP muon
- - time to next WP muon
- - time to previous AD muon
- - time to next AD muon
- - time to previous AD shower muon
- - time to next AD shower muon
- - number of prompt-like signals in previous 400us
- - time to previous prompt-like signal
- - time to next delayed-like signal
+ - [X] flasher ID fID
+ - [X] flasher PSD ID fPSD
+ - [X] number of muons within previous 5s
+ - [X] {time to each muon within previous 5s}
+ - [X] time to previous WP muon
+ - [X] time to next WP muon
+ - [X] time to previous AD muon
+ - [] time to next AD muon
+ - [X] time to previous AD shower muon
+ - [] time to next AD shower muon
+ - [X] number of prompt-like signals in previous 400us
+ - [X] {time to each prompt-like signal in previous 400us}
+ - [X] time to previous prompt-like signal
+ - [] time to next delayed-like signal

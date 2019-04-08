@@ -48,6 +48,7 @@ def main(debug):
     fill_buf.dt_next_WSMuon = long_value()
     fill_buf.dt_previous_ADMuon = long_value()
     fill_buf.dt_previous_ShowerMuon = long_value()
+    fill_buf.dt_previous_PromptLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
     fill_buf.num_PromptLikes_400us = unsigned_int_value()
@@ -170,15 +171,18 @@ def main(debug):
         recent_promptlike_dts = [timestamp - prompt_time for prompt_time
                 in recent_promptlikes[detector]]
 
-
         assign_value(buf.dt_previous_WSMuon, timestamp -
                 last_WSMuon_time)
         assign_value(buf.dt_previous_ADMuon, timestamp -
                 last_ADMuon_time[detector])
         assign_value(buf.dt_previous_ShowerMuon, timestamp -
                 last_ShowerMuon_time[detector])
+        assign_value(buf.dt_previous_PromptLike, timestamp -
+                last_PromptLike_time[detector])
         assign_value(buf.num_ShowerMuons_5sec,
                 len(recent_shower_muons[detector]))
+        assign_value(buf.num_PromptLikes_400us,
+                len(recent_promptlikes[detector]))
         for i, dt in enumerate(recent_showermuon_dts):
             assign_value(buf.dts_ShowerMuons_5sec, dt, i)
         for i, dt in enumerate(recent_promptlike_dts):

@@ -12,6 +12,7 @@ import logging
 from ROOT import TFile, TTree
 from flashers import fID, fPSD, isFlasher
 import muons
+from prompts import isPromptLike
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
@@ -42,12 +43,15 @@ def main(debug):
     fill_buf.tag_WSMuonVeto = unsigned_int_value()
     fill_buf.tag_ADMuonVeto = unsigned_int_value()
     fill_buf.tag_ShowerMuonVeto = unsigned_int_value()
+    fill_buf.tag_PromptLike = unsigned_int_value()
     fill_buf.dt_previous_WSMuon = long_value()
     fill_buf.dt_next_WSMuon = long_value()
     fill_buf.dt_previous_ADMuon = long_value()
     fill_buf.dt_previous_ShowerMuon = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
+    fill_buf.num_PromptLikes_400us = unsigned_int_value()
+    fill_buf.dts_PromptLikes_400us = long_value(200)
 
     outdata.Branch('fID', fill_buf.fID, 'fID/F')
     outdata.Branch('fPSD', fill_buf.fPSD, 'fPSD/F')
@@ -62,6 +66,8 @@ def main(debug):
             'tag_ADMuonVeto/i')
     outdata.Branch('tag_ShowerMuonVeto', fill_buf.tag_ShowerMuonVeto,
             'tag_ShowerMuonVeto/i')
+    outdata.Branch('tag_PromptLike', fill_buf.tag_PromptLike,
+            'tag_PromptLike/i')
     outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
     outdata.Branch('dt_next_WSMuon', fill_buf.dt_next_WSMuon,
@@ -74,6 +80,11 @@ def main(debug):
             'num_ShowerMuons_5sec/i')
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
+    outdata.Branch('num_PromptLikes_400us',
+            fill_buf.num_PromptLikes_400us, 'num_PromptLikes_400us/i')
+    outdata.Branch('dts_PromptLikes_400us',
+            fill_buf.dts_PromptLikes_400us,
+            'dts_PromptLikes_400us[num_PromptLikes_400us]/L')
 
     event_cache = deque()
     last_WSMuon_time = 0
@@ -81,6 +92,9 @@ def main(debug):
     last_ShowerMuon_time = {n:0 for n in range(9)}
     MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
     recent_shower_muons = {n:deque() for n in range(9)}
+    last_PromptLike_time = {n:0 for n in range(9)}
+    PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
+    recent_promptlikes = {n:deque() for n in range(9)}
 
     for event_number in xrange(indata.GetEntries()):
         logging.debug('event cache size: %d', len(event_cache))
@@ -119,6 +133,8 @@ def main(debug):
             assign_value(buf.tag_ADMuon, event_isADMuon)
             event_isShowerMuon = muons.isShowerMuon(charge)
             assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
+        event_isPromptLike = isPromptLike(detector, energy)
+        assign_value(buf.tag_PromptLike, event_isPromptLike)
 
         if event_isWSMuon:
             logging.debug("isWSMuon")
@@ -135,14 +151,25 @@ def main(debug):
         if event_isShowerMuon:
             last_ShowerMuon_time[detector] = timestamp
             recent_shower_muons[detector].append(timestamp)
+        if event_isPromptLike and not event_isFlasher:
+            last_PromptLike_time[detector] = timestamp
+            recent_promptlikes[detector].append(timestamp)
 
         # Remove muons that happened greater than MUON_COUNT_TIME ago
         while len(recent_shower_muons[detector]) > 0 and (timestamp
                 - recent_shower_muons[detector][0] > MUON_COUNT_TIME):
             recent_shower_muons[detector].popleft()
 
-        recent_dts = [timestamp - muon_time for muon_time in
+        # Remove prompt-likes that happened greater than PROMPT_COUNT_TIME ago
+        while len(recent_promptlikes[detector]) > 0 and (timestamp -
+                recent_promptlikes[detector][0] > PROMPT_COUNT_TIME):
+            recent_promptlikes[detector].popleft()
+
+        recent_showermuon_dts = [timestamp - muon_time for muon_time in
                 recent_shower_muons[detector]]
+        recent_promptlike_dts = [timestamp - prompt_time for prompt_time
+                in recent_promptlikes[detector]]
+
 
         assign_value(buf.dt_previous_WSMuon, timestamp -
                 last_WSMuon_time)
@@ -152,8 +179,10 @@ def main(debug):
                 last_ShowerMuon_time[detector])
         assign_value(buf.num_ShowerMuons_5sec,
                 len(recent_shower_muons[detector]))
-        for i, dt in enumerate(recent_dts):
+        for i, dt in enumerate(recent_showermuon_dts):
             assign_value(buf.dts_ShowerMuons_5sec, dt, i)
+        for i, dt in enumerate(recent_promptlike_dts):
+            assign_value(buf.dts_PromptLikes_400us, dt, i)
 
         # Compute muon vetoes
         assign_value(buf.tag_ADMuonVeto,

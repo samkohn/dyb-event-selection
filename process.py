@@ -101,8 +101,6 @@ def main(debug):
             'dts_PromptLikes_400us[num_PromptLikes_400us]/L')
 
     event_cache = deque()
-    cache_assigned_WS = 0
-    cache_assigned_delayed = {n: 0 for n in range(9)}
     last_WSMuon_time = 0
     last_ADMuon_time = {n:0 for n in range(9)}
     last_ShowerMuon_time = {n:0 for n in range(9)}
@@ -112,7 +110,8 @@ def main(debug):
     PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
     recent_promptlikes = {n:deque() for n in range(9)}
 
-    for event_number in xrange(indata.GetEntries()):
+    entries = xrange(indata.GetEntries()) if not debug else range(10000)
+    for event_number in entries:
         logging.debug('event cache size: %d', len(event_cache))
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
@@ -201,14 +200,16 @@ def main(debug):
         if event_isWSMuon:
             logging.debug("isWSMuon")
             last_WSMuon_time = timestamp
-            for cached_event in event_cache[cache_assigned_WS:]:
+            for cached_event in event_cache:
+                if cached_event.dt_next_WSMuon[0] != 0:
+                    continue
                 if cached_event.noTree_site[0] == site:
+                    logging.debug('taggedNextWS%d', cached_event.noTree_timestamp[0])
                     assign_value(cached_event.dt_next_WSMuon,
                             timestamp - cached_event.noTree_timestamp[0])
                     assign_value(cached_event.tag_WSMuonVeto,
                             muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                                 cached_event.dt_next_WSMuon[0]))
-            cache_assigned_WS = len(event_cache)
         if event_isADMuon:
             last_ADMuon_time[detector] = timestamp
         if event_isShowerMuon:
@@ -218,13 +219,16 @@ def main(debug):
             last_PromptLike_time[detector] = timestamp
             recent_promptlikes[detector].append(timestamp)
         if event_isDelayedLike and not event_isFlasher:
-            start_point = cache_assigned_delayed[detector]
-            for cached_event in event_cache[start_point:]:
+            logging.debug("isDelayedLike")
+            for cached_event in event_cache:
+                if cached_event.dt_next_DelayedLike[0] != 0:
+                    continue
                 if cached_event.noTree_detector[0] == detector:
+                    logging.debug('taggedNextDelayed%d',
+                            cached_event.noTree_timestamp[0])
                     assign_value(cached_event.dt_next_DelayedLike,
                             timestamp
                             - cached_event.noTree_timestamp[0])
-            cache_assigned_delayed[detector] = len(event_cache)
 
         # Determine which of the oldest events are ready to go into the
         # new TTree. It is possible (due to different ADs) that the
@@ -242,14 +246,7 @@ def main(debug):
             else:
                 logging.debug('event is not done with cache')
                 all_done_with_cache = False
-        logging.debug('first %d events have next_WS', cache_assigned_WS)
-        logging.debug('first events that have next_delayed, by detector:')
-        logging.debug(cache_assigned_delayed)
         logging.debug('deleting %d events', num_to_delete)
-        cache_assigned_WS -= num_to_delete
-        for key in cache_assigned_delayed:
-            if cache_assigned_delayed[key] != 0:
-                cache_assigned_delayed[key] -= num_to_delete
         # Remove the oldest events from the cache and fill them into the
         # new TTree
         for _ in range(num_to_delete):
@@ -259,7 +256,7 @@ def main(debug):
 
         event_cache.append(buf)
         if debug:
-            time.sleep(1)
+            pass #time.sleep(0.1)
         #outdata.Fill()
     for cached_event in event_cache:
         assign_value(cached_event.dt_next_WSMuon, -1)

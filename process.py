@@ -150,6 +150,15 @@ def main(debug):
         f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
         energy = fetch_value(indata, 'energy', float)
 
+        # initialize last_*Muon_time to be the timestamp of the first
+        # event
+        if event_number == 0:
+            last_WSMuon_time = timestamp
+            for key in last_ADMuon_time:
+                last_ADMuon_time[key] = timestamp
+            for key in last_ShowerMuon_time:
+                last_ShowerMuon_time[key] = timestamp
+
         # Compute simple tags and values (those that only require data
         # from the current event)
         event_fID = fID(fMax, fQuad)

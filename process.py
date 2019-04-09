@@ -134,9 +134,6 @@ def main(debug):
     PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
     recent_promptlikes = {n:deque() for n in range(9)}
 
-    # General quantities to track
-    total_nonvetoed_livetime = {1:0, 2:0}  # by AD
-
     entries = xrange(indata.GetEntries()) if not debug else range(10000)
     for event_number in entries:
         logging.debug('event cache size: %d', len(event_cache))
@@ -245,22 +242,6 @@ def main(debug):
         assign_value(buf.tag_ShowerMuonVeto,
                 muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
-        # Update the total nonvetoed livetime (for muon efficiency)
-        if event_isWSMuon or event_isADMuon or event_isShowerMuon:
-            dt_last_WSMuon = timestamp - last_WSMuon_time
-            dt_last_ADMuon = timestamp - last_ADMuon_time[detector]
-            dt_last_ShowerMuon = (timestamp -
-                    last_ShowerMuon_time[detector])
-            dt_past_WSMuonVeto = (dt_last_WSMuon -
-                    muons._WSMUON_VETO_LAST_NS)
-            dt_past_ADMuonVeto = (dt_last_ADMuon -
-                    muons._ADMUON_VETO_LAST_NS)
-            dt_past_ShowerMuon = (dt_last_ShowerMuon -
-                    muons._SHOWER_MUON_VETO_LAST_NS)
-            total_nonvetoed_livetime[detector] += (
-                    min(0, dt_past_WSMuonVeto, dt_past_ADMuonVeto,
-                        dt_past_ShowerMuon))
-
         # Update the dt_previous_* and dt_next_* values
 
         # This comes after values are assigned to the buffer because we
@@ -360,9 +341,6 @@ def main(debug):
 
     infile.Write()
     infile.Close()
-
-    print('Total nonvetoed livetime by AD:')
-    print(total_nonvetoed_livetime)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

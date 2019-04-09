@@ -60,11 +60,13 @@ def main(debug):
     fill_buf.tag_ShowerMuonVeto = unsigned_int_value()
     fill_buf.tag_PromptLike = unsigned_int_value()
     fill_buf.tag_DelayedLike = unsigned_int_value()
+    fill_buf.tag_IBDDelayed = unsigned_int_value()
     fill_buf.dt_previous_WSMuon = long_value()
     fill_buf.dt_next_WSMuon = long_value()
     fill_buf.dt_previous_ADMuon = long_value()
     fill_buf.dt_previous_ShowerMuon = long_value()
     fill_buf.dt_previous_PromptLike = long_value()
+    fill_buf.energy_previous_PromptLike = float_value()
     fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
@@ -100,6 +102,9 @@ def main(debug):
             'dt_previous_ShowerMuon/L')
     outdata.Branch('dt_previous_PromptLike',
             fill_buf.dt_previous_PromptLike, 'dt_previous_PromptLike/L')
+    outdata.Branch('energy_previous_PromptLike',
+            fill_buf.energy_previous_PromptLike,
+            'energy_previous_PromptLike/F')
     outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
             'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
@@ -122,7 +127,8 @@ def main(debug):
     last_ShowerMuon_time = {n:0 for n in range(9)}
     MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
     recent_shower_muons = {n:deque() for n in range(9)}
-    last_PromptLike_time = {n:0 for n in range(9)}
+    last_PromptLike_time = {n:-1 for n in range(9)}
+    last_PromptLike_energy = {n:-1 for n in range(9)}
     PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
     recent_promptlikes = {n:deque() for n in range(9)}
 
@@ -220,6 +226,8 @@ def main(debug):
                 last_ShowerMuon_time[detector])
         assign_value(buf.dt_previous_PromptLike, timestamp -
                 last_PromptLike_time[detector])
+        assign_value(buf.energy_previous_PromptLike,
+                last_PromptLike_energy[detector])
         assign_value(buf.num_ShowerMuons_5sec,
                 len(recent_shower_muons[detector]))
         assign_value(buf.num_PromptLikes_400us,
@@ -281,6 +289,7 @@ def main(debug):
         # Don't include prompt-like flasher events
         if event_isPromptLike and not event_isFlasher:
             last_PromptLike_time[detector] = timestamp
+            last_PromptLike_energy[detector] = energy
             recent_promptlikes[detector].append(timestamp)
         # Don't include prompt-like delayed events
         if event_isDelayedLike and not event_isFlasher:
@@ -317,9 +326,21 @@ def main(debug):
                 all_done_with_cache = False
         logging.debug('deleting %d events', num_to_delete)
         # Remove the oldest events from the cache and fill them into the
-        # new TTree
+        # new TTree, computing the final IBD tags while we're at it.
         for _ in range(num_to_delete):
             cached_event = event_cache.popleft()
+            e = cached_event
+            ibd_delayed = isIBDDelayed(
+                    e.detector[0],
+                    e.tag_DelayedLike[0],
+                    e.dt_previous_PromptLike[0],
+                    e.num_PromptLikes_400us[0],
+                    e.dt_next_DelayedLike[0],
+                    e.tag_WSMuonVeto[0],
+                    e.tag_ADMuonVeto[0],
+                    e.tag_ShowerMuonVeto[0],
+                    e.tag_flasher[0])
+            assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
             cached_event.copyTo(fill_buf)
             outdata.Fill()
 

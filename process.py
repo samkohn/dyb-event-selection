@@ -14,7 +14,7 @@ from common import *
 from flashers import fID, fPSD, isFlasher
 import muons
 from prompts import isPromptLike
-from delayeds import isDelayedLike
+from delayeds import isDelayedLike, isIBDDelayed
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value)
 
@@ -92,6 +92,8 @@ def main(debug):
             'tag_PromptLike/i')
     outdata.Branch('tag_DelayedLike', fill_buf.tag_DelayedLike,
             'tag_DelayedLike/i')
+    outdata.Branch('tag_IBDDelayed', fill_buf.tag_IBDDelayed,
+            'tag_IBDDelayed/i')
     outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
     outdata.Branch('dt_next_WSMuon', fill_buf.dt_next_WSMuon,
@@ -331,7 +333,6 @@ def main(debug):
             cached_event = event_cache.popleft()
             e = cached_event
             ibd_delayed = isIBDDelayed(
-                    e.detector[0],
                     e.tag_DelayedLike[0],
                     e.dt_previous_PromptLike[0],
                     e.num_PromptLikes_400us[0],

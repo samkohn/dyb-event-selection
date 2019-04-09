@@ -15,15 +15,13 @@ def isDelayedLike(event_detector, event_energy):
             and event_energy > _EMIN
             and event_energy < _EMAX)
 
-def isIBDDelayed(event_detector, tag_DelayedLike,
+def isIBDDelayed(tag_DelayedLike,
         dt_previous_PromptLike, num_PromptLikes_400us,
         dt_next_DelayedLike, tag_WSMuonVeto, tag_ADMuonVeto,
         tag_ShowerMuonVeto, tag_flasher):
     if not tag_DelayedLike:
         return False
     if tag_flasher:
-        return False
-    if event_detector not in AD_DETECTORS:
         return False
     if tag_WSMuonVeto or tag_ADMuonVeto or tag_ShowerMuonVeto:
         return False

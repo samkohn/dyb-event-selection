@@ -3,7 +3,7 @@ Translate a Daya Bay recon.*.root file into a simpler .root file.
 
 '''
 from array import array
-from ROOT import TTree, TFile
+from ROOT import TTree, TFile, TChain
 
 class TreeBuffer(object):
     def copyTo(self, other):
@@ -63,10 +63,17 @@ def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
 def main():
-    filename = "/project/projectdirs/dayabay/data/exp/dayabay/2015/p14b/Neutrino/0107/recon.Neutrino.0048415.Physics.EH1-Merged.P14B-P._0278.root"
-    infile = TFile(filename)
-    calibStats = infile.Get('/Event/Data/CalibStats')
-    adSimple = infile.Get('/Event/Rec/AdSimple')
+    filenames = [
+            "/project/projectdirs/dayabay/data/exp/dayabay/2014/p15a/Neutrino/0101/recon.Neutrino.0043646.Physics.EH1-Merged.P15A-P._0001.root",
+            "/project/projectdirs/dayabay/data/exp/dayabay/2014/p15a/Neutrino/0101/recon.Neutrino.0043646.Physics.EH1-Merged.P15A-P._0002.root",
+            "/project/projectdirs/dayabay/data/exp/dayabay/2014/p15a/Neutrino/0101/recon.Neutrino.0043646.Physics.EH1-Merged.P15A-P._0003.root",
+            ]
+
+    calibStats = TChain('/Event/Data/CalibStats')
+    adSimple = TChain('/Event/Rec/AdSimple')
+    for filename in filenames:
+        calibStats.Add(filename)
+        adSimple.Add(filename)
 
     outfile = TFile('out.root', 'RECREATE')
     outdata = TTree('data', 'Daya Bay Data by Sam Kohn')
@@ -91,6 +98,29 @@ def main():
     buf.y = float_value()
     buf.z = float_value()
 
+    activeBranches = {
+            calibStats: [
+                'triggerNumber',
+                'context*',
+                'nHit',
+                'NominalCharge',
+                'Quadrant',
+                'MaxQ',
+                'time_PSD',
+                'time_PSD1',
+                'MaxQ_2inchPMT',
+            ],
+            adSimple: [
+                'context*',
+                'triggerType',
+                'energy',
+                'x', 'y', 'z',
+            ]
+    }
+    for chain, branch_names in activeBranches.items():
+        chain.SetBranchStatus('*', 0)
+        for branch_name in branch_names:
+            chain.SetBranchStatus(branch_name, 1)
 
 
     outdata.Branch('triggerNumber', buf.triggerNumber, 'triggerNumber/I')
@@ -156,7 +186,6 @@ def main():
 
     outfile.Write()
     outfile.Close()
-    infile.Close()
 
 if __name__ == '__main__':
     main()

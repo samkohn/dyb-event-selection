@@ -21,6 +21,6 @@ def fPSD(f_t1, f_t2):
         return log10(t1_term + t2_term)
 
 def isFlasher(event_fID, event_fPSD, f2inch_maxQ):
-    if event_fID == _NOT_RELEVANT and event_fPSD == _NOT_RELEVANT:
-        return 2
+    if event_fID == _NOT_RELEVANT or event_fPSD == _NOT_RELEVANT:
+        return False
     return (event_fID >= 0 or event_fPSD >= 0 or f2inch_maxQ > 100)

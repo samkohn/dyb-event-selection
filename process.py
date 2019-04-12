@@ -173,7 +173,8 @@ def main(debug):
         assign_value(buf.fID, event_fID)
         event_fPSD = fPSD(fPSD_t1, fPSD_t2)
         assign_value(buf.fPSD, event_fPSD)
-        event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ)
+        event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ,
+                detector)
         assign_value(buf.tag_flasher, event_isFlasher)
         if event_isFlasher:
             # Flashers cannot be muons but they can be prompt-like or

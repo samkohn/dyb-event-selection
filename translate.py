@@ -64,9 +64,9 @@ def fetch_annoying_value(ttree, branch_name, type_cast):
 
 def main():
     filenames = [
-            "/project/projectdirs/dayabay/data/exp/dayabay/2014/p15a/Neutrino/0101/recon.Neutrino.0043646.Physics.EH1-Merged.P15A-P._0001.root",
-            "/project/projectdirs/dayabay/data/exp/dayabay/2014/p15a/Neutrino/0101/recon.Neutrino.0043646.Physics.EH1-Merged.P15A-P._0002.root",
-            "/project/projectdirs/dayabay/data/exp/dayabay/2014/p15a/Neutrino/0101/recon.Neutrino.0043646.Physics.EH1-Merged.P15A-P._0003.root",
+            "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
+            "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0002.root",
+            "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0003.root",
             ]
 
     calibStats = TChain('/Event/Data/CalibStats')

@@ -27,4 +27,7 @@ def isFlasher(event_fID, event_fPSD, f2inch_maxQ, event_detector):
         return False
     if event_fID == _NOT_RELEVANT and event_fPSD == _NOT_RELEVANT:
         return False
-    return (event_fID >= 0 or event_fPSD >= 0 or f2inch_maxQ > 100)
+    fID_cut = int(event_fID >= 0)
+    fPSD_cut = int(event_fPSD >= 0) * 2
+    f2inch_cut = int(f2inch_maxQ > 100) * 4
+    return fID_cut + fPSD_cut + f2inch_cut

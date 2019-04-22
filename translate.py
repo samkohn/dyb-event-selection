@@ -3,6 +3,8 @@ Translate a Daya Bay recon.*.root file into a simpler .root file.
 
 '''
 from array import array
+import argparse
+
 from ROOT import TTree, TFile, TChain
 
 class TreeBuffer(object):
@@ -62,12 +64,13 @@ def assign_value(buf_value, new_value, index=0):
 def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
-def main():
-    filenames = [
-            "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
-            "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0002.root",
-            "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0003.root",
-            ]
+def main(filenames):
+    if len(filenames) == 0:
+        filenames = [
+                "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
+                "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0002.root",
+                "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0003.root",
+                ]
 
     calibStats = TChain('/Event/Data/CalibStats')
     adSimple = TChain('/Event/Rec/AdSimple')
@@ -188,4 +191,14 @@ def main():
     outfile.Close()
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--file-list', default=None)
+    args = parser.parse_args()
+    infile_list = args.file_list
+    infiles = []
+    if infile_list is not None:
+        with open(infile_list, 'r') as f:
+            for line in f:
+                if len(line) > 5:
+                    infiles.append(line[:-1])
+    main(infiles)

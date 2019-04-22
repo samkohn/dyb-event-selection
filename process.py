@@ -37,7 +37,7 @@ def done_with_cache(buf):
             or (found_next_WSMuon
                 and found_next_DelayedLike))
 
-def main(debug):
+def main(entries, debug):
 
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
@@ -134,7 +134,12 @@ def main(debug):
     PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
     recent_promptlikes = {n:deque() for n in range(9)}
 
-    entries = xrange(indata.GetEntries()) if not debug else range(10000)
+    if entries == -1:
+        entries = xrange(indata.GetEntries())
+    else:
+        entries = xrange(entries)
+    if debug:
+        entries = xrange(10000)
     for event_number in entries:
         logging.debug('event cache size: %d', len(event_cache))
         # Load the current event in the input TTree
@@ -346,7 +351,8 @@ def main(debug):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-n', '--events', type=int, default=-1)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.debug)
+    main(args.events, args.debug)

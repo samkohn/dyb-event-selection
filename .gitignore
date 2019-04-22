@@ -3,3 +3,5 @@
 *.pdf
 *.swp
 *.txt
+*.out
+*.o

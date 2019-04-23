@@ -181,19 +181,12 @@ def main(entries, debug):
         event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ,
                 detector)
         assign_value(buf.tag_flasher, event_isFlasher)
-        if event_isFlasher:
-            # Flashers cannot be muons but they can be prompt-like or
-            # delayed-like
-            event_isWSMuon = False
-            event_isADMuon = False
-            event_isShowerMuon = False
-        else:
-            event_isWSMuon = muons.isWSMuon(detector, nHit)
-            assign_value(buf.tag_WSMuon, event_isWSMuon)
-            event_isADMuon = muons.isADMuon(detector, charge)
-            assign_value(buf.tag_ADMuon, event_isADMuon)
-            event_isShowerMuon = muons.isShowerMuon(detector, charge)
-            assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
+        event_isWSMuon = muons.isWSMuon(detector, nHit)
+        assign_value(buf.tag_WSMuon, event_isWSMuon)
+        event_isADMuon = muons.isADMuon(detector, charge)
+        assign_value(buf.tag_ADMuon, event_isADMuon)
+        event_isShowerMuon = muons.isShowerMuon(detector, charge)
+        assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
         event_isPromptLike = isPromptLike(detector, energy)
         assign_value(buf.tag_PromptLike, event_isPromptLike)
         event_isDelayedLike = isDelayedLike(detector, energy)

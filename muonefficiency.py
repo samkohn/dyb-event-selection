@@ -20,6 +20,9 @@ def main(debug):
     total_nonvetoed_livetime = {1:0, 2:0}  # by AD
     start_time = 0
     end_time = 0
+    number_IBD_candidates = {1:0, 2:0}
+    number_prompts = {1:0, 2:0}
+    number_delayeds = {1:0, 2:0}
 
     entries = 10000 if debug else indata.GetEntries()
     for event_number in xrange(entries):
@@ -33,15 +36,46 @@ def main(debug):
         isWSMuon = fetch_value(incomputed, 'tag_WSMuon', bool)
         isADMuon = fetch_value(incomputed, 'tag_ADMuon', bool)
         isShowerMuon = fetch_value(incomputed, 'tag_ShowerMuon', bool)
+        isIBDDelayed = fetch_value(incomputed, 'tag_IBDDelayed', bool)
+        isPromptLike = fetch_value(incomputed, 'tag_PromptLike', bool)
+        isDelayedLike = fetch_value(incomputed, 'tag_DelayedLike', bool)
+        isWSMuonVetoed = fetch_value(incomputed, 'tag_WSMuonVeto', bool)
+        isADMuonVetoed = fetch_value(incomputed, 'tag_ADMuonVeto', bool)
+        isShowerMuonVetoed = fetch_value(incomputed,
+                'tag_ShowerMuonVeto', bool)
+        isFlasher = fetch_value(incomputed, 'tag_flasher', bool)
         dt_last_WSMuon = fetch_value(incomputed, 'dt_previous_WSMuon', int)
+        dt_next_WSMuon = fetch_value(incomputed, 'dt_next_WSMuon', int)
         dt_last_ADMuon = fetch_value(incomputed, 'dt_previous_ADMuon', int)
         dt_last_ShowerMuon = fetch_value(incomputed,
                 'dt_previous_ShowerMuon', int)
+
 
         if event_number == 0:
             start_time = timestamp
         if event_number == entries - 1:
             end_time = timestamp
+
+        if isIBDDelayed:
+            number_IBD_candidates[detector] += 1
+        if (isDelayedLike
+                and not isFlasher
+                and not isWSMuonVetoed
+                and not isADMuonVetoed
+                and not isShowerMuonVetoed):
+            number_delayeds[detector] += 1
+        EXTRA_PROMPT_DT = 400e3
+        if (isPromptLike
+                and not isFlasher
+                and dt_next_WSMuon > muons._WSMUON_VETO_NEXT_NS
+                and dt_last_WSMuon > (muons._WSMUON_VETO_LAST_NS
+                    - EXTRA_PROMPT_DT)
+                and dt_last_ADMuon > (muons._ADMUON_VETO_LAST_NS
+                    - EXTRA_PROMPT_DT)
+                and dt_last_ShowerMuon >
+                    (muons._SHOWER_MUON_VETO_LAST_NS
+                        - EXTRA_PROMPT_DT)):
+            number_prompts[detector] += 1
 
         if isWSMuon or isADMuon or isShowerMuon:
             dt_past_WSVeto = max(0, dt_last_WSMuon -
@@ -77,6 +111,23 @@ def main(debug):
             total_nonvetoed_livetime.items()}
     print('efficiency:')
     print(efficiency)
+    nonvetoed_livetime_days = total_nonvetoed_livetime / (1e9 * 60 * 60
+            * 24)
+    print('IBD candidates:')
+    print(number_IBD_candidates)
+    print('delayed-like:')
+    print(number_delayeds)
+    print('prompt-like:')
+    print(number_prompts)
+    print('IBD rate per day:')
+    print({n: num/nonvetoed_livetime_days for n, num in
+        number_IBD_candidates})
+    print('delayed-like rate (Hz):')
+    print({n: float(num)/total_nonvetoed_livetime/1e9 for n, num in
+        number_delayeds})
+    print('prompt-like rate (Hz):')
+    print({n: float(num)/total_nonvetoed_livetime/1e9 for n, num in
+        number_prompts})
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -11,7 +11,7 @@ from ROOT import TFile, TTree
 from translate import fetch_value
 import muons
 
-def main(debug):
+def main(num_events, debug):
     filename = 'out.root'
     infile = TFile(filename, 'READ')
     indata = infile.Get('data')
@@ -24,7 +24,7 @@ def main(debug):
     number_prompts = {1:0, 2:0}
     number_delayeds = {1:0, 2:0}
 
-    entries = 10000 if debug else indata.GetEntries()
+    entries = num_events if num_events > 0 else indata.GetEntries()
     for event_number in xrange(entries):
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
@@ -111,8 +111,8 @@ def main(debug):
             total_nonvetoed_livetime.items()}
     print('efficiency:')
     print(efficiency)
-    nonvetoed_livetime_days = total_nonvetoed_livetime / (1e9 * 60 * 60
-            * 24)
+    nonvetoed_livetime_days = {n: t/(1e9 * 60 * 60 * 24) for n, t in
+            total_nonvetoed_livetime.items()}
     print('IBD candidates:')
     print(number_IBD_candidates)
     print('delayed-like:')
@@ -120,20 +120,21 @@ def main(debug):
     print('prompt-like:')
     print(number_prompts)
     print('IBD rate per day:')
-    print({n: num/nonvetoed_livetime_days for n, num in
-        number_IBD_candidates})
+    print({n: num/nonvetoed_livetime_days[n] for n, num in
+        number_IBD_candidates.items()})
     print('delayed-like rate (Hz):')
-    print({n: float(num)/total_nonvetoed_livetime/1e9 for n, num in
-        number_delayeds})
+    print({n: float(num)/total_nonvetoed_livetime[n]*1e9 for n, num in
+        number_delayeds.items()})
     print('prompt-like rate (Hz):')
-    print({n: float(num)/total_nonvetoed_livetime/1e9 for n, num in
-        number_prompts})
+    print({n: float(num)/total_nonvetoed_livetime[n]*1e9 for n, num in
+        number_prompts.items()})
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('-n', '--num-events', type=int, default=-1)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.debug)
+    main(args.num_events, args.debug)
 

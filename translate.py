@@ -64,7 +64,7 @@ def assign_value(buf_value, new_value, index=0):
 def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
-def main(filenames):
+def main(filenames, nevents):
     if len(filenames) == 0:
         filenames = [
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
@@ -147,8 +147,9 @@ def main(filenames):
     outdata.Branch('y', buf.y, 'y/F')
     outdata.Branch('z', buf.z, 'z/F')
 
-    n_entries = calibStats.GetEntries()
-    if adSimple.GetEntries() != n_entries:
+    n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
+            calibStats.GetEntries())
+    if nevents == -1 and adSimple.GetEntries() != n_entries:
         print('Discrepant number of entries')
         return
 
@@ -193,6 +194,7 @@ def main(filenames):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--file-list', default=None)
+    parser.add_argument('-n', '--num-events', default=-1, type=int)
     args = parser.parse_args()
     infile_list = args.file_list
     infiles = []
@@ -201,4 +203,4 @@ if __name__ == '__main__':
             for line in f:
                 if len(line) > 5:
                     infiles.append(line[:-1])
-    main(infiles)
+    main(infiles, args.num_events)

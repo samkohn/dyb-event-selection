@@ -11,7 +11,7 @@ from ROOT import TFile, TTree
 from translate import fetch_value
 import muons
 
-def main(num_events, debug):
+def main(num_events, start_event, debug):
     filename = 'out.root'
     infile = TFile(filename, 'READ')
     indata = infile.Get('data')
@@ -23,13 +23,16 @@ def main(num_events, debug):
     number_IBD_candidates = {1:0, 2:0}
     number_prompts = {1:0, 2:0}
     number_delayeds = {1:0, 2:0}
+    events_since_last_valid_time = 0
 
-    entries = num_events if num_events > 0 else indata.GetEntries()
-    for event_number in xrange(entries):
+    total_entries = min(indata.GetEntries(), incomputed.GetEntries())
+    entries = min(num_events+start_event, total_entries) if num_events > 0 else total_entries
+    for event_number in xrange(start_event, entries):
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
         incomputed.LoadTree(event_number)
         incomputed.GetEntry(event_number)
+        logging.debug('Event %d', event_number)
 
         timestamp = fetch_value(indata, 'timeStamp', int)
         detector = fetch_value(indata, 'detector', int)
@@ -50,8 +53,10 @@ def main(num_events, debug):
         dt_last_ShowerMuon = fetch_value(incomputed,
                 'dt_previous_ShowerMuon', int)
 
+        logging.debug('isWSMuon: %d', int(isWSMuon))
 
-        if event_number == 0:
+
+        if event_number == start_event:
             start_time = timestamp
         if event_number == entries - 1:
             end_time = timestamp
@@ -101,7 +106,15 @@ def main(num_events, debug):
                     total_nonvetoed_livetime[det] += new_livetime
             else:
                 total_nonvetoed_livetime[detector] += new_livetime
+
+            if new_livetime > 0:
+                events_since_last_valid_time = 0
+            else:
+                events_since_last_valid_time += 1
+            logging.debug('events since last valid time: %d',
+                    events_since_last_valid_time)
             logging.debug('new livetime: %d', new_livetime)
+            logging.debug('new total: %s', total_nonvetoed_livetime)
     print('total DAQ livetime:')
     daq_livetime = end_time - start_time
     print(daq_livetime)
@@ -133,8 +146,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--num-events', type=int, default=-1)
+    parser.add_argument('-s', '--start-event', type=int, default=0)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.num_events, args.debug)
+    main(args.num_events, args.start_event, args.debug)
 

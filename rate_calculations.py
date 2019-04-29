@@ -20,6 +20,7 @@ def main(num_events, start_event, debug):
     total_nonvetoed_livetime = {1:0, 2:0}  # by AD
     start_time = 0
     end_time = 0
+    next_livetime_start = {1:0, 2:0}
     number_IBD_candidates = {1:0, 2:0}
     number_prompts = {1:0, 2:0}
     number_delayeds = {1:0, 2:0}
@@ -53,11 +54,21 @@ def main(num_events, start_event, debug):
         dt_last_ShowerMuon = fetch_value(incomputed,
                 'dt_previous_ShowerMuon', int)
 
-        logging.debug('isWSMuon: %d', int(isWSMuon))
+        muon_type = 'None'
+        if isWSMuon:
+            muon_type = 'WS'
+        if isADMuon:
+            muon_type = 'AD'
+        if isShowerMuon:
+            muon_type = 'Shower'
+        logging.debug('muon type: %s', muon_type)
 
 
         if event_number == start_event:
             start_time = timestamp
+            for key in next_livetime_start:
+                next_livetime_start[key] = (timestamp +
+                        muons._SHOWER_MUON_VETO_LAST_NS)
         if event_number == entries - 1:
             end_time = timestamp
 
@@ -82,39 +93,35 @@ def main(num_events, start_event, debug):
                         - EXTRA_PROMPT_DT)):
             number_prompts[detector] += 1
 
-        if isWSMuon or isADMuon or isShowerMuon:
-            dt_past_WSVeto = max(0, dt_last_WSMuon -
-                    muons._WSMUON_VETO_LAST_NS)
-            dt_past_ADVeto = max(0, dt_last_ADMuon -
-                    muons._ADMUON_VETO_LAST_NS)
-            dt_past_ShowerVeto = max(0, dt_last_ShowerMuon -
-                    muons._SHOWER_MUON_VETO_LAST_NS)
-            logging.debug('last WSMuon: %d', dt_last_WSMuon)
-            logging.debug('dt WS Veto: %d', dt_past_WSVeto)
-            logging.debug('last_ADMuon: %d', dt_last_ADMuon)
-            logging.debug('dt AD Veto: %d', dt_past_ADVeto)
-            logging.debug('last shower: %d', dt_last_ShowerMuon)
-            logging.debug('dt shower veto: %d', dt_past_ShowerVeto)
-
-            new_livetime = min(dt_past_WSVeto, dt_past_ADVeto,
-                    dt_past_ShowerVeto)
-
-            if isWSMuon:
-                new_livetime -= muons._WSMUON_VETO_NEXT_NS
-                new_livetime = max(0, new_livetime)
-                for det in total_nonvetoed_livetime:
+        logging.debug('next livetime start: %s', next_livetime_start)
+        logging.debug('timestamp: %d', timestamp)
+        if isWSMuon:
+            for det, next_start in next_livetime_start.items():
+                new_livetime = (timestamp - muons._WSMUON_VETO_NEXT_NS
+                        - next_start)
+                if new_livetime > 0:
                     total_nonvetoed_livetime[det] += new_livetime
-            else:
-                total_nonvetoed_livetime[detector] += new_livetime
-
+                new_start = timestamp + muons._WSMUON_VETO_LAST_NS
+                if new_start > next_start:
+                    next_livetime_start[det] = new_start
+        if isADMuon:
+            next_start = next_livetime_start[detector]
+            new_livetime = timestamp - next_start
             if new_livetime > 0:
-                events_since_last_valid_time = 0
-            else:
-                events_since_last_valid_time += 1
-            logging.debug('events since last valid time: %d',
-                    events_since_last_valid_time)
-            logging.debug('new livetime: %d', new_livetime)
-            logging.debug('new total: %s', total_nonvetoed_livetime)
+                total_nonvetoed_livetime[detector] += new_livetime
+            new_start = timestamp + muons._ADMUON_VETO_LAST_NS
+            if new_start > next_start:
+                next_livetime_start[detector] = new_start
+        if isShowerMuon:
+            next_start = next_livetime_start[detector]
+            new_livetime = timestamp - next_start
+            if new_livetime > 0:
+                total_nonvetoed_livetime[detector] += new_livetime
+            new_start = timestamp + muons._SHOWER_MUON_VETO_LAST_NS
+            if new_start > next_start:
+                next_livetime_start[detector] = new_start
+        logging.debug('new next livetime start: %s', next_livetime_start)
+        logging.debug('new total: %s', total_nonvetoed_livetime)
     print('total DAQ livetime:')
     daq_livetime = end_time - start_time
     print(daq_livetime)

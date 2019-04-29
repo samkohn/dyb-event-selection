@@ -335,7 +335,7 @@ def main(entries, debug):
         cached_event.copyTo(fill_buf)
         outdata.Fill()
 
-    infile.Write()
+    outdata.Write()
     infile.Close()
 
 if __name__ == '__main__':

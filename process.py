@@ -28,14 +28,11 @@ def done_with_cache(buf):
     # WSMuon and the next delayed-like events have been processed. (If
     # the event is not an AD event then the delayed-like event does not
     # have to have been processed.)
-    #flasher_done = buf.tag_flasher[0] != 0
     found_next_WSMuon = buf.dt_next_WSMuon[0] != 0
     detector = buf.noTree_detector[0]
     found_next_DelayedLike = (detector not in AD_DETECTORS
             or buf.dt_next_DelayedLike[0] != 0)
-    return (#flasher_done
-            (found_next_WSMuon
-                and found_next_DelayedLike))
+    return found_next_WSMuon and found_next_DelayedLike
 
 def main(entries, debug):
 
@@ -326,9 +323,7 @@ def main(entries, debug):
             outdata.Fill()
 
         event_cache.append(buf)
-        if debug:
-            pass #time.sleep(0.1)
-        #outdata.Fill()
+
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in event_cache:

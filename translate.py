@@ -4,8 +4,23 @@ Translate a Daya Bay recon.*.root file into a simpler .root file.
 '''
 from array import array
 import argparse
+import os
+import subprocess
 
 from ROOT import TTree, TFile, TChain
+
+def git_describe(directory=None):
+    if directory is None:
+        directory = os.path.dirname(__file__)
+    current_dir = os.getcwd()
+    try:
+        os.chdir(directory)
+    finally:
+        output = subprocess.check_output(['git', 'describe',
+            '--always', '--long', '--dirty']).strip()
+        os.chdir(current_dir)
+        return output
+
 
 class TreeBuffer(object):
     def copyTo(self, other):
@@ -65,6 +80,7 @@ def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
 def main(filenames, nevents):
+    git_description = git_describe()
     if len(filenames) == 0:
         filenames = [
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
@@ -79,7 +95,8 @@ def main(filenames, nevents):
         adSimple.Add(filename)
 
     outfile = TFile('out.root', 'RECREATE')
-    outdata = TTree('data', 'Daya Bay Data by Sam Kohn')
+    outdata = TTree('data', 'Daya Bay Data by Sam Kohn (git: %s)' %
+            git_description)
 
     buf = TreeBuffer()
     buf.triggerNumber = int_value()

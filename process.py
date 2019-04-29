@@ -16,7 +16,7 @@ import muons
 from prompts import isPromptLike
 from delayeds import isDelayedLike, isIBDDelayed
 from translate import (TreeBuffer, float_value, assign_value,
-        fetch_value, int_value, unsigned_int_value, long_value)
+        fetch_value, int_value, unsigned_int_value, long_value, git_describe)
 
 def done_with_cache(buf):
     '''
@@ -36,10 +36,12 @@ def done_with_cache(buf):
 
 def main(entries, debug):
 
+    git_description = git_describe()
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
     indata = infile.Get('data')
-    outdata = TTree('computed', 'Computed quantities by Sam Kohn')
+    outdata = TTree('computed', 'Computed quantities by Sam Kohn (git: %s)' %
+            git_description)
 
     # Initialize the "buffer" used to fill values into the TTree
     fill_buf = TreeBuffer()

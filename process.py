@@ -34,15 +34,11 @@ def done_with_cache(buf):
             or buf.dt_next_DelayedLike[0] != 0)
     return found_next_WSMuon and found_next_DelayedLike
 
-def main(entries, debug):
-
+def create_computed_TTree(host_file):
+    host_file.cd()
     git_description = git_describe()
-    filename = 'out.root'
-    infile = TFile(filename, 'UPDATE')
-    indata = infile.Get('data')
     outdata = TTree('computed', 'Computed quantities by Sam Kohn (git: %s)' %
             git_description)
-
     # Initialize the "buffer" used to fill values into the TTree
     fill_buf = TreeBuffer()
     fill_buf.noTree_timestamp = long_value()
@@ -117,21 +113,33 @@ def main(entries, debug):
     outdata.Branch('dts_PromptLikes_400us',
             fill_buf.dts_PromptLikes_400us,
             'dts_PromptLikes_400us[num_PromptLikes_400us]/L')
+    return outdata, fill_buf
 
-    # Initialize the machinery for dt_next_* and dt_previous_*
-    # attributes. The event_cache stores the TreeBuffer for each event
-    # until the next WSMuon and next DelayedLike have been found, thus
-    # preserving the event order between the input and output TTrees.
-    event_cache = deque()
-    last_WSMuon_time = 0
-    last_ADMuon_time = {n:0 for n in range(9)}
-    last_ShowerMuon_time = {n:0 for n in range(9)}
+class ProcessHelper(object):
     MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
-    recent_shower_muons = {n:deque() for n in range(9)}
-    last_PromptLike_time = {n:-1 for n in range(9)}
-    last_PromptLike_energy = {n:-1 for n in range(9)}
     PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
-    recent_promptlikes = {n:deque() for n in range(9)}
+    def __init__(self):
+        # Initialize the machinery for dt_next_* and dt_previous_*
+        # attributes. The event_cache stores the TreeBuffer for each event
+        # until the next WSMuon and next DelayedLike have been found, thus
+        # preserving the event order between the input and output TTrees.
+        self.event_cache = deque()
+        self.last_WSMuon_time = 0
+        self.last_ADMuon_time = {n:0 for n in range(9)}
+        self.last_ShowerMuon_time = {n:0 for n in range(9)}
+        self.recent_shower_muons = {n:deque() for n in range(9)}
+        self.last_PromptLike_time = {n:-1 for n in range(9)}
+        self.last_PromptLike_energy = {n:-1 for n in range(9)}
+        self.recent_promptlikes = {n:deque() for n in range(9)}
+
+def main(entries, debug):
+
+    filename = 'out.root'
+    infile = TFile(filename, 'UPDATE')
+    indata = infile.Get('data')
+    outdata, fill_buf = create_computed_TTree(infile)
+
+    helper = ProcessHelper()
 
     if entries == -1:
         entries = xrange(indata.GetEntries())
@@ -140,195 +148,15 @@ def main(entries, debug):
     if debug:
         entries = xrange(10000)
     for event_number in entries:
-        logging.debug('event cache size: %d', len(event_cache))
         # Load the current event in the input TTree
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
-        buf = fill_buf.clone_type()
+        indata_list = fetch_indata(indata)
 
-        # Fetch the necessary values from the input TTree
-        timestamp = fetch_value(indata, 'timeStamp', int)
-        assign_value(buf.noTree_timestamp, timestamp)
-        detector = fetch_value(indata, 'detector', int)
-        assign_value(buf.noTree_detector, detector)
-        site = fetch_value(indata, 'site', int)
-        assign_value(buf.noTree_site, site)
-        nHit = fetch_value(indata, 'nHit', int)
-        charge = fetch_value(indata, 'charge', float)
-        fMax = fetch_value(indata, 'fMax', float)
-        fQuad = fetch_value(indata, 'fQuad', float)
-        fPSD_t1 = fetch_value(indata, 'fPSD_t1', float)
-        fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
-        f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
-        energy = fetch_value(indata, 'energy', float)
-
-        # initialize last_*Muon_time to be the timestamp of the first
-        # event
-        if event_number == 0:
-            last_WSMuon_time = timestamp
-            for key in last_ADMuon_time:
-                last_ADMuon_time[key] = timestamp
-            for key in last_ShowerMuon_time:
-                last_ShowerMuon_time[key] = timestamp
-
-        # Compute simple tags and values (those that only require data
-        # from the current event)
-        event_fID = fID(fMax, fQuad)
-        assign_value(buf.fID, event_fID)
-        event_fPSD = fPSD(fPSD_t1, fPSD_t2)
-        assign_value(buf.fPSD, event_fPSD)
-        event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ,
-                detector)
-        assign_value(buf.tag_flasher, event_isFlasher)
-        event_isWSMuon = muons.isWSMuon(detector, nHit)
-        assign_value(buf.tag_WSMuon, event_isWSMuon)
-        event_isADMuon = muons.isADMuon(detector, charge)
-        assign_value(buf.tag_ADMuon, event_isADMuon)
-        event_isShowerMuon = muons.isShowerMuon(detector, charge)
-        assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
-        event_isPromptLike = isPromptLike(detector, energy)
-        assign_value(buf.tag_PromptLike, event_isPromptLike)
-        event_isDelayedLike = isDelayedLike(detector, energy)
-        assign_value(buf.tag_DelayedLike, event_isDelayedLike)
-
-
-        # Compute tags and values that count the number of previous
-        # events within a given time satisfying some criteria.
-
-        # Ensure the list of previous shower muons only has events more
-        # recent than MUON_COUNT_TIME ago
-        while len(recent_shower_muons[detector]) > 0 and (timestamp
-                - recent_shower_muons[detector][0] > MUON_COUNT_TIME):
-            recent_shower_muons[detector].popleft()
-
-        # Ensure the list of previous prompt-like events only has events
-        # more recent than PROMPT_COUNT_TIME ago
-        while len(recent_promptlikes[detector]) > 0 and (timestamp -
-                recent_promptlikes[detector][0] > PROMPT_COUNT_TIME):
-            recent_promptlikes[detector].popleft()
-
-        # Compute the dts for both recent muons and recent prompt-likes
-        recent_showermuon_dts = [timestamp - muon_time for muon_time in
-                recent_shower_muons[detector]]
-        recent_promptlike_dts = [timestamp - prompt_time for prompt_time
-                in recent_promptlikes[detector]]
-
-        # Assign the values for dt_previous_* and for the lists of
-        # recent muons and prompt-likes.
-        assign_value(buf.dt_previous_WSMuon, timestamp -
-                last_WSMuon_time)
-        assign_value(buf.dt_previous_ADMuon, timestamp -
-                last_ADMuon_time[detector])
-        assign_value(buf.dt_previous_ShowerMuon, timestamp -
-                last_ShowerMuon_time[detector])
-        assign_value(buf.dt_previous_PromptLike, timestamp -
-                last_PromptLike_time[detector])
-        assign_value(buf.energy_previous_PromptLike,
-                last_PromptLike_energy[detector])
-        assign_value(buf.num_ShowerMuons_5sec,
-                len(recent_shower_muons[detector]))
-        assign_value(buf.num_PromptLikes_400us,
-                len(recent_promptlikes[detector]))
-        for i, dt in enumerate(recent_showermuon_dts):
-            assign_value(buf.dts_ShowerMuons_5sec, dt, i)
-        for i, dt in enumerate(recent_promptlike_dts):
-            assign_value(buf.dts_PromptLikes_400us, dt, i)
-
-        # Compute muon vetoes that only rely on previous events
-        assign_value(buf.tag_ADMuonVeto,
-                muons.isVetoedByADMuon(buf.dt_previous_ADMuon[0]))
-        assign_value(buf.tag_ShowerMuonVeto,
-                muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
-
-        # Update the dt_previous_* and dt_next_* values
-
-        # This comes after values are assigned to the buffer because we
-        # don't want dt_previous_* to be 0.
-        if event_isWSMuon:
-            logging.debug("isWSMuon")
-            last_WSMuon_time = timestamp
-            # Assign dt_next_WSMuon to the events in the event_cache
-            for cached_event in event_cache:
-                # Some events might already have been assigned, so skip
-                # those
-                if cached_event.dt_next_WSMuon[0] != 0:
-                    continue
-                # WSMuons are common across the entire EH/site
-                if cached_event.noTree_site[0] == site:
-                    logging.debug('taggedNextWS%d', cached_event.noTree_timestamp[0])
-                    assign_value(cached_event.dt_next_WSMuon,
-                            timestamp - cached_event.noTree_timestamp[0])
-                    assign_value(cached_event.tag_WSMuonVeto,
-                            muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
-                                cached_event.dt_next_WSMuon[0]))
-
-        if event_isADMuon:
-            last_ADMuon_time[detector] = timestamp
-        if event_isShowerMuon:
-            last_ShowerMuon_time[detector] = timestamp
-            recent_shower_muons[detector].append(timestamp)
-        # Don't include prompt-like flasher events
-        if event_isPromptLike and not event_isFlasher:
-            last_PromptLike_time[detector] = timestamp
-            last_PromptLike_energy[detector] = energy
-            recent_promptlikes[detector].append(timestamp)
-        # Don't include prompt-like delayed events
-        if event_isDelayedLike and not event_isFlasher:
-            logging.debug("isDelayedLike")
-            # Assign dt_next_PromptLike to events in the event_cache
-            for cached_event in event_cache:
-                # Some events might already have been assigned, so skip
-                # those
-                if cached_event.dt_next_DelayedLike[0] != 0:
-                    continue
-                # PromptLikes are restricted to a single AD
-                if cached_event.noTree_detector[0] == detector:
-                    logging.debug('taggedNextDelayed%d',
-                            cached_event.noTree_timestamp[0])
-                    assign_value(cached_event.dt_next_DelayedLike,
-                            timestamp
-                            - cached_event.noTree_timestamp[0])
-
-        # Determine which of the oldest events are ready to go into the
-        # new TTree. It is possible (due to different ADs) that the
-        # oldest event might not be ready but another event might be. In
-        # that case, to preserve event order, we will wait for the
-        # oldest event to be ready anyways.
-        num_to_delete = 0
-        all_done_with_cache = True
-        cache_size = len(event_cache)
-        while all_done_with_cache and num_to_delete < cache_size:
-            cached_event = event_cache[num_to_delete]
-            if done_with_cache(cached_event):
-                logging.debug('event is done with cache')
-                num_to_delete += 1
-            else:
-                logging.debug('event is not done with cache')
-                all_done_with_cache = False
-        logging.debug('deleting %d events', num_to_delete)
-        # Remove the oldest events from the cache and fill them into the
-        # new TTree, computing the final IBD tags while we're at it.
-        for _ in range(num_to_delete):
-            cached_event = event_cache.popleft()
-            e = cached_event
-            ibd_delayed = isIBDDelayed(
-                    e.tag_DelayedLike[0],
-                    e.dt_previous_PromptLike[0],
-                    e.num_PromptLikes_400us[0],
-                    e.dt_next_DelayedLike[0],
-                    e.tag_WSMuonVeto[0],
-                    e.tag_ADMuonVeto[0],
-                    e.tag_ShowerMuonVeto[0],
-                    e.tag_flasher[0])
-            assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
-            cached_event.copyTo(fill_buf)
-            outdata.Fill()
-
-        event_cache.append(buf)
-
+        one_iteration(event_number, indata_list, outdata, fill_buf, helper)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
-    for cached_event in event_cache:
+    for cached_event in helper.event_cache:
         assign_value(cached_event.dt_next_WSMuon, -1)
         assign_value(cached_event.tag_WSMuonVeto, 2)
         assign_value(cached_event.dt_next_DelayedLike, -1)
@@ -337,6 +165,208 @@ def main(entries, debug):
 
     outdata.Write()
     infile.Close()
+
+def fetch_indata(indata):
+    # Fetch the necessary values from the input TTree
+    timestamp = fetch_value(indata, 'timeStamp', int)
+    detector = fetch_value(indata, 'detector', int)
+    site = fetch_value(indata, 'site', int)
+    nHit = fetch_value(indata, 'nHit', int)
+    charge = fetch_value(indata, 'charge', float)
+    fMax = fetch_value(indata, 'fMax', float)
+    fQuad = fetch_value(indata, 'fQuad', float)
+    fPSD_t1 = fetch_value(indata, 'fPSD_t1', float)
+    fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
+    f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
+    energy = fetch_value(indata, 'energy', float)
+    return (
+            timestamp,
+            detector,
+            site,
+            nHit,
+            charge,
+            fMax,
+            fQuad,
+            fPSD_t1,
+            fPSD_t2,
+            f2inch_maxQ,
+            energy
+            )
+
+def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper):
+    (timestamp, detector, site, nHit, charge, fMax, fQuad,
+            fPSD_t1, fPSD_t2, f2inch_maxQ, energy) = relevant_indata
+
+    logging.debug('event cache size: %d', len(helper.event_cache))
+
+    buf = fill_buf.clone_type()
+    assign_value(buf.noTree_timestamp, timestamp)
+    assign_value(buf.noTree_detector, detector)
+    assign_value(buf.noTree_site, site)
+    # initialize last_*Muon_time to be the timestamp of the first
+    # event
+    if event_number == 0:
+        helper.last_WSMuon_time = timestamp
+        for key in helper.last_ADMuon_time:
+            helper.last_ADMuon_time[key] = timestamp
+        for key in helper.last_ShowerMuon_time:
+            helper.last_ShowerMuon_time[key] = timestamp
+
+    # Compute simple tags and values (those that only require data
+    # from the current event)
+    event_fID = fID(fMax, fQuad)
+    assign_value(buf.fID, event_fID)
+    event_fPSD = fPSD(fPSD_t1, fPSD_t2)
+    assign_value(buf.fPSD, event_fPSD)
+    event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ,
+            detector)
+    assign_value(buf.tag_flasher, event_isFlasher)
+    event_isWSMuon = muons.isWSMuon(detector, nHit)
+    assign_value(buf.tag_WSMuon, event_isWSMuon)
+    event_isADMuon = muons.isADMuon(detector, charge)
+    assign_value(buf.tag_ADMuon, event_isADMuon)
+    event_isShowerMuon = muons.isShowerMuon(detector, charge)
+    assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
+    event_isPromptLike = isPromptLike(detector, energy)
+    assign_value(buf.tag_PromptLike, event_isPromptLike)
+    event_isDelayedLike = isDelayedLike(detector, energy)
+    assign_value(buf.tag_DelayedLike, event_isDelayedLike)
+
+
+    # Compute tags and values that count the number of previous
+    # events within a given time satisfying some criteria.
+
+    # Ensure the list of previous shower muons only has events more
+    # recent than MUON_COUNT_TIME ago
+    while len(helper.recent_shower_muons[detector]) > 0 and (timestamp
+            - helper.recent_shower_muons[detector][0] > ProcessHelper.MUON_COUNT_TIME):
+        helper.recent_shower_muons[detector].popleft()
+
+    # Ensure the list of previous prompt-like events only has events
+    # more recent than PROMPT_COUNT_TIME ago
+    while len(helper.recent_promptlikes[detector]) > 0 and (timestamp -
+            helper.recent_promptlikes[detector][0] > ProcessHelper.PROMPT_COUNT_TIME):
+        helper.recent_promptlikes[detector].popleft()
+
+    # Compute the dts for both recent muons and recent prompt-likes
+    recent_showermuon_dts = [timestamp - muon_time for muon_time in
+            helper.recent_shower_muons[detector]]
+    recent_promptlike_dts = [timestamp - prompt_time for prompt_time
+            in helper.recent_promptlikes[detector]]
+
+    # Assign the values for dt_previous_* and for the lists of
+    # recent muons and prompt-likes.
+    assign_value(buf.dt_previous_WSMuon, timestamp -
+            helper.last_WSMuon_time)
+    assign_value(buf.dt_previous_ADMuon, timestamp -
+            helper.last_ADMuon_time[detector])
+    assign_value(buf.dt_previous_ShowerMuon, timestamp -
+            helper.last_ShowerMuon_time[detector])
+    assign_value(buf.dt_previous_PromptLike, timestamp -
+            helper.last_PromptLike_time[detector])
+    assign_value(buf.energy_previous_PromptLike,
+            helper.last_PromptLike_energy[detector])
+    assign_value(buf.num_ShowerMuons_5sec,
+            len(helper.recent_shower_muons[detector]))
+    assign_value(buf.num_PromptLikes_400us,
+            len(helper.recent_promptlikes[detector]))
+    for i, dt in enumerate(recent_showermuon_dts):
+        assign_value(buf.dts_ShowerMuons_5sec, dt, i)
+    for i, dt in enumerate(recent_promptlike_dts):
+        assign_value(buf.dts_PromptLikes_400us, dt, i)
+
+    # Compute muon vetoes that only rely on previous events
+    assign_value(buf.tag_ADMuonVeto,
+            muons.isVetoedByADMuon(buf.dt_previous_ADMuon[0]))
+    assign_value(buf.tag_ShowerMuonVeto,
+            muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
+
+    # Update the dt_previous_* and dt_next_* values
+
+    # This comes after values are assigned to the buffer because we
+    # don't want dt_previous_* to be 0.
+    if event_isWSMuon:
+        logging.debug("isWSMuon")
+        helper.last_WSMuon_time = timestamp
+        # Assign dt_next_WSMuon to the events in the event_cache
+        for cached_event in helper.event_cache:
+            # Some events might already have been assigned, so skip
+            # those
+            if cached_event.dt_next_WSMuon[0] != 0:
+                continue
+            # WSMuons are common across the entire EH/site
+            if cached_event.noTree_site[0] == site:
+                logging.debug('taggedNextWS%d', cached_event.noTree_timestamp[0])
+                assign_value(cached_event.dt_next_WSMuon,
+                        timestamp - cached_event.noTree_timestamp[0])
+                assign_value(cached_event.tag_WSMuonVeto,
+                        muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
+                            cached_event.dt_next_WSMuon[0]))
+
+    if event_isADMuon:
+        helper.last_ADMuon_time[detector] = timestamp
+    if event_isShowerMuon:
+        helper.last_ShowerMuon_time[detector] = timestamp
+        helper.recent_shower_muons[detector].append(timestamp)
+    # Don't include prompt-like flasher events
+    if event_isPromptLike and not event_isFlasher:
+        helper.last_PromptLike_time[detector] = timestamp
+        helper.last_PromptLike_energy[detector] = energy
+        helper.recent_promptlikes[detector].append(timestamp)
+    # Don't include prompt-like delayed events
+    if event_isDelayedLike and not event_isFlasher:
+        logging.debug("isDelayedLike")
+        # Assign dt_next_PromptLike to events in the event_cache
+        for cached_event in helper.event_cache:
+            # Some events might already have been assigned, so skip
+            # those
+            if cached_event.dt_next_DelayedLike[0] != 0:
+                continue
+            # PromptLikes are restricted to a single AD
+            if cached_event.noTree_detector[0] == detector:
+                logging.debug('taggedNextDelayed%d',
+                        cached_event.noTree_timestamp[0])
+                assign_value(cached_event.dt_next_DelayedLike,
+                        timestamp
+                        - cached_event.noTree_timestamp[0])
+
+    # Determine which of the oldest events are ready to go into the
+    # new TTree. It is possible (due to different ADs) that the
+    # oldest event might not be ready but another event might be. In
+    # that case, to preserve event order, we will wait for the
+    # oldest event to be ready anyways.
+    num_to_delete = 0
+    all_done_with_cache = True
+    cache_size = len(helper.event_cache)
+    while all_done_with_cache and num_to_delete < cache_size:
+        cached_event = helper.event_cache[num_to_delete]
+        if done_with_cache(cached_event):
+            logging.debug('event is done with cache')
+            num_to_delete += 1
+        else:
+            logging.debug('event is not done with cache')
+            all_done_with_cache = False
+    logging.debug('deleting %d events', num_to_delete)
+    # Remove the oldest events from the cache and fill them into the
+    # new TTree, computing the final IBD tags while we're at it.
+    for _ in range(num_to_delete):
+        cached_event = helper.event_cache.popleft()
+        e = cached_event
+        ibd_delayed = isIBDDelayed(
+                e.tag_DelayedLike[0],
+                e.dt_previous_PromptLike[0],
+                e.num_PromptLikes_400us[0],
+                e.dt_next_DelayedLike[0],
+                e.tag_WSMuonVeto[0],
+                e.tag_ADMuonVeto[0],
+                e.tag_ShowerMuonVeto[0],
+                e.tag_flasher[0])
+        assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
+        cached_event.copyTo(fill_buf)
+        outdata.Fill()
+
+    helper.event_cache.append(buf)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

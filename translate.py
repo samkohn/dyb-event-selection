@@ -80,7 +80,6 @@ def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
 def main(filenames, nevents):
-    git_description = git_describe()
     if len(filenames) == 0:
         filenames = [
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
@@ -88,35 +87,33 @@ def main(filenames, nevents):
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0003.root",
                 ]
 
+
+    calibStats, adSimple = initialize_indata(filenames)
+    outfile = TFile('out.root', 'RECREATE')
+    outdata, buf = create_outdata(outfile)
+    n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
+            calibStats.GetEntries())
+    if nevents == -1 and adSimple.GetEntries() != n_entries:
+        print('Discrepant number of entries')
+        return
+
+    for entry_number in range(n_entries):
+        calibStats.LoadTree(entry_number)
+        calibStats.GetEntry(entry_number)
+        adSimple.LoadTree(entry_number)
+        adSimple.GetEntry(entry_number)
+        copy(buf, calibStats, adSimple)
+        outdata.Fill()
+
+    outfile.Write()
+    outfile.Close()
+
+def initialize_indata(filenames):
     calibStats = TChain('/Event/Data/CalibStats')
     adSimple = TChain('/Event/Rec/AdSimple')
     for filename in filenames:
         calibStats.Add(filename)
         adSimple.Add(filename)
-
-    outfile = TFile('out.root', 'RECREATE')
-    outdata = TTree('data', 'Daya Bay Data by Sam Kohn (git: %s)' %
-            git_description)
-
-    buf = TreeBuffer()
-    buf.triggerNumber = int_value()
-    buf.timeStamp_seconds = int_value()
-    buf.timeStamp_nanoseconds = int_value()
-    buf.timeStamp = long_value()
-    buf.detector = int_value()
-    buf.site = int_value()
-    buf.triggerType = unsigned_int_value()
-    buf.nHit = int_value()
-    buf.charge = float_value()
-    buf.fQuad = float_value()
-    buf.fMax = float_value()
-    buf.fPSD_t1 = float_value()
-    buf.fPSD_t2 = float_value()
-    buf.f2inch_maxQ = float_value()
-    buf.energy = float_value()
-    buf.x = float_value()
-    buf.y = float_value()
-    buf.z = float_value()
 
     activeBranches = {
             calibStats: [
@@ -141,7 +138,33 @@ def main(filenames, nevents):
         chain.SetBranchStatus('*', 0)
         for branch_name in branch_names:
             chain.SetBranchStatus(branch_name, 1)
+    return calibStats, adSimple
 
+def create_data_TTree(host_file):
+    host_file.cd()
+    git_description = git_describe()
+    outdata = TTree('data', 'Daya Bay Data by Sam Kohn (git: %s)' %
+            git_description)
+
+    buf = TreeBuffer()
+    buf.triggerNumber = int_value()
+    buf.timeStamp_seconds = int_value()
+    buf.timeStamp_nanoseconds = int_value()
+    buf.timeStamp = long_value()
+    buf.detector = int_value()
+    buf.site = int_value()
+    buf.triggerType = unsigned_int_value()
+    buf.nHit = int_value()
+    buf.charge = float_value()
+    buf.fQuad = float_value()
+    buf.fMax = float_value()
+    buf.fPSD_t1 = float_value()
+    buf.fPSD_t2 = float_value()
+    buf.f2inch_maxQ = float_value()
+    buf.energy = float_value()
+    buf.x = float_value()
+    buf.y = float_value()
+    buf.z = float_value()
 
     outdata.Branch('triggerNumber', buf.triggerNumber, 'triggerNumber/I')
     outdata.Branch('timeStamp_seconds', buf.timeStamp_seconds,
@@ -164,49 +187,38 @@ def main(filenames, nevents):
     outdata.Branch('y', buf.y, 'y/F')
     outdata.Branch('z', buf.z, 'z/F')
 
-    n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
-            calibStats.GetEntries())
-    if nevents == -1 and adSimple.GetEntries() != n_entries:
-        print('Discrepant number of entries')
-        return
+    return outdata, buf
 
-    for entry_number in range(n_entries):
-        calibStats.LoadTree(entry_number)
-        calibStats.GetEntry(entry_number)
-        adSimple.LoadTree(entry_number)
-        adSimple.GetEntry(entry_number)
 
-        assign_value(buf.triggerNumber, fetch_value(calibStats,
-            'triggerNumber', int))
-        assign_value(buf.timeStamp_seconds, fetch_value(calibStats,
-            'context.mTimeStamp.mSec', int))
-        assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
-            'context.mTimeStamp.mNanoSec', int))
-        assign_value(buf.timeStamp, buf.timeStamp_seconds[0]*(10**9) +
-                buf.timeStamp_nanoseconds[0])
-        assign_value(buf.detector, fetch_value(calibStats,
-            'context.mDetId', int))
-        assign_value(buf.site, fetch_value(adSimple, 'context.mSite',
-            int))
-        assign_value(buf.triggerType, fetch_value(adSimple,
-            'triggerType', int))
-        assign_value(buf.nHit, fetch_value(calibStats, 'nHit', int))
-        assign_value(buf.charge, fetch_value(calibStats,
-            'NominalCharge', float))
-        assign_value(buf.fQuad, fetch_value(calibStats, 'Quadrant', float))
-        assign_value(buf.fMax, fetch_value(calibStats, 'MaxQ', float))
-        assign_value(buf.fPSD_t1, fetch_value(calibStats, 'time_PSD', float))
-        assign_value(buf.fPSD_t2, fetch_value(calibStats, 'time_PSD1', float))
-        assign_value(buf.f2inch_maxQ, fetch_value(calibStats,
-            'MaxQ_2inchPMT', float))
-        assign_value(buf.energy, fetch_value(adSimple, 'energy', float))
-        assign_value(buf.x, fetch_value(adSimple, 'x', float))
-        assign_value(buf.y, fetch_value(adSimple, 'y', float))
-        assign_value(buf.z, fetch_value(adSimple, 'z', float))
-        outdata.Fill()
 
-    outfile.Write()
-    outfile.Close()
+def copy(buf, calibStats, adSimple):
+    assign_value(buf.triggerNumber, fetch_value(calibStats,
+        'triggerNumber', int))
+    assign_value(buf.timeStamp_seconds, fetch_value(calibStats,
+        'context.mTimeStamp.mSec', int))
+    assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
+        'context.mTimeStamp.mNanoSec', int))
+    assign_value(buf.timeStamp, buf.timeStamp_seconds[0]*(10**9) +
+            buf.timeStamp_nanoseconds[0])
+    assign_value(buf.detector, fetch_value(calibStats,
+        'context.mDetId', int))
+    assign_value(buf.site, fetch_value(adSimple, 'context.mSite',
+        int))
+    assign_value(buf.triggerType, fetch_value(adSimple,
+        'triggerType', int))
+    assign_value(buf.nHit, fetch_value(calibStats, 'nHit', int))
+    assign_value(buf.charge, fetch_value(calibStats,
+        'NominalCharge', float))
+    assign_value(buf.fQuad, fetch_value(calibStats, 'Quadrant', float))
+    assign_value(buf.fMax, fetch_value(calibStats, 'MaxQ', float))
+    assign_value(buf.fPSD_t1, fetch_value(calibStats, 'time_PSD', float))
+    assign_value(buf.fPSD_t2, fetch_value(calibStats, 'time_PSD1', float))
+    assign_value(buf.f2inch_maxQ, fetch_value(calibStats,
+        'MaxQ_2inchPMT', float))
+    assign_value(buf.energy, fetch_value(adSimple, 'energy', float))
+    assign_value(buf.x, fetch_value(adSimple, 'x', float))
+    assign_value(buf.y, fetch_value(adSimple, 'y', float))
+    assign_value(buf.z, fetch_value(adSimple, 'z', float))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

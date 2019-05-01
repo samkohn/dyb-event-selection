@@ -9,6 +9,7 @@ from ROOT import TTree, TFile, TChain
 
 import translate
 import process
+import rate_calculations
 
 def main(filenames, nevents):
     if len(filenames) == 0:
@@ -23,6 +24,7 @@ def main(filenames, nevents):
     computed, computed_buf = process.create_computed_TTree(outfile)
     calibStats, adSimple = translate.initialize_indata(filenames)
     computed_helper = process.ProcessHelper()
+    rate_helper = rate_calculations.RateHelper()
 
     n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
             calibStats.GetEntries())
@@ -30,6 +32,7 @@ def main(filenames, nevents):
         print('Discrepant number of entries')
         return
 
+    callback = rate_calculations.callback_adapter(rate_helper, 0, n_entries)
     for entry_number in range(n_entries):
         calibStats.LoadTree(entry_number)
         calibStats.GetEntry(entry_number)
@@ -53,18 +56,20 @@ def main(filenames, nevents):
         outdata.Fill()
 
         process.one_iteration(entry_number, indata_list, computed,
-                computed_buf, computed_helper)
+                computed_buf, computed_helper, callback)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in computed_helper.event_cache:
         translate.assign_value(cached_event.dt_next_WSMuon, -1)
         translate.assign_value(cached_event.tag_WSMuonVeto, 2)
         translate.assign_value(cached_event.dt_next_DelayedLike, -1)
+        callback(cached_event)
         cached_event.copyTo(computed_buf)
         computed.Fill()
 
     outfile.Write()
     outfile.Close()
+    rate_calculations.print_results(rate_helper)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -41,6 +41,7 @@ def create_computed_TTree(host_file):
             git_description)
     # Initialize the "buffer" used to fill values into the TTree
     fill_buf = TreeBuffer()
+    fill_buf.noTree_loopIndex = int_value()
     fill_buf.noTree_timestamp = long_value()
     fill_buf.noTree_detector = int_value()
     fill_buf.noTree_site = int_value()
@@ -147,19 +148,23 @@ def main(entries, debug):
         entries = xrange(entries)
     if debug:
         entries = xrange(10000)
+    def callback(event_cache):
+        print(event_cache.noTree_loopIndex[0])
     for event_number in entries:
         # Load the current event in the input TTree
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
         indata_list = fetch_indata(indata)
 
-        one_iteration(event_number, indata_list, outdata, fill_buf, helper)
+        one_iteration(event_number, indata_list, outdata, fill_buf, helper,
+                callback)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in helper.event_cache:
         assign_value(cached_event.dt_next_WSMuon, -1)
         assign_value(cached_event.tag_WSMuonVeto, 2)
         assign_value(cached_event.dt_next_DelayedLike, -1)
+        callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
 
@@ -193,13 +198,15 @@ def fetch_indata(indata):
             energy
             )
 
-def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper):
+def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
+        callback=lambda e:None):
     (timestamp, detector, site, nHit, charge, fMax, fQuad,
             fPSD_t1, fPSD_t2, f2inch_maxQ, energy) = relevant_indata
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
     buf = fill_buf.clone_type()
+    assign_value(buf.noTree_loopIndex, event_number)
     assign_value(buf.noTree_timestamp, timestamp)
     assign_value(buf.noTree_detector, detector)
     assign_value(buf.noTree_site, site)
@@ -362,6 +369,7 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper):
                 e.tag_ShowerMuonVeto[0],
                 e.tag_flasher[0])
         assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
+        callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
 

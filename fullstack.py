@@ -4,6 +4,7 @@ Translate a Daya Bay recon.*.root file into a simpler .root file.
 '''
 from array import array
 import argparse
+import logging
 
 from ROOT import TTree, TFile, TChain
 
@@ -11,7 +12,7 @@ import translate
 import process
 import rate_calculations
 
-def main(filenames, nevents):
+def main(filenames, nevents, start_event):
     if len(filenames) == 0:
         filenames = [
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
@@ -19,21 +20,23 @@ def main(filenames, nevents):
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0003.root",
                 ]
 
-    outfile = TFile('out3.root', 'RECREATE')
+    outfile = TFile('out.root', 'RECREATE')
     outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree(outfile)
     calibStats, adSimple = translate.initialize_indata(filenames)
     computed_helper = process.ProcessHelper()
     rate_helper = rate_calculations.RateHelper()
 
-    n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
-            calibStats.GetEntries())
-    if nevents == -1 and adSimple.GetEntries() != n_entries:
+    end_event = (calibStats.GetEntries() if nevents == -1 else
+            min(nevents+start_event, calibStats.GetEntries()))
+    if nevents == -1 and adSimple.GetEntries() != end_event:
         print('Discrepant number of entries')
         return
 
-    callback = rate_calculations.callback_adapter(rate_helper, 0, n_entries)
-    for entry_number in range(n_entries):
+    callback = rate_calculations.callback_adapter(rate_helper, start_event,
+            end_event)
+    for entry_number in range(start_event, end_event):
+        logging.debug('Event %d', entry_number)
         calibStats.LoadTree(entry_number)
         calibStats.GetEntry(entry_number)
         adSimple.LoadTree(entry_number)
@@ -75,7 +78,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--file-list', default=None)
     parser.add_argument('-n', '--num-events', default=-1, type=int)
+    parser.add_argument('-s', '--start-event', default=0, type=int)
+    parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
     infile_list = args.file_list
     infiles = []
     if infile_list is not None:
@@ -83,4 +90,4 @@ if __name__ == '__main__':
             for line in f:
                 if len(line) > 5:
                     infiles.append(line[:-1])
-    main(infiles, args.num_events)
+    main(infiles, args.num_events, args.start_event)

@@ -368,6 +368,8 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
                 e.tag_ADMuonVeto[0],
                 e.tag_ShowerMuonVeto[0],
                 e.tag_flasher[0])
+        logging.debug('cached event: %s', cached_event)
+        logging.debug('isIBDDelayed: %s', ibd_delayed)
         assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
         callback(cached_event)
         cached_event.copyTo(fill_buf)

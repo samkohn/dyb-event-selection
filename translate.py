@@ -23,6 +23,9 @@ def git_describe(directory=None):
 
 
 class TreeBuffer(object):
+    def __str__(self):
+        return str(self.__dict__)
+
     def copyTo(self, other):
         '''
         Copy the values in this TreeBuffer to an existing TreeBuffer set

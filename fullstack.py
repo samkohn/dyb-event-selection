@@ -25,7 +25,9 @@ def main(filename, nevents, start_event):
 
     run, fileno = extract_run_fileno(filename)
 
-    outfile = TFile('out_%d_%d.root' % (run, fileno), 'RECREATE')
+    outfile = TFile('out_%d_%d.root' % (run, fileno), 'RECREATE',
+            'DYB Run %d file %d, git %s' % (run, fileno,
+                translate.git_describe()))
     outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree(outfile)
     calibStats, adSimple = translate.initialize_indata([filename])
@@ -47,7 +49,7 @@ def main(filename, nevents, start_event):
         adSimple.LoadTree(entry_number)
         adSimple.GetEntry(entry_number)
 
-        translate.copy(outdata_buf, calibStats, adSimple)
+        translate.copy(outdata_buf, calibStats, adSimple, run, fileno)
         indata_list = []
         indata_list.append(outdata_buf.timeStamp[0])
         indata_list.append(outdata_buf.triggerType[0])

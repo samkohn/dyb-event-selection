@@ -150,6 +150,8 @@ def create_data_TTree(host_file):
             git_description)
 
     buf = TreeBuffer()
+    buf.run = unsigned_int_value()
+    buf.fileno = unsigned_int_value()
     buf.triggerNumber = int_value()
     buf.timeStamp_seconds = int_value()
     buf.timeStamp_nanoseconds = int_value()
@@ -169,6 +171,8 @@ def create_data_TTree(host_file):
     buf.y = float_value()
     buf.z = float_value()
 
+    outdata.Branch('run', buf.run, 'run/i')
+    outdata.Branch('fileno', buf.fileno, 'fileno/i')
     outdata.Branch('triggerNumber', buf.triggerNumber, 'triggerNumber/I')
     outdata.Branch('timeStamp_seconds', buf.timeStamp_seconds,
             'timeStamp_seconds/I')
@@ -194,7 +198,9 @@ def create_data_TTree(host_file):
 
 
 
-def copy(buf, calibStats, adSimple):
+def copy(buf, calibStats, adSimple, run, fileno):
+    assign_value(buf.run, run)
+    assign_value(buf.fileno, fileno)
     assign_value(buf.triggerNumber, fetch_value(calibStats,
         'triggerNumber', int))
     assign_value(buf.timeStamp_seconds, fetch_value(calibStats,

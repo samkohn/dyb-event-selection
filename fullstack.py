@@ -5,6 +5,8 @@ Translate a Daya Bay recon.*.root file into a simpler .root file.
 from array import array
 import argparse
 import logging
+import json
+import re
 
 from ROOT import TTree, TFile, TChain
 
@@ -12,20 +14,23 @@ import translate
 import process
 import rate_calculations
 
-def main(filenames, nevents, start_event):
-    if len(filenames) == 0:
-        filenames = [
-                "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
-                "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0002.root",
-                "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0003.root",
-                ]
+def extract_run_fileno(filename):
+    run = int(re.search('\d{7}', filename).group(0))
+    fileno = int(re.search('_\d{4}', filename).group(0)[1:])
+    return (run, fileno)
 
-    outfile = TFile('out.root', 'RECREATE')
+def main(filename, nevents, start_event):
+    if filename is None:
+        filename = "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root"
+
+    run, fileno = extract_run_fileno(filename)
+
+    outfile = TFile('out_%d_%d.root' % (run, fileno), 'RECREATE')
     outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree(outfile)
-    calibStats, adSimple = translate.initialize_indata(filenames)
+    calibStats, adSimple = translate.initialize_indata([filename])
     computed_helper = process.ProcessHelper()
-    rate_helper = rate_calculations.RateHelper()
+    rate_helper = rate_calculations.RateHelper(run, fileno)
 
     end_event = (calibStats.GetEntries() if nevents == -1 else
             min(nevents+start_event, calibStats.GetEntries()))
@@ -68,21 +73,16 @@ def main(filenames, nevents, start_event):
     outfile.Write()
     outfile.Close()
     rate_calculations.print_results(rate_helper)
+    with open('out_%d_%d.json' % (run, fileno), 'w') as f:
+        json.dump(rate_helper.compute_results(), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--file-list', default=None)
+    parser.add_argument('-i', '--infile', default=None)
     parser.add_argument('-n', '--num-events', default=-1, type=int)
     parser.add_argument('-s', '--start-event', default=0, type=int)
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    infile_list = args.file_list
-    infiles = []
-    if infile_list is not None:
-        with open(infile_list, 'r') as f:
-            for line in f:
-                if len(line) > 5:
-                    infiles.append(line[:-1])
-    main(infiles, args.num_events, args.start_event)
+    main(args.infile, args.num_events, args.start_event)

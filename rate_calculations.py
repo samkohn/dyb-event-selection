@@ -5,6 +5,7 @@ Compute the livetime inefficiency due to muons.
 from __future__ import print_function
 import logging
 import argparse
+from math import exp
 
 from ROOT import TFile, TTree
 
@@ -12,7 +13,9 @@ from translate import fetch_value
 import muons
 
 class RateHelper(object):
-    def __init__(self):
+    def __init__(self, run, fileno):
+        self.run = run
+        self.fileno = fileno
         self.total_nonvetoed_livetime = {1:0, 2:0}  # by AD
         self.start_time = 0
         self.end_time = 0
@@ -21,6 +24,55 @@ class RateHelper(object):
         self.number_prompts = {1:0, 2:0}
         self.number_delayeds = {1:0, 2:0}
         self.events_since_last_valid_time = 0
+
+    def compute_results(self):
+        NS_PER_DAY = 1e9*60*60*24
+        S_PER_DAY = 60*60*24
+        daq_livetime = self.end_time - self.start_time
+        mu_eff = {n: float(nonvetoed)/daq_livetime for n, nonvetoed in
+                self.total_nonvetoed_livetime.items()}
+        prompt_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
+                num in self.number_prompts.items()}
+        delayed_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
+                num in self.number_delayeds.items()}
+        livetime_days = {n: t/NS_PER_DAY for n, t in
+                self.total_nonvetoed_livetime.items()}
+        ibd_rate_perday = {n: num/livetime_days[n] for n, num in
+                self.number_IBD_candidates.items()}
+        dt_mult_cut_sec = 200e-6
+        mult_eff = {n: self.multiplicity_eff(
+            prompt_rate_Hz[n], delayed_rate_Hz[n], dt_mult_cut_sec)
+            for n in prompt_rate_Hz}
+        acc_rate_perday = {n: S_PER_DAY*self.accidental_rate(
+            prompt_rate_Hz[n], delayed_rate_Hz[n], dt_mult_cut_sec)
+            for n in prompt_rate_Hz}
+        return {
+                'run': self.run,
+                'fileno': self.fileno,
+                'daq_livetime': daq_livetime,
+                'usable_livetime': self.total_nonvetoed_livetime,
+                'start_time': self.start_time,
+                'end_time': self.end_time,
+                'muon_efficiency': mu_eff,
+                'prompt_rate_Hz': prompt_rate_Hz,
+                'delayed_rate_Hz': delayed_rate_Hz,
+                'ibd_rate_perday': ibd_rate_perday,
+                'multiplicity_efficiency': mult_eff,
+                'accidental_rate_perday': acc_rate_perday,
+                'number_prompts': self.number_prompts,
+                'number_delayeds': self.number_delayeds,
+                'number_IBDs': self.number_IBD_candidates,
+                }
+
+    @staticmethod
+    def multiplicity_eff(rp, rd, dt):
+        return exp(-2*rp*dt - rd*dt)
+
+    @staticmethod
+    def accidental_rate(rp, rd, dt):
+        return rd*rp*dt*exp(-2*rp*dt - rd*dt)
+
+
 
 def main(num_events, start_event, debug):
     filename = 'out.root'

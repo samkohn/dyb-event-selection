@@ -63,14 +63,8 @@ def main(filenames, nevents, start_event):
                 computed_buf, computed_helper, callback)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
-    for cached_event in computed_helper.event_cache:
-        translate.assign_value(cached_event.dt_next_WSMuon, -1)
-        translate.assign_value(cached_event.tag_WSMuonVeto, 2)
-        translate.assign_value(cached_event.dt_next_DelayedLike, -1)
-        callback(cached_event)
-        cached_event.copyTo(computed_buf)
-        computed.Fill()
-
+    process.finish_emptying_cache(computed, computed_buf,
+            computed_helper.event_cache, callback)
     outfile.Write()
     outfile.Close()
     rate_calculations.print_results(rate_helper)

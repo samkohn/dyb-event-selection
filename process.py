@@ -158,18 +158,22 @@ def main(entries, debug):
 
         one_iteration(event_number, indata_list, outdata, fill_buf, helper,
                 callback)
+    finish_emptying_cache(outdata, fill_buf, helper.event_cache, callback)
+    outdata.Write()
+    infile.Close()
+
+def finish_emptying_cache(outdata, fill_buf, cache, callback):
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
-    for cached_event in helper.event_cache:
-        assign_value(cached_event.dt_next_WSMuon, -1)
-        assign_value(cached_event.tag_WSMuonVeto, 2)
-        assign_value(cached_event.dt_next_DelayedLike, -1)
+    for cached_event in cache:
+        if cached_event.dt_next_WSMuon[0] == 0:
+            assign_value(cached_event.dt_next_WSMuon, -1)
+            assign_value(cached_event.tag_WSMuonVeto, 0)
+        if cached_event.dt_next_DelayedLike[0] == 0:
+            assign_value(cached_event.dt_next_DelayedLike, -1)
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
-
-    outdata.Write()
-    infile.Close()
 
 def fetch_indata(indata):
     # Fetch the necessary values from the input TTree
@@ -212,14 +216,6 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
     assign_value(buf.noTree_timestamp, timestamp)
     assign_value(buf.noTree_detector, detector)
     assign_value(buf.noTree_site, site)
-    # initialize last_*Muon_time to be the timestamp of the first
-    # event
-    if event_number == 0:
-        helper.last_WSMuon_time = timestamp
-        for key in helper.last_ADMuon_time:
-            helper.last_ADMuon_time[key] = timestamp
-        for key in helper.last_ShowerMuon_time:
-            helper.last_ShowerMuon_time[key] = timestamp
 
     # Compute simple tags and values (those that only require data
     # from the current event)

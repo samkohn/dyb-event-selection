@@ -45,6 +45,7 @@ def main(filenames, nevents, start_event):
         translate.copy(outdata_buf, calibStats, adSimple)
         indata_list = []
         indata_list.append(outdata_buf.timeStamp[0])
+        indata_list.append(outdata_buf.triggerType[0])
         indata_list.append(outdata_buf.detector[0])
         indata_list.append(outdata_buf.site[0])
         indata_list.append(outdata_buf.nHit[0])

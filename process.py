@@ -174,6 +174,7 @@ def main(entries, debug):
 def fetch_indata(indata):
     # Fetch the necessary values from the input TTree
     timestamp = fetch_value(indata, 'timeStamp', int)
+    triggerType = fetch_value(indata, 'triggerType', int)
     detector = fetch_value(indata, 'detector', int)
     site = fetch_value(indata, 'site', int)
     nHit = fetch_value(indata, 'nHit', int)
@@ -186,6 +187,7 @@ def fetch_indata(indata):
     energy = fetch_value(indata, 'energy', float)
     return (
             timestamp,
+            triggerType,
             detector,
             site,
             nHit,
@@ -200,7 +202,7 @@ def fetch_indata(indata):
 
 def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
         callback=lambda e:None):
-    (timestamp, detector, site, nHit, charge, fMax, fQuad,
+    (timestamp, triggerType, detector, site, nHit, charge, fMax, fQuad,
             fPSD_t1, fPSD_t2, f2inch_maxQ, energy) = relevant_indata
 
     logging.debug('event cache size: %d', len(helper.event_cache))
@@ -228,7 +230,7 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
     event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ,
             detector)
     assign_value(buf.tag_flasher, event_isFlasher)
-    event_isWSMuon = muons.isWSMuon(detector, nHit)
+    event_isWSMuon = muons.isWSMuon(detector, nHit, triggerType)
     assign_value(buf.tag_WSMuon, event_isWSMuon)
     event_isADMuon = muons.isADMuon(detector, charge)
     assign_value(buf.tag_ADMuon, event_isADMuon)

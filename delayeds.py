@@ -28,6 +28,7 @@ def isIBDDelayed(tag_DelayedLike,
     passesDtCut = (dt_previous_PromptLike > _IBD_DT_MIN
             and dt_previous_PromptLike < _IBD_DT_MAX)
     passesMultPre = num_PromptLikes_400us == 1
-    passesMultPost = dt_next_DelayedLike > _MULT_POST_MIN
+    passesMultPost = (dt_next_DelayedLike > _MULT_POST_MIN
+            or dt_next_DelayedLike == -1)
     return (passesDtCut and passesMultPre and passesMultPost)
 

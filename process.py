@@ -171,6 +171,19 @@ def finish_emptying_cache(outdata, fill_buf, cache, callback):
             assign_value(cached_event.tag_WSMuonVeto, 0)
         if cached_event.dt_next_DelayedLike[0] == 0:
             assign_value(cached_event.dt_next_DelayedLike, -1)
+        e = cached_event
+        ibd_delayed = isIBDDelayed(
+                e.tag_DelayedLike[0],
+                e.dt_previous_PromptLike[0],
+                e.num_PromptLikes_400us[0],
+                e.dt_next_DelayedLike[0],
+                e.tag_WSMuonVeto[0],
+                e.tag_ADMuonVeto[0],
+                e.tag_ShowerMuonVeto[0],
+                e.tag_flasher[0])
+        logging.debug('cached event: %s', cached_event)
+        logging.debug('isIBDDelayed: %s', ibd_delayed)
+        assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()

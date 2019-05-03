@@ -34,11 +34,18 @@ def done_with_cache(buf):
             or buf.dt_next_DelayedLike[0] != 0)
     return found_next_WSMuon and found_next_DelayedLike
 
-def create_computed_TTree(host_file):
-    host_file.cd()
+def create_computed_TTree(name, host_file, title=None):
     git_description = git_describe()
-    outdata = TTree('computed', 'Computed quantities by Sam Kohn (git: %s)' %
+    if title is None:
+        title = ('Computed quantities by Sam Kohn (git: %s)' %
             git_description)
+    else:
+        try:
+            title = title % git_description
+        except:
+            pass
+    host_file.cd()
+    outdata = TTree(name, title)
     # Initialize the "buffer" used to fill values into the TTree
     fill_buf = TreeBuffer()
     fill_buf.noTree_loopIndex = int_value()
@@ -138,7 +145,9 @@ def main(entries, debug):
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
     indata = infile.Get('data')
-    outdata, fill_buf = create_computed_TTree(infile)
+    outdata, fill_buf = create_computed_TTree('computed', infile)
+    out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', infile,
+            'IBD candidates (git: %s)')
 
     helper = ProcessHelper()
 
@@ -156,13 +165,16 @@ def main(entries, debug):
         indata.GetEntry(event_number)
         indata_list = fetch_indata(indata)
 
-        one_iteration(event_number, indata_list, outdata, fill_buf, helper,
-                callback)
-    finish_emptying_cache(outdata, fill_buf, helper.event_cache, callback)
+        one_iteration(event_number, indata_list, outdata, fill_buf, out_IBDs,
+                ibd_fill_buf, helper, callback)
+    finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
+            helper.event_cache, callback)
     outdata.Write()
+    out_IBDs.Write()
     infile.Close()
 
-def finish_emptying_cache(outdata, fill_buf, cache, callback):
+def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
+        cache, callback):
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in cache:
@@ -187,6 +199,9 @@ def finish_emptying_cache(outdata, fill_buf, cache, callback):
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
+        if ibd_delayed:
+            cached_event.copyTo(ibd_fill_buf)
+            out_IBDs.Fill()
 
 def fetch_indata(indata):
     # Fetch the necessary values from the input TTree
@@ -217,8 +232,8 @@ def fetch_indata(indata):
             energy
             )
 
-def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
-        callback=lambda e:None):
+def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
+        ibd_fill_buf, helper, callback=lambda e:None):
     (timestamp, triggerType, detector, site, nHit, charge, fMax, fQuad,
             fPSD_t1, fPSD_t2, f2inch_maxQ, energy) = relevant_indata
 
@@ -385,6 +400,9 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, helper,
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
+        if ibd_delayed:
+            cached_event.copyTo(ibd_fill_buf)
+            out_IBDs.Fill()
 
     helper.event_cache.append(buf)
 

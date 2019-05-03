@@ -29,7 +29,9 @@ def main(filename, nevents, start_event):
             'DYB Run %d file %d, git %s' % (run, fileno,
                 translate.git_describe()))
     outdata, outdata_buf = translate.create_data_TTree(outfile)
-    computed, computed_buf = process.create_computed_TTree(outfile)
+    computed, computed_buf = process.create_computed_TTree('computed', outfile)
+    out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile,
+            'IBD candidates (git: %s)')
     calibStats, adSimple = translate.initialize_indata([filename])
     computed_helper = process.ProcessHelper()
     rate_helper = rate_calculations.RateHelper(run, fileno)
@@ -67,11 +69,12 @@ def main(filename, nevents, start_event):
         outdata.Fill()
 
         process.one_iteration(entry_number, indata_list, computed,
-                computed_buf, computed_helper, callback)
+                computed_buf, out_IBDs, ibd_fill_buf, computed_helper,
+                callback)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
-    process.finish_emptying_cache(computed, computed_buf,
-            computed_helper.event_cache, callback)
+    process.finish_emptying_cache(computed, computed_buf, out_IBDs,
+            ibd_fill_buf, computed_helper.event_cache, callback)
     outfile.Write()
     outfile.Close()
     rate_calculations.print_results(rate_helper)

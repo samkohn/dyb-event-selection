@@ -191,17 +191,11 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                 and not isADMuonVetoed
                 and not isShowerMuonVetoed):
             helper.number_delayeds[detector] += 1
-        EXTRA_PROMPT_DT = 400e3
         if (isPromptLike
                 and not isFlasher
-                and dt_next_WSMuon > muons._WSMUON_VETO_NEXT_NS
-                and dt_last_WSMuon > (muons._WSMUON_VETO_LAST_NS
-                    - EXTRA_PROMPT_DT)
-                and dt_last_ADMuon > (muons._ADMUON_VETO_LAST_NS
-                    - EXTRA_PROMPT_DT)
-                and dt_last_ShowerMuon >
-                    (muons._SHOWER_MUON_VETO_LAST_NS
-                        - EXTRA_PROMPT_DT)):
+                and not isWSMuonVetoed
+                and not isADMuonVetoed
+                and not isShowerMuonVetoed):
             helper.number_prompts[detector] += 1
 
         logging.debug('next livetime start: %s', helper.next_livetime_start)

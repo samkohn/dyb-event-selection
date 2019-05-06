@@ -5,6 +5,7 @@ Compute the livetime inefficiency due to muons.
 from __future__ import print_function
 import logging
 import argparse
+import json
 from math import exp
 
 from ROOT import TFile, TTree
@@ -74,13 +75,12 @@ class RateHelper(object):
 
 
 
-def main(num_events, start_event, debug):
-    filename = 'out.root'
+def main(filename, run, fileno, num_events, start_event, debug):
     infile = TFile(filename, 'READ')
     indata = infile.Get('data')
     incomputed = infile.Get('computed')
 
-    helper = RateHelper()
+    helper = RateHelper(run, fileno)
 
     total_entries = min(indata.GetEntries(), incomputed.GetEntries())
     entries = min(num_events+start_event, total_entries) if num_events > 0 else total_entries
@@ -93,6 +93,10 @@ def main(num_events, start_event, debug):
         data_list = fetch_data(indata, incomputed)
         one_iteration(event_number, data_list, helper, start_event, entries)
     print_results(helper)
+    outname = filename.split('.')[0] + '.json'
+    with open(outname, 'w') as f:
+        json.dump(helper.compute_results(), f)
+
 
 def print_results(helper):
     print('total DAQ livetime:')
@@ -271,8 +275,11 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--num-events', type=int, default=-1)
     parser.add_argument('-s', '--start-event', type=int, default=0)
+    parser.add_argument('-f', '--filename', default='out.root')
+    parser.add_argument('--run', default=0, type=int)
+    parser.add_argument('--fileno', default=0, type=int)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.num_events, args.start_event, args.debug)
+    main(args.filename, args.run, args.fileno, args.num_events, args.start_event, args.debug)
 

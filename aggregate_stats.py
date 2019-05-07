@@ -20,6 +20,9 @@ def main(run, files):
         for detector_str, livetime in results['usable_livetime'].items():
             detector = int(detector_str)
             helper.total_nonvetoed_livetime[detector] += livetime
+        for detector_str, livetime in results['singles_livetime'].items():
+            detector = int(detector_str)
+            helper.singles_livetime[detector] += livetime
         for detector_str, number_prompts in results['number_prompts'].items():
             detector = int(detector_str)
             helper.number_prompts[detector] += number_prompts
@@ -27,6 +30,14 @@ def main(run, files):
                 results['number_delayeds'].items()):
             detector = int(detector_str)
             helper.number_delayeds[detector] += number_delayeds
+        for detector_str, number_prompts in (
+                results['number_prompt_singles'].items()):
+            detector = int(detector_str)
+            helper.number_prompt_singles[detector] += number_prompts
+        for detector_str, number_delayeds in (
+                results['number_delayed_singles'].items()):
+            detector = int(detector_str)
+            helper.number_delayed_singles[detector] += number_delayeds
         for detector_str, number_IBDs in results['number_IBDs'].items():
             detector = int(detector_str)
             helper.number_IBD_candidates[detector] += number_IBDs

@@ -24,6 +24,12 @@ class RateHelper(object):
         self.number_IBD_candidates = {1:0, 2:0}
         self.number_prompts = {1:0, 2:0}
         self.number_delayeds = {1:0, 2:0}
+        self.number_prompt_singles = {1:0, 2:0}
+        self.number_delayed_singles = {1:0, 2:0}
+        self.next_singles_livetime_start = {1:0, 2:0}
+        self.last_singles_buffer = {1:0, 2:0}
+        self.last_single_vetoed = {1:False, 2:False}
+        self.singles_livetime = {1:0, 2:0}
         self.events_since_last_valid_time = 0
 
     def compute_results(self):
@@ -36,32 +42,45 @@ class RateHelper(object):
                 num in self.number_prompts.items()}
         delayed_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
                 num in self.number_delayeds.items()}
+        prompt_singles_rate_Hz = {n: (1e9*num)/self.singles_livetime[n] for n,
+                num in self.number_prompt_singles.items()}
+        delayed_singles_rate_Hz = {n: (1e9*num)/self.singles_livetime[n] for n,
+                num in self.number_delayed_singles.items()}
         livetime_days = {n: t/NS_PER_DAY for n, t in
                 self.total_nonvetoed_livetime.items()}
         ibd_rate_perday = {n: num/livetime_days[n] for n, num in
                 self.number_IBD_candidates.items()}
         dt_mult_cut_sec = 200e-6
         mult_eff = {n: self.multiplicity_eff(
-            prompt_rate_Hz[n], delayed_rate_Hz[n], dt_mult_cut_sec)
+                prompt_singles_rate_Hz[n],
+                delayed_singles_rate_Hz[n],
+                dt_mult_cut_sec)
             for n in prompt_rate_Hz}
         acc_rate_perday = {n: S_PER_DAY*self.accidental_rate(
-            prompt_rate_Hz[n], delayed_rate_Hz[n], dt_mult_cut_sec)
+                prompt_singles_rate_Hz[n],
+                delayed_singles_rate_Hz[n],
+                dt_mult_cut_sec)
             for n in prompt_rate_Hz}
         return {
                 'run': self.run,
                 'fileno': self.fileno,
                 'daq_livetime': daq_livetime,
                 'usable_livetime': self.total_nonvetoed_livetime,
+                'singles_livetime': self.singles_livetime,
                 'start_time': self.start_time,
                 'end_time': self.end_time,
                 'muon_efficiency': mu_eff,
                 'prompt_rate_Hz': prompt_rate_Hz,
                 'delayed_rate_Hz': delayed_rate_Hz,
+                'prompt_singles_rate_Hz': prompt_singles_rate_Hz,
+                'delayed_singles_rate_Hz': delayed_singles_rate_Hz,
                 'ibd_rate_perday': ibd_rate_perday,
                 'multiplicity_efficiency': mult_eff,
                 'accidental_rate_perday': acc_rate_perday,
                 'number_prompts': self.number_prompts,
                 'number_delayeds': self.number_delayeds,
+                'number_prompt_singles': self.number_prompt_singles,
+                'number_delayed_singles': self.number_delayed_singles,
                 'number_IBDs': self.number_IBD_candidates,
                 }
 
@@ -112,10 +131,10 @@ def print_results(helper):
             helper.total_nonvetoed_livetime.items()}
     print('IBD candidates:')
     print(helper.number_IBD_candidates)
-    print('delayed-like:')
-    print(helper.number_delayeds)
-    print('prompt-like:')
-    print(helper.number_prompts)
+    print('delayed-like singles:')
+    print(helper.number_delayed_singles)
+    print('prompt-like singles:')
+    print(helper.number_prompt_singles)
     print('IBD rate per day:')
     print({n: num/nonvetoed_livetime_days[n] for n, num in
         helper.number_IBD_candidates.items()})
@@ -182,8 +201,7 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
         if event_number == start_event:
             helper.start_time = timestamp
             for key in helper.next_livetime_start:
-                helper.next_livetime_start[key] = (timestamp +
-                        muons._SHOWER_MUON_VETO_LAST_NS)
+                helper.next_livetime_start[key] = timestamp
         if event_number == entries - 1:
             helper.end_time = timestamp
 
@@ -201,6 +219,62 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                 and not isADMuonVetoed
                 and not isShowerMuonVetoed):
             helper.number_prompts[detector] += 1
+            # Count uncorrelated singles (uncorrelated at the timescale of
+            # 200us)
+            singles_dt_ns = int(200e3)
+            logging.debug('promptlike. Timestamp: %d', timestamp)
+            # Check for muon veto
+            buffer_start_time = max(helper.next_livetime_start[detector],
+                    helper.last_singles_buffer[detector])
+            logging.debug('buffer start time: %d', buffer_start_time)
+            if timestamp > helper.next_singles_livetime_start[detector]:
+                if helper.last_single_vetoed[detector]:
+                    logging.debug('last single was vetoed')
+                    helper.last_singles_buffer[detector] = (
+                            helper.next_singles_livetime_start[detector])
+                    logging.debug('next buffer start time: %d',
+                            helper.last_singles_buffer[detector])
+                    helper.last_single_vetoed[detector] = False
+                else:
+                    logging.debug('last single was not vetoed')
+                    new_time = timestamp-singles_dt_ns - buffer_start_time
+                    helper.singles_livetime[detector] += new_time
+                    logging.debug('new time: %d', new_time)
+                    helper.number_prompt_singles[detector] += 1
+                    if isDelayedLike:
+                        helper.number_delayed_singles[detector] += 1
+                    helper.last_singles_buffer[detector] = (timestamp
+                            - singles_dt_ns)
+                    logging.debug('next buffer start time: %d',
+                            helper.last_singles_buffer[detector])
+            else:
+                logging.debug('current event is vetoed')
+                helper.last_single_vetoed[detector] = True
+                helper.last_singles_buffer[detector] = timestamp+singles_dt_ns
+            helper.next_singles_livetime_start[detector] = (timestamp
+                    + singles_dt_ns)
+            logging.debug('next singles start: %d', timestamp+singles_dt_ns)
+        # Deal with intersection between singles and muons
+        if isWSMuon or isADMuon or isShowerMuon:
+            # Add to singles livetime the time between the last veto and the
+            # current muon.
+            window_end = timestamp
+            if isWSMuon:
+                window_end -= muons._WSMUON_VETO_NEXT_NS
+                detectors = helper.next_livetime_start.keys()
+            else:
+                detectors = (detector,)
+            for det in detectors:
+                window_start = max(helper.last_singles_buffer[det],
+                        helper.next_livetime_start[det])
+                logging.debug('detector %d, window_start: %d', det,
+                        window_start)
+                dt = window_end - window_start
+                if dt > 0:
+                    logging.debug('new time: %d', dt)
+                    helper.singles_livetime[det] += dt
+
+
 
         logging.debug('next livetime start: %s', helper.next_livetime_start)
         logging.debug('timestamp: %d', timestamp)

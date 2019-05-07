@@ -13,23 +13,27 @@ from ROOT import TFile, TTree
 from translate import fetch_value
 import muons
 
+def AD_dict(nADs, default=0):
+    return {n: default for n in range(1, nADs+1)}
+
 class RateHelper(object):
     def __init__(self, run, fileno):
+        nADs = 4
         self.run = run
         self.fileno = fileno
-        self.total_nonvetoed_livetime = {1:0, 2:0}  # by AD
+        self.total_nonvetoed_livetime = AD_dict(nADs)
         self.start_time = 0
         self.end_time = 0
-        self.next_livetime_start = {1:0, 2:0}
-        self.number_IBD_candidates = {1:0, 2:0}
-        self.number_prompts = {1:0, 2:0}
-        self.number_delayeds = {1:0, 2:0}
-        self.number_prompt_singles = {1:0, 2:0}
-        self.number_delayed_singles = {1:0, 2:0}
-        self.next_singles_livetime_start = {1:0, 2:0}
-        self.last_singles_buffer = {1:0, 2:0}
-        self.last_single_vetoed = {1:False, 2:False}
-        self.singles_livetime = {1:0, 2:0}
+        self.next_livetime_start = AD_dict(nADs)
+        self.number_IBD_candidates = AD_dict(nADs)
+        self.number_prompts = AD_dict(nADs)
+        self.number_delayeds = AD_dict(nADs)
+        self.number_prompt_singles = AD_dict(nADs)
+        self.number_delayed_singles = AD_dict(nADs)
+        self.next_singles_livetime_start = AD_dict(nADs)
+        self.last_singles_buffer = AD_dict(nADs)
+        self.last_single_vetoed = AD_dict(nADs, False)
+        self.singles_livetime = AD_dict(nADs)
         self.events_since_last_valid_time = 0
 
     def compute_results(self):

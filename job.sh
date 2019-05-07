@@ -5,6 +5,7 @@ OUT_DIR=$2
 RUNNO=$3
 FILENO=$4
 NEVENTS=$5
+SUBLIST=$6
 
 function log {
   echo "$FILENO: $@"
@@ -20,7 +21,7 @@ log "executing time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` 
 time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS
 
 log "done"
-NEXT_JOB=`python $SRC_DIR/next_job.py --sublist 0 --srcdir $SRC_DIR --outdir $OUT_DIR`
+NEXT_JOB=`python $SRC_DIR/next_job.py --sublist $SUBLIST --srcdir $SRC_DIR --outdir $OUT_DIR`
 log $NEXT_JOB
-$NEXT_JOB &
+$NEXT_JOB
 exit 0

@@ -11,11 +11,12 @@
 
 export DIR="/global/homes/s/skohn/dyb-event-selection-production/"
 export RUNDIR=$SCRATCH/dyb5
+SUBLIST=$SLURM_ARRAY_TASK_ID
 module load root
 
 for i in `seq 1 64`
 do
-    NEXT_JOB=`python $DIR/next_job.py --sublist 0 --srcdir $DIR --outdir $RUNDIR`
+    NEXT_JOB=`python $DIR/next_job.py --sublist $SUBLIST --srcdir $DIR --outdir $RUNDIR`
     echo $NEXT_JOB
     $NEXT_JOB &
     sleep 1

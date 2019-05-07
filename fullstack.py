@@ -28,7 +28,7 @@ def main(filename, nevents, start_event):
     outfile = TFile('out_%d_%d.root' % (run, fileno), 'RECREATE',
             'DYB Run %d file %d, git %s' % (run, fileno,
                 translate.git_describe()))
-    outdata, outdata_buf = translate.create_data_TTree(outfile)
+    #outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree('computed', outfile)
     out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile,
             'IBD candidates (git: %s)')
@@ -51,24 +51,9 @@ def main(filename, nevents, start_event):
         adSimple.LoadTree(entry_number)
         adSimple.GetEntry(entry_number)
 
-        translate.copy(outdata_buf, calibStats, adSimple, run, fileno)
-        indata_list = []
-        indata_list.append(outdata_buf.timeStamp[0])
-        indata_list.append(outdata_buf.triggerType[0])
-        indata_list.append(outdata_buf.detector[0])
-        indata_list.append(outdata_buf.site[0])
-        indata_list.append(outdata_buf.nHit[0])
-        indata_list.append(outdata_buf.charge[0])
-        indata_list.append(outdata_buf.fMax[0])
-        indata_list.append(outdata_buf.fQuad[0])
-        indata_list.append(outdata_buf.fPSD_t1[0])
-        indata_list.append(outdata_buf.fPSD_t2[0])
-        indata_list.append(outdata_buf.f2inch_maxQ[0])
-        indata_list.append(outdata_buf.energy[0])
+        translate.copy(computed_buf, calibStats, adSimple, run, fileno)
 
-        outdata.Fill()
-
-        process.one_iteration(entry_number, indata_list, computed,
+        process.one_iteration(entry_number, None, computed,
                 computed_buf, out_IBDs, ibd_fill_buf, computed_helper,
                 callback)
     # After the event loop is finished, fill the remaining events from

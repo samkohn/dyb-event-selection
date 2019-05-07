@@ -52,6 +52,26 @@ def create_computed_TTree(name, host_file, title=None):
     fill_buf.noTree_timestamp = long_value()
     fill_buf.noTree_detector = int_value()
     fill_buf.noTree_site = int_value()
+    fill_buf.run = unsigned_int_value()
+    fill_buf.fileno = unsigned_int_value()
+    fill_buf.triggerNumber = int_value()
+    fill_buf.timeStamp_seconds = int_value()
+    fill_buf.timeStamp_nanoseconds = int_value()
+    fill_buf.timeStamp = long_value()
+    fill_buf.detector = int_value()
+    fill_buf.site = int_value()
+    fill_buf.triggerType = unsigned_int_value()
+    fill_buf.nHit = int_value()
+    fill_buf.charge = float_value()
+    fill_buf.fQuad = float_value()
+    fill_buf.fMax = float_value()
+    fill_buf.fPSD_t1 = float_value()
+    fill_buf.fPSD_t2 = float_value()
+    fill_buf.f2inch_maxQ = float_value()
+    fill_buf.energy = float_value()
+    fill_buf.x = float_value()
+    fill_buf.y = float_value()
+    fill_buf.z = float_value()
     fill_buf.fID = float_value()
     fill_buf.fPSD = float_value()
     fill_buf.tag_flasher = unsigned_int_value()
@@ -78,6 +98,28 @@ def create_computed_TTree(name, host_file, title=None):
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute
+    outdata.Branch('run', fill_buf.run, 'run/i')
+    outdata.Branch('fileno', fill_buf.fileno, 'fileno/i')
+    outdata.Branch('triggerNumber', fill_buf.triggerNumber, 'triggerNumber/I')
+    outdata.Branch('timeStamp_seconds', fill_buf.timeStamp_seconds,
+            'timeStamp_seconds/I')
+    outdata.Branch('timestamp_nanoseconds', fill_buf.timeStamp_nanoseconds,
+            'timeStamp_nanoseconds/I')
+    outdata.Branch('timeStamp', fill_buf.timeStamp, 'timeStamp/L')
+    outdata.Branch('detector', fill_buf.detector, 'detector/I')
+    outdata.Branch('site', fill_buf.site, 'site/I')
+    outdata.Branch('triggerType', fill_buf.triggerType, 'triggerType/i')
+    outdata.Branch('nHit', fill_buf.nHit, 'nHit/I')
+    outdata.Branch('charge', fill_buf.charge, 'charge/F')
+    outdata.Branch('fQuad', fill_buf.fQuad, 'fQuad/F')
+    outdata.Branch('fMax', fill_buf.fMax, 'fMax/F')
+    outdata.Branch('fPSD_t1', fill_buf.fPSD_t1, 'fPSD_t1/F')
+    outdata.Branch('fPSD_t2', fill_buf.fPSD_t2, 'fPSD_t2/F')
+    outdata.Branch('f2inch_maxQ', fill_buf.f2inch_maxQ, 'f2inch_maxQ/F')
+    outdata.Branch('energy', fill_buf.energy, 'energy/F')
+    outdata.Branch('x', fill_buf.x, 'x/F')
+    outdata.Branch('y', fill_buf.y, 'y/F')
+    outdata.Branch('z', fill_buf.z, 'z/F')
     outdata.Branch('fID', fill_buf.fID, 'fID/F')
     outdata.Branch('fPSD', fill_buf.fPSD, 'fPSD/F')
     outdata.Branch('tag_flasher', fill_buf.tag_flasher, 'tag_flasher/i')
@@ -234,12 +276,22 @@ def fetch_indata(indata):
 
 def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
         ibd_fill_buf, helper, callback=lambda e:None):
-    (timestamp, triggerType, detector, site, nHit, charge, fMax, fQuad,
-            fPSD_t1, fPSD_t2, f2inch_maxQ, energy) = relevant_indata
+    timestamp = fill_buf.timeStamp[0]
+    triggerType = fill_buf.triggerType[0]
+    detector = fill_buf.detector[0]
+    site = fill_buf.site[0]
+    nHit = fill_buf.nHit[0]
+    charge = fill_buf.charge[0]
+    fMax = fill_buf.fMax[0]
+    fQuad = fill_buf.fQuad[0]
+    fPSD_t1 = fill_buf.fPSD_t1[0]
+    fPSD_t2 = fill_buf.fPSD_t2[0]
+    f2inch_maxQ = fill_buf.f2inch_maxQ[0]
+    energy = fill_buf.energy[0]
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
-    buf = fill_buf.clone_type()
+    buf = fill_buf.clone()
     assign_value(buf.noTree_loopIndex, event_number)
     assign_value(buf.noTree_timestamp, timestamp)
     assign_value(buf.noTree_detector, detector)

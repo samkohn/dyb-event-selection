@@ -37,24 +37,30 @@ class TreeBuffer(object):
             for i, entry in enumerate(value):
                 otherArray[i] = entry
 
-    def clone(self):
+    def clone(self, dest=None):
         '''
         Create a new independent TreeBuffer with the same array
         attributes and values.
 
         '''
-        new = TreeBuffer()
+        if dest is None:
+            new = TreeBuffer()
+        else:
+            new = dest
         for attr, value in self.__dict__.items():
             setattr(new, attr, value[:])
         return new
 
-    def clone_type(self):
+    def clone_type(self, dest=None):
         '''
         Create a new TreeBuffer with the same array attributes
         containing values of 0.
 
         '''
-        new = TreeBuffer()
+        if dest is None:
+            new = TreeBuffer()
+        else:
+            new = dest
         for attr, value in self.__dict__.items():
             setattr(new, attr, array(value.typecode,
                 [0]*len(value)))

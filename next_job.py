@@ -27,6 +27,7 @@ with open(filename, 'r') as f:
     max_index = int(f.readline().strip())
 if current_index > max_index:
     print('echo done')
+    subprocess.check_output(['rm', lockname])
     sys.exit(0)
 
 with open(filename, 'w') as f:

@@ -9,14 +9,16 @@
 #SBATCH --mail-type=ALL
 ####### IGNORE SBATCH --array=0-14
 
-export DIR="/global/homes/s/skohn/dyb-event-selection/"
-export RUNDIR=$SCRATCH/dyb4
+export DIR="/global/homes/s/skohn/dyb-event-selection-production/"
+export RUNDIR=$SCRATCH/dyb5
 module load root
 
-NEVENTS=-1
 for i in `seq 1 64`
 do
-    $DIR/job.sh $DIR $RUNDIR $i $NEVENTS &
+    NEXT_JOB=`python $DIR/next_job.py --sublist 0 --srcdir $DIR --outdir $RUNDIR`
+    echo $NEXT_JOB
+    $NEXT_JOB &
+    sleep 1
 done
 
 until [ $(jobs | wc -l) -eq 0 ]

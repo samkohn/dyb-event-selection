@@ -1,22 +1,26 @@
 #! /bin/bash -l
 
-DIR=$1
-RUNDIR=$2
-ARRAY_NUM=$3
-NEVENTS=$4
+SRC_DIR=$1
+OUT_DIR=$2
+RUNNO=$3
+FILENO=$4
+NEVENTS=$5
 
 function log {
-  echo "$ARRAY_NUM: $@"
+  echo "$FILENO: $@"
 }
 
-log $DIR $RUNDIR $ARRAY_NUM $NEVENTS
+log $SRC_DIR $OUT_DIR $FILENO $NEVENTS
 
-log "executing cd $RUNDIR"
-cd $RUNDIR
+log "executing cd $OUT_DIR"
+cd $OUT_DIR
 
 FIND_FILE=~mkramer/projscratch/p17b/code/p17b_find/p17b_find
-log "executing time python $DIR/fullstack.py -i `$FIND_FILE 72442 $ARRAY_NUM` -n $NEVENTS"
-time python $DIR/fullstack.py -i `$FIND_FILE 72442 $ARRAY_NUM` -n $NEVENTS
+log "executing time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS"
+time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS
 
 log "done"
+NEXT_JOB=`python $SRC_DIR/next_job.py --sublist 0 --srcdir $SRC_DIR --outdir $OUT_DIR`
+log $NEXT_JOB
+$NEXT_JOB &
 exit 0

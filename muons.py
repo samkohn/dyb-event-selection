@@ -15,7 +15,7 @@ _SHOWER_MUON_VETO_LAST_NS = int(0.4e9)
 
 def isWSMuon(event_detector, event_nHit, event_triggerType):
     return (event_detector in WP_DETECTORS and
-            event_nHit >= _WSMUON_NHIT_THRESHOLD and
+            event_nHit > _WSMUON_NHIT_THRESHOLD and
             (event_triggerType & 0x2) == 0)
 
 def isADMuon(event_detector, event_charge):

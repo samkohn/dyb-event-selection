@@ -45,7 +45,7 @@ site = int(result.group(3))
 args = {
         'srcdir': args.srcdir,
         'outdir': args.outdir,
-        'nevents': 4000,
+        'nevents': -1,
         'run': run,
         'fileno': fileno,
         'site': site,
@@ -55,4 +55,4 @@ args = {
 
 
 print('%(srcdir)s/job.sh %(srcdir)s %(outdir)s %(run)d %(fileno)d %(nevents)d '
-        '%(sublist)d' % args)
+        '%(sublist)d %(site)d' % args)

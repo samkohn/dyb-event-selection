@@ -6,6 +6,7 @@ RUNNO=$3
 FILENO=$4
 NEVENTS=$5
 SUBLIST=$6
+SITE=$7
 
 function log {
   echo "$FILENO: $@"
@@ -18,7 +19,7 @@ cd $OUT_DIR
 
 FIND_FILE=~mkramer/projscratch/p17b/code/p17b_find/p17b_find
 log "executing time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS"
-time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS
+time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS --site $SITE
 
 log "done"
 NEXT_JOB=`python $SRC_DIR/next_job.py --sublist $SUBLIST --srcdir $SRC_DIR --outdir $OUT_DIR`

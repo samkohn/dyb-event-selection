@@ -19,7 +19,7 @@ def extract_run_fileno(filename):
     fileno = int(re.search('_\d{4}', filename).group(0)[1:])
     return (run, fileno)
 
-def main(filename, nevents, start_event):
+def main(filename, nevents, start_event, site):
     if filename is None:
         filename = "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root"
 
@@ -35,7 +35,7 @@ def main(filename, nevents, start_event):
     calibStats, adSimple = translate.initialize_indata([filename])
     computed_helper = process.ProcessHelper()
     rate_helper = rate_calculations.RateHelper(run, fileno)
-
+    rate_helper.site = site
     end_event = (calibStats.GetEntries() if nevents == -1 else
             min(nevents+start_event, calibStats.GetEntries()))
     if nevents == -1 and adSimple.GetEntries() != end_event:
@@ -72,7 +72,8 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num-events', default=-1, type=int)
     parser.add_argument('-s', '--start-event', default=0, type=int)
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('--site', type=int)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.infile, args.num_events, args.start_event)
+    main(args.infile, args.num_events, args.start_event, args.site)

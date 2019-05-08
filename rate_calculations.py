@@ -19,6 +19,7 @@ def AD_dict(nADs, default=0):
 class RateHelper(object):
     def __init__(self, run, fileno):
         nADs = 4
+        self.site = None
         self.run = run
         self.fileno = fileno
         self.total_nonvetoed_livetime = AD_dict(nADs)
@@ -68,6 +69,7 @@ class RateHelper(object):
         return {
                 'run': self.run,
                 'fileno': self.fileno,
+                'site': self.site,
                 'daq_livetime': daq_livetime,
                 'usable_livetime': self.total_nonvetoed_livetime,
                 'singles_livetime': self.singles_livetime,

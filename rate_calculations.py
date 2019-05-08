@@ -154,8 +154,8 @@ def print_results(helper):
 def callback_adapter(helper, start_event, entries):
     def callback(event_cache):
         data_list = []
-        data_list.append(event_cache.noTree_timestamp[0])
-        data_list.append(event_cache.noTree_detector[0])
+        data_list.append(event_cache.timestamp[0])
+        data_list.append(event_cache.detector[0])
         data_list.append(event_cache.tag_WSMuon[0])
         data_list.append(event_cache.tag_ADMuon[0])
         data_list.append(event_cache.tag_ShowerMuon[0])

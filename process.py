@@ -29,7 +29,7 @@ def done_with_cache(buf):
     # the event is not an AD event then the delayed-like event does not
     # have to have been processed.)
     found_next_WSMuon = buf.dt_next_WSMuon[0] != 0
-    detector = buf.noTree_detector[0]
+    detector = buf.detector[0]
     found_next_DelayedLike = (detector not in AD_DETECTORS
             or buf.dt_next_DelayedLike[0] != 0)
     return found_next_WSMuon and found_next_DelayedLike
@@ -49,9 +49,9 @@ def create_computed_TTree(name, host_file, title=None):
     # Initialize the "buffer" used to fill values into the TTree
     fill_buf = TreeBuffer()
     fill_buf.noTree_loopIndex = int_value()
-    fill_buf.noTree_timestamp = long_value()
-    fill_buf.noTree_detector = int_value()
-    fill_buf.noTree_site = int_value()
+    fill_buf.timestamp = long_value()
+    fill_buf.detector = int_value()
+    fill_buf.site = int_value()
     fill_buf.run = unsigned_int_value()
     fill_buf.fileno = unsigned_int_value()
     fill_buf.triggerNumber = int_value()
@@ -291,11 +291,20 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
-    buf = fill_buf.clone()
+    buf = fill_buf.clone_type()
     assign_value(buf.noTree_loopIndex, event_number)
-    assign_value(buf.noTree_timestamp, timestamp)
-    assign_value(buf.noTree_detector, detector)
-    assign_value(buf.noTree_site, site)
+    assign_value(buf.timestamp, timestamp)
+    assign_value(buf.triggerType, triggerType)
+    assign_value(buf.detector, detector)
+    assign_value(buf.site, site)
+    assign_value(buf.nHit, nHit)
+    assign_value(buf.charge, charge)
+    assign_value(buf.fMax, fMax)
+    assign_value(buf.fQuad, fQuad)
+    assign_value(buf.fPSD_t1, fPSD_t1)
+    assign_value(buf.fPSD_t2, fPSD_t2)
+    assign_value(buf.f2inch_maxQ, f2inch_maxQ)
+    assign_value(buf.energy, energy)
 
     # Compute simple tags and values (those that only require data
     # from the current event)
@@ -380,10 +389,10 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
             if cached_event.dt_next_WSMuon[0] != 0:
                 continue
             # WSMuons are common across the entire EH/site
-            if cached_event.noTree_site[0] == site:
-                logging.debug('taggedNextWS%d', cached_event.noTree_timestamp[0])
+            if cached_event.site[0] == site:
+                logging.debug('taggedNextWS%d', cached_event.timestamp[0])
                 assign_value(cached_event.dt_next_WSMuon,
-                        timestamp - cached_event.noTree_timestamp[0])
+                        timestamp - cached_event.timestamp[0])
                 assign_value(cached_event.tag_WSMuonVeto,
                         muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                             cached_event.dt_next_WSMuon[0]))
@@ -408,12 +417,12 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
             if cached_event.dt_next_DelayedLike[0] != 0:
                 continue
             # PromptLikes are restricted to a single AD
-            if cached_event.noTree_detector[0] == detector:
+            if cached_event.detector[0] == detector:
                 logging.debug('taggedNextDelayed%d',
-                        cached_event.noTree_timestamp[0])
+                        cached_event.timestamp[0])
                 assign_value(cached_event.dt_next_DelayedLike,
                         timestamp
-                        - cached_event.noTree_timestamp[0])
+                        - cached_event.timestamp[0])
 
     # Determine which of the oldest events are ready to go into the
     # new TTree. It is possible (due to different ADs) that the

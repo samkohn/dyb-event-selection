@@ -1,13 +1,13 @@
 #! /bin/bash -l
-#SBATCH -q debug
+#SBATCH -q regular
 #SBATCH -N 1
-#SBATCH -t 00:30:00
+#SBATCH -t 04:00:00
 #SBATCH -J skohn-dyb-test
 #SBATCH -L project,SCRATCH
 #SBATCH -C haswell
 #SBATCH --mail-user=skohn@lbl.gov
 #SBATCH --mail-type=ALL
-#SBATCH --array=0-0
+#SBATCH --array=1-40
 
 export DIR="/global/homes/s/skohn/dyb-event-selection-production/"
 export RUNDIR=$SCRATCH/dyb6

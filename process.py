@@ -216,8 +216,8 @@ def main(entries, debug):
 
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
-    indata = infile.Get('data')
-    outdata, fill_buf = create_computed_TTree('computed', infile)
+    indata = infile.Get('raw_data')
+    outdata, fill_buf = create_computed_TTree('data', infile)
     out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', infile,
             'IBD candidates (git: %s)')
 

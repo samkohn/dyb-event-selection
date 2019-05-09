@@ -152,7 +152,7 @@ def initialize_indata(filenames):
 def create_data_TTree(host_file):
     host_file.cd()
     git_description = git_describe()
-    outdata = TTree('data', 'Daya Bay Data by Sam Kohn (git: %s)' %
+    outdata = TTree('raw_data', 'Daya Bay Data by Sam Kohn (git: %s)' %
             git_description)
 
     buf = TreeBuffer()

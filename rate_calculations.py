@@ -103,19 +103,16 @@ class RateHelper(object):
 def main(filename, run, fileno, num_events, start_event, debug):
     infile = TFile(filename, 'READ')
     indata = infile.Get('data')
-    incomputed = infile.Get('computed')
 
     helper = RateHelper(run, fileno)
 
-    total_entries = min(indata.GetEntries(), incomputed.GetEntries())
+    total_entries = indata.GetEntries()
     entries = min(num_events+start_event, total_entries) if num_events > 0 else total_entries
     for event_number in xrange(start_event, entries):
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
-        incomputed.LoadTree(event_number)
-        incomputed.GetEntry(event_number)
         logging.debug('Event %d', event_number)
-        data_list = fetch_data(indata, incomputed)
+        data_list = fetch_data(indata)
         one_iteration(event_number, data_list, helper, start_event, entries)
     print_results(helper)
     outname = filename.split('.')[0] + '.json'
@@ -312,24 +309,24 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
         logging.debug('new next livetime start: %s', helper.next_livetime_start)
         logging.debug('new total: %s', helper.total_nonvetoed_livetime)
 
-def fetch_data(indata, incomputed):
+def fetch_data(indata):
     timestamp = fetch_value(indata, 'timestamp', int)
     detector = fetch_value(indata, 'detector', int)
-    isWSMuon = fetch_value(incomputed, 'tag_WSMuon', bool)
-    isADMuon = fetch_value(incomputed, 'tag_ADMuon', bool)
-    isShowerMuon = fetch_value(incomputed, 'tag_ShowerMuon', bool)
-    isIBDDelayed = fetch_value(incomputed, 'tag_IBDDelayed', bool)
-    isPromptLike = fetch_value(incomputed, 'tag_PromptLike', bool)
-    isDelayedLike = fetch_value(incomputed, 'tag_DelayedLike', bool)
-    isWSMuonVetoed = fetch_value(incomputed, 'tag_WSMuonVeto', bool)
-    isADMuonVetoed = fetch_value(incomputed, 'tag_ADMuonVeto', bool)
-    isShowerMuonVetoed = fetch_value(incomputed,
+    isWSMuon = fetch_value(indata, 'tag_WSMuon', bool)
+    isADMuon = fetch_value(indata, 'tag_ADMuon', bool)
+    isShowerMuon = fetch_value(indata, 'tag_ShowerMuon', bool)
+    isIBDDelayed = fetch_value(indata, 'tag_IBDDelayed', bool)
+    isPromptLike = fetch_value(indata, 'tag_PromptLike', bool)
+    isDelayedLike = fetch_value(indata, 'tag_DelayedLike', bool)
+    isWSMuonVetoed = fetch_value(indata, 'tag_WSMuonVeto', bool)
+    isADMuonVetoed = fetch_value(indata, 'tag_ADMuonVeto', bool)
+    isShowerMuonVetoed = fetch_value(indata,
             'tag_ShowerMuonVeto', bool)
-    isFlasher = fetch_value(incomputed, 'tag_flasher', bool)
-    dt_last_WSMuon = fetch_value(incomputed, 'dt_previous_WSMuon', int)
-    dt_next_WSMuon = fetch_value(incomputed, 'dt_next_WSMuon', int)
-    dt_last_ADMuon = fetch_value(incomputed, 'dt_previous_ADMuon', int)
-    dt_last_ShowerMuon = fetch_value(incomputed,
+    isFlasher = fetch_value(indata, 'tag_flasher', bool)
+    dt_last_WSMuon = fetch_value(indata, 'dt_previous_WSMuon', int)
+    dt_next_WSMuon = fetch_value(indata, 'dt_next_WSMuon', int)
+    dt_last_ADMuon = fetch_value(indata, 'dt_previous_ADMuon', int)
+    dt_last_ShowerMuon = fetch_value(indata,
             'dt_previous_ShowerMuon', int)
     return (
             timestamp,

@@ -53,7 +53,7 @@ def main(filename, nevents, start_event, site):
 
         translate.copy(computed_buf, calibStats, adSimple, run, fileno)
 
-        process.one_iteration(entry_number, None, computed,
+        process.one_iteration(entry_number, computed,
                 computed_buf, out_IBDs, ibd_fill_buf, computed_helper,
                 callback)
     # After the event loop is finished, fill the remaining events from

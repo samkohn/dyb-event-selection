@@ -22,7 +22,7 @@ log "executing cd $OUT_DIR"
 cd $OUT_DIR
 
 FIND_FILE=~mkramer/projscratch/p17b/code/p17b_find/p17b_find
-log "executing time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS"
+log "executing time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS --site $SITE"
 time python $SRC_DIR/fullstack.py -i `$FIND_FILE $RUNNO $FILENO` -n $NEVENTS --site $SITE
 
 log "deleting progress file $SRC_DIR/progress/__in_progress_${RUNFILE_LINENO}__"

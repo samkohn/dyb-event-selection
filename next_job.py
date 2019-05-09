@@ -50,9 +50,10 @@ args = {
         'fileno': fileno,
         'site': site,
         'sublist': args.sublist,
+        'lineno': current_index,
         }
 
 
 
 print('%(srcdir)s/job.sh %(srcdir)s %(outdir)s %(run)d %(fileno)d %(nevents)d '
-        '%(sublist)d %(site)d' % args)
+        '%(sublist)d %(site)d %(lineno)d' % args)

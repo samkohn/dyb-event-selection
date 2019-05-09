@@ -228,14 +228,14 @@ def main(entries, debug):
     if debug:
         entries = xrange(10000)
     def callback(event_cache):
-        print(event_cache.noTree_loopIndex[0])
+        logging.debug(event_cache.noTree_loopIndex[0])
     for event_number in entries:
         # Load the current event in the input TTree
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
-        indata_list = fetch_indata(indata)
+        fetch_indata(indata, fill_buf)
 
-        one_iteration(event_number, indata_list, outdata, fill_buf, out_IBDs,
+        one_iteration(event_number, outdata, fill_buf, out_IBDs,
                 ibd_fill_buf, helper, callback)
     finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
             helper.event_cache, callback)
@@ -250,7 +250,7 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
     for cached_event in cache:
         if cached_event.dt_next_WSMuon[0] == 0:
             assign_value(cached_event.dt_next_WSMuon, -1)
-            assign_value(cahced_event.nHit_next_WSMuon, -1)
+            assign_value(cached_event.nHit_next_WSMuon, -1)
             assign_value(cached_event.tag_WSMuonVeto, 0)
         if cached_event.dt_next_DelayedLike[0] == 0:
             assign_value(cached_event.dt_next_DelayedLike, -1)
@@ -274,36 +274,26 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
             cached_event.copyTo(ibd_fill_buf)
             out_IBDs.Fill()
 
-def fetch_indata(indata):
+def fetch_indata(indata, buf):
     # Fetch the necessary values from the input TTree
-    timestamp = fetch_value(indata, 'timeStamp', int)
-    triggerType = fetch_value(indata, 'triggerType', int)
-    detector = fetch_value(indata, 'detector', int)
-    site = fetch_value(indata, 'site', int)
-    nHit = fetch_value(indata, 'nHit', int)
-    charge = fetch_value(indata, 'charge', float)
-    fMax = fetch_value(indata, 'fMax', float)
-    fQuad = fetch_value(indata, 'fQuad', float)
-    fPSD_t1 = fetch_value(indata, 'fPSD_t1', float)
-    fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
-    f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
-    energy = fetch_value(indata, 'energy', float)
-    return (
-            timestamp,
-            triggerType,
-            detector,
-            site,
-            nHit,
-            charge,
-            fMax,
-            fQuad,
-            fPSD_t1,
-            fPSD_t2,
-            f2inch_maxQ,
-            energy
-            )
+    assign_value(buf.timeStamp, fetch_value(indata, 'timeStamp', int))
+    assign_value(buf.triggerType, fetch_value(indata, 'triggerType', int))
+    assign_value(buf.detector, fetch_value(indata, 'detector', int))
+    assign_value(buf.site, fetch_value(indata, 'site', int))
+    assign_value(buf.nHit, fetch_value(indata, 'nHit', int))
+    assign_value(buf.charge, fetch_value(indata, 'charge', float))
+    assign_value(buf.fMax, fetch_value(indata, 'fMax', float))
+    assign_value(buf.fQuad, fetch_value(indata, 'fQuad', float))
+    assign_value(buf.fPSD_t1, fetch_value(indata, 'fPSD_t1', float))
+    assign_value(buf.fPSD_t2, fetch_value(indata, 'fPSD_t2', float))
+    assign_value(buf.f2inch_maxQ, fetch_value(indata, 'f2inch_maxQ', float))
+    assign_value(buf.energy, fetch_value(indata, 'energy', float))
+    assign_value(buf.x, fetch_value(indata, 'x', float))
+    assign_value(buf.y, fetch_value(indata, 'y', float))
+    assign_value(buf.z, fetch_value(indata, 'z', float))
+    return buf
 
-def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
+def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         ibd_fill_buf, helper, callback=lambda e:None):
     timestamp = fill_buf.timeStamp[0]
     triggerType = fill_buf.triggerType[0]

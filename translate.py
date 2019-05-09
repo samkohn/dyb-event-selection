@@ -99,7 +99,7 @@ def main(filenames, nevents):
 
     calibStats, adSimple = initialize_indata(filenames)
     outfile = TFile('out.root', 'RECREATE')
-    outdata, buf = create_outdata(outfile)
+    outdata, buf = create_data_TTree(outfile)
     n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
             calibStats.GetEntries())
     if nevents == -1 and adSimple.GetEntries() != n_entries:
@@ -111,7 +111,7 @@ def main(filenames, nevents):
         calibStats.GetEntry(entry_number)
         adSimple.LoadTree(entry_number)
         adSimple.GetEntry(entry_number)
-        copy(buf, calibStats, adSimple)
+        copy(buf, calibStats, adSimple, 0, 0)
         outdata.Fill()
 
     outfile.Write()

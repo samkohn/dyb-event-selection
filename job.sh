@@ -10,7 +10,7 @@ SITE=$7
 LINENO=$8
 
 function log {
-  echo "$FILENO: $@"
+    echo "${LINENO}.${RUNNO}.${FILENO}: $@"
 }
 
 log $SRC_DIR $OUT_DIR $FILENO $NEVENTS

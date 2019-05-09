@@ -7,7 +7,7 @@
 #SBATCH -C haswell
 #SBATCH --mail-user=skohn@lbl.gov
 #SBATCH --mail-type=ALL
-#SBATCH --array=0-1
+#SBATCH --array=0-0
 
 export DIR="/global/homes/s/skohn/dyb-event-selection-production/"
 export RUNDIR=$SCRATCH/dyb6

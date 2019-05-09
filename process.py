@@ -85,11 +85,18 @@ def create_computed_TTree(name, host_file, title=None):
     fill_buf.tag_DelayedLike = unsigned_int_value()
     fill_buf.tag_IBDDelayed = unsigned_int_value()
     fill_buf.dt_previous_WSMuon = long_value()
+    fill_buf.nHit_previous_WSMuon = int_value()
     fill_buf.dt_next_WSMuon = long_value()
+    fill_buf.nHit_next_WSMuon = int_value()
     fill_buf.dt_previous_ADMuon = long_value()
+    fill_buf.charge_previous_ADMuon = float_value()
     fill_buf.dt_previous_ShowerMuon = long_value()
+    fill_buf.charge_previous_ShowerMuon = float_value()
     fill_buf.dt_previous_PromptLike = long_value()
     fill_buf.energy_previous_PromptLike = float_value()
+    fill_buf.x_previous_PromptLike = float_value()
+    fill_buf.y_previous_PromptLike = float_value()
+    fill_buf.z_previous_PromptLike = float_value()
     fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
@@ -141,17 +148,32 @@ def create_computed_TTree(name, host_file, title=None):
             'tag_IBDDelayed/i')
     outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
+    outdata.Branch('nHit_previous_WSMuon', fill_buf.nHit_previous_WSMuon,
+            'nHit_previous_WSMuon/I')
     outdata.Branch('dt_next_WSMuon', fill_buf.dt_next_WSMuon,
             'dt_next_WSMuon/L')
+    outdata.Branch('nHit_next_WSMuon', fill_buf.nHit_next_WSMuon,
+            'nHit_next_WSMuon/I')
     outdata.Branch('dt_previous_ADMuon', fill_buf.dt_previous_ADMuon,
             'dt_previous_ADMuon/L')
+    outdata.Branch('charge_previous_ADMuon', fill_buf.charge_previous_ADMuon,
+            'charge_previous_ADMuon/F')
     outdata.Branch('dt_previous_ShowerMuon', fill_buf.dt_previous_ShowerMuon,
             'dt_previous_ShowerMuon/L')
+    outdata.Branch('charge_previous_ShowerMuon',
+            fill_buf.charge_previous_ShowerMuon,
+            'charge_previous_ShowerMuon/F')
     outdata.Branch('dt_previous_PromptLike',
             fill_buf.dt_previous_PromptLike, 'dt_previous_PromptLike/L')
     outdata.Branch('energy_previous_PromptLike',
             fill_buf.energy_previous_PromptLike,
             'energy_previous_PromptLike/F')
+    outdata.Branch('x_previous_PromptLike', fill_buf.x_previous_PromptLike,
+            'x_previous_PromptLike/F')
+    outdata.Branch('y_previous_PromptLike', fill_buf.y_previous_PromptLike,
+            'y_previous_PromptLike/F')
+    outdata.Branch('z_previous_PromptLike', fill_buf.z_previous_PromptLike,
+            'z_previous_PromptLike/F')
     outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
             'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
@@ -175,11 +197,17 @@ class ProcessHelper(object):
         # preserving the event order between the input and output TTrees.
         self.event_cache = deque()
         self.last_WSMuon_time = 0
+        self.last_WSMuon_nHit = 0
         self.last_ADMuon_time = {n:0 for n in range(9)}
+        self.last_ADMuon_charge = {n:0 for n in range(9)}
         self.last_ShowerMuon_time = {n:0 for n in range(9)}
+        self.last_ShowerMuon_charge = {n:0 for n in range(9)}
         self.recent_shower_muons = {n:deque() for n in range(9)}
         self.last_PromptLike_time = {n:-1 for n in range(9)}
         self.last_PromptLike_energy = {n:-1 for n in range(9)}
+        self.last_PromptLike_x = {n:0 for n in range(9)}
+        self.last_PromptLike_y = {n:0 for n in range(9)}
+        self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque() for n in range(9)}
 
 def main(entries, debug):
@@ -222,6 +250,7 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
     for cached_event in cache:
         if cached_event.dt_next_WSMuon[0] == 0:
             assign_value(cached_event.dt_next_WSMuon, -1)
+            assign_value(cahced_event.nHit_next_WSMuon, -1)
             assign_value(cached_event.tag_WSMuonVeto, 0)
         if cached_event.dt_next_DelayedLike[0] == 0:
             assign_value(cached_event.dt_next_DelayedLike, -1)
@@ -288,6 +317,9 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
     fPSD_t2 = fill_buf.fPSD_t2[0]
     f2inch_maxQ = fill_buf.f2inch_maxQ[0]
     energy = fill_buf.energy[0]
+    x = fill_buf.x[0]
+    y = fill_buf.y[0]
+    z = fill_buf.z[0]
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
@@ -305,6 +337,9 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
     assign_value(buf.fPSD_t2, fPSD_t2)
     assign_value(buf.f2inch_maxQ, f2inch_maxQ)
     assign_value(buf.energy, energy)
+    assign_value(buf.x, x)
+    assign_value(buf.y, y)
+    assign_value(buf.z, z)
 
     # Compute simple tags and values (those that only require data
     # from the current event)
@@ -352,14 +387,22 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
     # recent muons and prompt-likes.
     assign_value(buf.dt_previous_WSMuon, timestamp -
             helper.last_WSMuon_time)
+    assign_value(buf.nHit_previous_WSMuon, helper.last_WSMuon_nHit)
     assign_value(buf.dt_previous_ADMuon, timestamp -
             helper.last_ADMuon_time[detector])
+    assign_value(buf.charge_previous_ADMuon,
+            helper.last_ADMuon_charge[detector])
     assign_value(buf.dt_previous_ShowerMuon, timestamp -
             helper.last_ShowerMuon_time[detector])
+    assign_value(buf.charge_previous_ShowerMuon,
+            helper.last_ShowerMuon_charge[detector])
     assign_value(buf.dt_previous_PromptLike, timestamp -
             helper.last_PromptLike_time[detector])
     assign_value(buf.energy_previous_PromptLike,
             helper.last_PromptLike_energy[detector])
+    assign_value(buf.x_previous_PromptLike, helper.last_PromptLike_x[detector])
+    assign_value(buf.y_previous_PromptLike, helper.last_PromptLike_y[detector])
+    assign_value(buf.z_previous_PromptLike, helper.last_PromptLike_z[detector])
     assign_value(buf.num_ShowerMuons_5sec,
             len(helper.recent_shower_muons[detector]))
     assign_value(buf.num_PromptLikes_400us,
@@ -382,6 +425,7 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
     if event_isWSMuon:
         logging.debug("isWSMuon")
         helper.last_WSMuon_time = timestamp
+        helper.last_WSMuon_nHit = nHit
         # Assign dt_next_WSMuon to the events in the event_cache
         for cached_event in helper.event_cache:
             # Some events might already have been assigned, so skip
@@ -393,19 +437,25 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
                 logging.debug('taggedNextWS%d', cached_event.timestamp[0])
                 assign_value(cached_event.dt_next_WSMuon,
                         timestamp - cached_event.timestamp[0])
+                assign_value(cached_event.nHit_next_WSMuon, nHit)
                 assign_value(cached_event.tag_WSMuonVeto,
                         muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                             cached_event.dt_next_WSMuon[0]))
 
     if event_isADMuon:
         helper.last_ADMuon_time[detector] = timestamp
+        helper.last_ADMuon_charge[detector] = charge
     if event_isShowerMuon:
         helper.last_ShowerMuon_time[detector] = timestamp
+        helper.last_ShowerMuon_charge[detector] = charge
         helper.recent_shower_muons[detector].append(timestamp)
     # Don't include prompt-like flasher events
     if event_isPromptLike and not event_isFlasher:
         helper.last_PromptLike_time[detector] = timestamp
         helper.last_PromptLike_energy[detector] = energy
+        helper.last_PromptLike_x[detector] = x
+        helper.last_PromptLike_y[detector] = y
+        helper.last_PromptLike_z[detector] = z
         helper.recent_promptlikes[detector].append(timestamp)
     # Don't include prompt-like delayed events
     if event_isDelayedLike and not event_isFlasher:

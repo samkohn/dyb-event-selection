@@ -29,7 +29,7 @@ def done_with_cache(buf):
     # the event is not an AD event then the delayed-like event does not
     # have to have been processed.)
     found_next_WSMuon = buf.dt_next_WSMuon[0] != 0
-    detector = buf.noTree_detector[0]
+    detector = buf.detector[0]
     found_next_DelayedLike = (detector not in AD_DETECTORS
             or buf.dt_next_DelayedLike[0] != 0)
     return found_next_WSMuon and found_next_DelayedLike
@@ -49,9 +49,31 @@ def create_computed_TTree(name, host_file, title=None):
     # Initialize the "buffer" used to fill values into the TTree
     fill_buf = TreeBuffer()
     fill_buf.noTree_loopIndex = int_value()
-    fill_buf.noTree_timestamp = long_value()
-    fill_buf.noTree_detector = int_value()
-    fill_buf.noTree_site = int_value()
+    fill_buf.timestamp = long_value()
+    fill_buf.timestamp_seconds = int_value()
+    fill_buf.timestamp_nanoseconds = int_value()
+    fill_buf.detector = int_value()
+    fill_buf.site = int_value()
+    fill_buf.run = unsigned_int_value()
+    fill_buf.fileno = unsigned_int_value()
+    fill_buf.triggerNumber = int_value()
+    fill_buf.timestamp_seconds = int_value()
+    fill_buf.timestamp_nanoseconds = int_value()
+    fill_buf.timestamp = long_value()
+    fill_buf.detector = int_value()
+    fill_buf.site = int_value()
+    fill_buf.triggerType = unsigned_int_value()
+    fill_buf.nHit = int_value()
+    fill_buf.charge = float_value()
+    fill_buf.fQuad = float_value()
+    fill_buf.fMax = float_value()
+    fill_buf.fPSD_t1 = float_value()
+    fill_buf.fPSD_t2 = float_value()
+    fill_buf.f2inch_maxQ = float_value()
+    fill_buf.energy = float_value()
+    fill_buf.x = float_value()
+    fill_buf.y = float_value()
+    fill_buf.z = float_value()
     fill_buf.fID = float_value()
     fill_buf.fPSD = float_value()
     fill_buf.tag_flasher = unsigned_int_value()
@@ -65,11 +87,18 @@ def create_computed_TTree(name, host_file, title=None):
     fill_buf.tag_DelayedLike = unsigned_int_value()
     fill_buf.tag_IBDDelayed = unsigned_int_value()
     fill_buf.dt_previous_WSMuon = long_value()
+    fill_buf.nHit_previous_WSMuon = int_value()
     fill_buf.dt_next_WSMuon = long_value()
+    fill_buf.nHit_next_WSMuon = int_value()
     fill_buf.dt_previous_ADMuon = long_value()
+    fill_buf.charge_previous_ADMuon = float_value()
     fill_buf.dt_previous_ShowerMuon = long_value()
+    fill_buf.charge_previous_ShowerMuon = float_value()
     fill_buf.dt_previous_PromptLike = long_value()
     fill_buf.energy_previous_PromptLike = float_value()
+    fill_buf.x_previous_PromptLike = float_value()
+    fill_buf.y_previous_PromptLike = float_value()
+    fill_buf.z_previous_PromptLike = float_value()
     fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
@@ -78,6 +107,28 @@ def create_computed_TTree(name, host_file, title=None):
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute
+    outdata.Branch('run', fill_buf.run, 'run/i')
+    outdata.Branch('fileno', fill_buf.fileno, 'fileno/i')
+    outdata.Branch('triggerNumber', fill_buf.triggerNumber, 'triggerNumber/I')
+    outdata.Branch('timestamp_seconds', fill_buf.timestamp_seconds,
+            'timestamp_seconds/I')
+    outdata.Branch('timestamp_nanoseconds', fill_buf.timestamp_nanoseconds,
+            'timestamp_nanoseconds/I')
+    outdata.Branch('timestamp', fill_buf.timestamp, 'timestamp/L')
+    outdata.Branch('detector', fill_buf.detector, 'detector/I')
+    outdata.Branch('site', fill_buf.site, 'site/I')
+    outdata.Branch('triggerType', fill_buf.triggerType, 'triggerType/i')
+    outdata.Branch('nHit', fill_buf.nHit, 'nHit/I')
+    outdata.Branch('charge', fill_buf.charge, 'charge/F')
+    outdata.Branch('fQuad', fill_buf.fQuad, 'fQuad/F')
+    outdata.Branch('fMax', fill_buf.fMax, 'fMax/F')
+    outdata.Branch('fPSD_t1', fill_buf.fPSD_t1, 'fPSD_t1/F')
+    outdata.Branch('fPSD_t2', fill_buf.fPSD_t2, 'fPSD_t2/F')
+    outdata.Branch('f2inch_maxQ', fill_buf.f2inch_maxQ, 'f2inch_maxQ/F')
+    outdata.Branch('energy', fill_buf.energy, 'energy/F')
+    outdata.Branch('x', fill_buf.x, 'x/F')
+    outdata.Branch('y', fill_buf.y, 'y/F')
+    outdata.Branch('z', fill_buf.z, 'z/F')
     outdata.Branch('fID', fill_buf.fID, 'fID/F')
     outdata.Branch('fPSD', fill_buf.fPSD, 'fPSD/F')
     outdata.Branch('tag_flasher', fill_buf.tag_flasher, 'tag_flasher/i')
@@ -99,17 +150,32 @@ def create_computed_TTree(name, host_file, title=None):
             'tag_IBDDelayed/i')
     outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
+    outdata.Branch('nHit_previous_WSMuon', fill_buf.nHit_previous_WSMuon,
+            'nHit_previous_WSMuon/I')
     outdata.Branch('dt_next_WSMuon', fill_buf.dt_next_WSMuon,
             'dt_next_WSMuon/L')
+    outdata.Branch('nHit_next_WSMuon', fill_buf.nHit_next_WSMuon,
+            'nHit_next_WSMuon/I')
     outdata.Branch('dt_previous_ADMuon', fill_buf.dt_previous_ADMuon,
             'dt_previous_ADMuon/L')
+    outdata.Branch('charge_previous_ADMuon', fill_buf.charge_previous_ADMuon,
+            'charge_previous_ADMuon/F')
     outdata.Branch('dt_previous_ShowerMuon', fill_buf.dt_previous_ShowerMuon,
             'dt_previous_ShowerMuon/L')
+    outdata.Branch('charge_previous_ShowerMuon',
+            fill_buf.charge_previous_ShowerMuon,
+            'charge_previous_ShowerMuon/F')
     outdata.Branch('dt_previous_PromptLike',
             fill_buf.dt_previous_PromptLike, 'dt_previous_PromptLike/L')
     outdata.Branch('energy_previous_PromptLike',
             fill_buf.energy_previous_PromptLike,
             'energy_previous_PromptLike/F')
+    outdata.Branch('x_previous_PromptLike', fill_buf.x_previous_PromptLike,
+            'x_previous_PromptLike/F')
+    outdata.Branch('y_previous_PromptLike', fill_buf.y_previous_PromptLike,
+            'y_previous_PromptLike/F')
+    outdata.Branch('z_previous_PromptLike', fill_buf.z_previous_PromptLike,
+            'z_previous_PromptLike/F')
     outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
             'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
@@ -133,19 +199,25 @@ class ProcessHelper(object):
         # preserving the event order between the input and output TTrees.
         self.event_cache = deque()
         self.last_WSMuon_time = 0
+        self.last_WSMuon_nHit = 0
         self.last_ADMuon_time = {n:0 for n in range(9)}
+        self.last_ADMuon_charge = {n:0 for n in range(9)}
         self.last_ShowerMuon_time = {n:0 for n in range(9)}
+        self.last_ShowerMuon_charge = {n:0 for n in range(9)}
         self.recent_shower_muons = {n:deque() for n in range(9)}
         self.last_PromptLike_time = {n:-1 for n in range(9)}
         self.last_PromptLike_energy = {n:-1 for n in range(9)}
+        self.last_PromptLike_x = {n:0 for n in range(9)}
+        self.last_PromptLike_y = {n:0 for n in range(9)}
+        self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque() for n in range(9)}
 
 def main(entries, debug):
 
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
-    indata = infile.Get('data')
-    outdata, fill_buf = create_computed_TTree('computed', infile)
+    indata = infile.Get('raw_data')
+    outdata, fill_buf = create_computed_TTree('data', infile)
     out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', infile,
             'IBD candidates (git: %s)')
 
@@ -158,14 +230,14 @@ def main(entries, debug):
     if debug:
         entries = xrange(10000)
     def callback(event_cache):
-        print(event_cache.noTree_loopIndex[0])
+        logging.debug(event_cache.noTree_loopIndex[0])
     for event_number in entries:
         # Load the current event in the input TTree
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
-        indata_list = fetch_indata(indata)
+        fetch_indata(indata, fill_buf)
 
-        one_iteration(event_number, indata_list, outdata, fill_buf, out_IBDs,
+        one_iteration(event_number, outdata, fill_buf, out_IBDs,
                 ibd_fill_buf, helper, callback)
     finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
             helper.event_cache, callback)
@@ -180,6 +252,7 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
     for cached_event in cache:
         if cached_event.dt_next_WSMuon[0] == 0:
             assign_value(cached_event.dt_next_WSMuon, -1)
+            assign_value(cached_event.nHit_next_WSMuon, -1)
             assign_value(cached_event.tag_WSMuonVeto, 0)
         if cached_event.dt_next_DelayedLike[0] == 0:
             assign_value(cached_event.dt_next_DelayedLike, -1)
@@ -203,47 +276,70 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
             cached_event.copyTo(ibd_fill_buf)
             out_IBDs.Fill()
 
-def fetch_indata(indata):
+def fetch_indata(indata, buf):
     # Fetch the necessary values from the input TTree
-    timestamp = fetch_value(indata, 'timeStamp', int)
-    triggerType = fetch_value(indata, 'triggerType', int)
-    detector = fetch_value(indata, 'detector', int)
-    site = fetch_value(indata, 'site', int)
-    nHit = fetch_value(indata, 'nHit', int)
-    charge = fetch_value(indata, 'charge', float)
-    fMax = fetch_value(indata, 'fMax', float)
-    fQuad = fetch_value(indata, 'fQuad', float)
-    fPSD_t1 = fetch_value(indata, 'fPSD_t1', float)
-    fPSD_t2 = fetch_value(indata, 'fPSD_t2', float)
-    f2inch_maxQ = fetch_value(indata, 'f2inch_maxQ', float)
-    energy = fetch_value(indata, 'energy', float)
-    return (
-            timestamp,
-            triggerType,
-            detector,
-            site,
-            nHit,
-            charge,
-            fMax,
-            fQuad,
-            fPSD_t1,
-            fPSD_t2,
-            f2inch_maxQ,
-            energy
-            )
+    assign_value(buf.timestamp, fetch_value(indata, 'timestamp', int))
+    assign_value(buf.timestamp_seconds, fetch_value(indata, 'timestamp_seconds',
+        int))
+    assign_value(buf.timestamp_nanoseconds, fetch_value(indata,
+            'timestamp_nanoseconds', int))
+    assign_value(buf.triggerType, fetch_value(indata, 'triggerType', int))
+    assign_value(buf.detector, fetch_value(indata, 'detector', int))
+    assign_value(buf.site, fetch_value(indata, 'site', int))
+    assign_value(buf.nHit, fetch_value(indata, 'nHit', int))
+    assign_value(buf.charge, fetch_value(indata, 'charge', float))
+    assign_value(buf.fMax, fetch_value(indata, 'fMax', float))
+    assign_value(buf.fQuad, fetch_value(indata, 'fQuad', float))
+    assign_value(buf.fPSD_t1, fetch_value(indata, 'fPSD_t1', float))
+    assign_value(buf.fPSD_t2, fetch_value(indata, 'fPSD_t2', float))
+    assign_value(buf.f2inch_maxQ, fetch_value(indata, 'f2inch_maxQ', float))
+    assign_value(buf.energy, fetch_value(indata, 'energy', float))
+    assign_value(buf.x, fetch_value(indata, 'x', float))
+    assign_value(buf.y, fetch_value(indata, 'y', float))
+    assign_value(buf.z, fetch_value(indata, 'z', float))
+    return buf
 
-def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
+def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         ibd_fill_buf, helper, callback=lambda e:None):
-    (timestamp, triggerType, detector, site, nHit, charge, fMax, fQuad,
-            fPSD_t1, fPSD_t2, f2inch_maxQ, energy) = relevant_indata
+    timestamp = fill_buf.timestamp[0]
+    timestamp_seconds = fill_buf.timestamp_seconds[0]
+    timestamp_nanoseconds = fill_buf.timestamp_nanoseconds[0]
+    triggerType = fill_buf.triggerType[0]
+    detector = fill_buf.detector[0]
+    site = fill_buf.site[0]
+    nHit = fill_buf.nHit[0]
+    charge = fill_buf.charge[0]
+    fMax = fill_buf.fMax[0]
+    fQuad = fill_buf.fQuad[0]
+    fPSD_t1 = fill_buf.fPSD_t1[0]
+    fPSD_t2 = fill_buf.fPSD_t2[0]
+    f2inch_maxQ = fill_buf.f2inch_maxQ[0]
+    energy = fill_buf.energy[0]
+    x = fill_buf.x[0]
+    y = fill_buf.y[0]
+    z = fill_buf.z[0]
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
     buf = fill_buf.clone_type()
     assign_value(buf.noTree_loopIndex, event_number)
-    assign_value(buf.noTree_timestamp, timestamp)
-    assign_value(buf.noTree_detector, detector)
-    assign_value(buf.noTree_site, site)
+    assign_value(buf.timestamp, timestamp)
+    assign_value(buf.timestamp_seconds, timestamp_seconds)
+    assign_value(buf.timestamp_nanoseconds, timestamp_nanoseconds)
+    assign_value(buf.triggerType, triggerType)
+    assign_value(buf.detector, detector)
+    assign_value(buf.site, site)
+    assign_value(buf.nHit, nHit)
+    assign_value(buf.charge, charge)
+    assign_value(buf.fMax, fMax)
+    assign_value(buf.fQuad, fQuad)
+    assign_value(buf.fPSD_t1, fPSD_t1)
+    assign_value(buf.fPSD_t2, fPSD_t2)
+    assign_value(buf.f2inch_maxQ, f2inch_maxQ)
+    assign_value(buf.energy, energy)
+    assign_value(buf.x, x)
+    assign_value(buf.y, y)
+    assign_value(buf.z, z)
 
     # Compute simple tags and values (those that only require data
     # from the current event)
@@ -291,14 +387,22 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
     # recent muons and prompt-likes.
     assign_value(buf.dt_previous_WSMuon, timestamp -
             helper.last_WSMuon_time)
+    assign_value(buf.nHit_previous_WSMuon, helper.last_WSMuon_nHit)
     assign_value(buf.dt_previous_ADMuon, timestamp -
             helper.last_ADMuon_time[detector])
+    assign_value(buf.charge_previous_ADMuon,
+            helper.last_ADMuon_charge[detector])
     assign_value(buf.dt_previous_ShowerMuon, timestamp -
             helper.last_ShowerMuon_time[detector])
+    assign_value(buf.charge_previous_ShowerMuon,
+            helper.last_ShowerMuon_charge[detector])
     assign_value(buf.dt_previous_PromptLike, timestamp -
             helper.last_PromptLike_time[detector])
     assign_value(buf.energy_previous_PromptLike,
             helper.last_PromptLike_energy[detector])
+    assign_value(buf.x_previous_PromptLike, helper.last_PromptLike_x[detector])
+    assign_value(buf.y_previous_PromptLike, helper.last_PromptLike_y[detector])
+    assign_value(buf.z_previous_PromptLike, helper.last_PromptLike_z[detector])
     assign_value(buf.num_ShowerMuons_5sec,
             len(helper.recent_shower_muons[detector]))
     assign_value(buf.num_PromptLikes_400us,
@@ -321,6 +425,7 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
     if event_isWSMuon:
         logging.debug("isWSMuon")
         helper.last_WSMuon_time = timestamp
+        helper.last_WSMuon_nHit = nHit
         # Assign dt_next_WSMuon to the events in the event_cache
         for cached_event in helper.event_cache:
             # Some events might already have been assigned, so skip
@@ -328,23 +433,29 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
             if cached_event.dt_next_WSMuon[0] != 0:
                 continue
             # WSMuons are common across the entire EH/site
-            if cached_event.noTree_site[0] == site:
-                logging.debug('taggedNextWS%d', cached_event.noTree_timestamp[0])
+            if cached_event.site[0] == site:
+                logging.debug('taggedNextWS%d', cached_event.timestamp[0])
                 assign_value(cached_event.dt_next_WSMuon,
-                        timestamp - cached_event.noTree_timestamp[0])
+                        timestamp - cached_event.timestamp[0])
+                assign_value(cached_event.nHit_next_WSMuon, nHit)
                 assign_value(cached_event.tag_WSMuonVeto,
                         muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                             cached_event.dt_next_WSMuon[0]))
 
     if event_isADMuon:
         helper.last_ADMuon_time[detector] = timestamp
+        helper.last_ADMuon_charge[detector] = charge
     if event_isShowerMuon:
         helper.last_ShowerMuon_time[detector] = timestamp
+        helper.last_ShowerMuon_charge[detector] = charge
         helper.recent_shower_muons[detector].append(timestamp)
     # Don't include prompt-like flasher events
     if event_isPromptLike and not event_isFlasher:
         helper.last_PromptLike_time[detector] = timestamp
         helper.last_PromptLike_energy[detector] = energy
+        helper.last_PromptLike_x[detector] = x
+        helper.last_PromptLike_y[detector] = y
+        helper.last_PromptLike_z[detector] = z
         helper.recent_promptlikes[detector].append(timestamp)
     # Don't include prompt-like delayed events
     if event_isDelayedLike and not event_isFlasher:
@@ -356,12 +467,12 @@ def one_iteration(event_number, relevant_indata, outdata, fill_buf, out_IBDs,
             if cached_event.dt_next_DelayedLike[0] != 0:
                 continue
             # PromptLikes are restricted to a single AD
-            if cached_event.noTree_detector[0] == detector:
+            if cached_event.detector[0] == detector:
                 logging.debug('taggedNextDelayed%d',
-                        cached_event.noTree_timestamp[0])
+                        cached_event.timestamp[0])
                 assign_value(cached_event.dt_next_DelayedLike,
                         timestamp
-                        - cached_event.noTree_timestamp[0])
+                        - cached_event.timestamp[0])
 
     # Determine which of the oldest events are ready to go into the
     # new TTree. It is possible (due to different ADs) that the

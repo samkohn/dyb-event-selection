@@ -19,7 +19,7 @@ def extract_run_fileno(filename):
     fileno = int(re.search('_\d{4}', filename).group(0)[1:])
     return (run, fileno)
 
-def main(filename, nevents, start_event):
+def main(filename, nevents, start_event, site):
     if filename is None:
         filename = "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root"
 
@@ -28,14 +28,14 @@ def main(filename, nevents, start_event):
     outfile = TFile('out_%d_%d.root' % (run, fileno), 'RECREATE',
             'DYB Run %d file %d, git %s' % (run, fileno,
                 translate.git_describe()))
-    outdata, outdata_buf = translate.create_data_TTree(outfile)
+    #outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree('computed', outfile)
     out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile,
             'IBD candidates (git: %s)')
     calibStats, adSimple = translate.initialize_indata([filename])
     computed_helper = process.ProcessHelper()
     rate_helper = rate_calculations.RateHelper(run, fileno)
-
+    rate_helper.site = site
     end_event = (calibStats.GetEntries() if nevents == -1 else
             min(nevents+start_event, calibStats.GetEntries()))
     if nevents == -1 and adSimple.GetEntries() != end_event:
@@ -51,24 +51,9 @@ def main(filename, nevents, start_event):
         adSimple.LoadTree(entry_number)
         adSimple.GetEntry(entry_number)
 
-        translate.copy(outdata_buf, calibStats, adSimple, run, fileno)
-        indata_list = []
-        indata_list.append(outdata_buf.timeStamp[0])
-        indata_list.append(outdata_buf.triggerType[0])
-        indata_list.append(outdata_buf.detector[0])
-        indata_list.append(outdata_buf.site[0])
-        indata_list.append(outdata_buf.nHit[0])
-        indata_list.append(outdata_buf.charge[0])
-        indata_list.append(outdata_buf.fMax[0])
-        indata_list.append(outdata_buf.fQuad[0])
-        indata_list.append(outdata_buf.fPSD_t1[0])
-        indata_list.append(outdata_buf.fPSD_t2[0])
-        indata_list.append(outdata_buf.f2inch_maxQ[0])
-        indata_list.append(outdata_buf.energy[0])
+        translate.copy(computed_buf, calibStats, adSimple, run, fileno)
 
-        outdata.Fill()
-
-        process.one_iteration(entry_number, indata_list, computed,
+        process.one_iteration(entry_number, computed,
                 computed_buf, out_IBDs, ibd_fill_buf, computed_helper,
                 callback)
     # After the event loop is finished, fill the remaining events from
@@ -87,7 +72,8 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--num-events', default=-1, type=int)
     parser.add_argument('-s', '--start-event', default=0, type=int)
     parser.add_argument('-d', '--debug', action='store_true')
+    parser.add_argument('--site', type=int)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.infile, args.num_events, args.start_event)
+    main(args.infile, args.num_events, args.start_event, args.site)

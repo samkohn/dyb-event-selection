@@ -37,24 +37,30 @@ class TreeBuffer(object):
             for i, entry in enumerate(value):
                 otherArray[i] = entry
 
-    def clone(self):
+    def clone(self, dest=None):
         '''
         Create a new independent TreeBuffer with the same array
         attributes and values.
 
         '''
-        new = TreeBuffer()
+        if dest is None:
+            new = TreeBuffer()
+        else:
+            new = dest
         for attr, value in self.__dict__.items():
             setattr(new, attr, value[:])
         return new
 
-    def clone_type(self):
+    def clone_type(self, dest=None):
         '''
         Create a new TreeBuffer with the same array attributes
         containing values of 0.
 
         '''
-        new = TreeBuffer()
+        if dest is None:
+            new = TreeBuffer()
+        else:
+            new = dest
         for attr, value in self.__dict__.items():
             setattr(new, attr, array(value.typecode,
                 [0]*len(value)))
@@ -93,7 +99,7 @@ def main(filenames, nevents):
 
     calibStats, adSimple = initialize_indata(filenames)
     outfile = TFile('out.root', 'RECREATE')
-    outdata, buf = create_outdata(outfile)
+    outdata, buf = create_data_TTree(outfile)
     n_entries = calibStats.GetEntries() if nevents == -1 else min(nevents,
             calibStats.GetEntries())
     if nevents == -1 and adSimple.GetEntries() != n_entries:
@@ -105,7 +111,7 @@ def main(filenames, nevents):
         calibStats.GetEntry(entry_number)
         adSimple.LoadTree(entry_number)
         adSimple.GetEntry(entry_number)
-        copy(buf, calibStats, adSimple)
+        copy(buf, calibStats, adSimple, 0, 0)
         outdata.Fill()
 
     outfile.Write()
@@ -146,16 +152,16 @@ def initialize_indata(filenames):
 def create_data_TTree(host_file):
     host_file.cd()
     git_description = git_describe()
-    outdata = TTree('data', 'Daya Bay Data by Sam Kohn (git: %s)' %
+    outdata = TTree('raw_data', 'Daya Bay Data by Sam Kohn (git: %s)' %
             git_description)
 
     buf = TreeBuffer()
     buf.run = unsigned_int_value()
     buf.fileno = unsigned_int_value()
     buf.triggerNumber = int_value()
-    buf.timeStamp_seconds = int_value()
-    buf.timeStamp_nanoseconds = int_value()
-    buf.timeStamp = long_value()
+    buf.timestamp_seconds = int_value()
+    buf.timestamp_nanoseconds = int_value()
+    buf.timestamp = long_value()
     buf.detector = int_value()
     buf.site = int_value()
     buf.triggerType = unsigned_int_value()
@@ -174,11 +180,11 @@ def create_data_TTree(host_file):
     outdata.Branch('run', buf.run, 'run/i')
     outdata.Branch('fileno', buf.fileno, 'fileno/i')
     outdata.Branch('triggerNumber', buf.triggerNumber, 'triggerNumber/I')
-    outdata.Branch('timeStamp_seconds', buf.timeStamp_seconds,
-            'timeStamp_seconds/I')
-    outdata.Branch('timestamp_nanoseconds', buf.timeStamp_nanoseconds,
-            'timeStamp_nanoseconds/I')
-    outdata.Branch('timeStamp', buf.timeStamp, 'timeStamp/L')
+    outdata.Branch('timestamp_seconds', buf.timestamp_seconds,
+            'timestamp_seconds/I')
+    outdata.Branch('timestamp_nanoseconds', buf.timestamp_nanoseconds,
+            'timestamp_nanoseconds/I')
+    outdata.Branch('timestamp', buf.timestamp, 'timestamp/L')
     outdata.Branch('detector', buf.detector, 'detector/I')
     outdata.Branch('site', buf.site, 'site/I')
     outdata.Branch('triggerType', buf.triggerType, 'triggerType/i')
@@ -203,12 +209,12 @@ def copy(buf, calibStats, adSimple, run, fileno):
     assign_value(buf.fileno, fileno)
     assign_value(buf.triggerNumber, fetch_value(calibStats,
         'triggerNumber', int))
-    assign_value(buf.timeStamp_seconds, fetch_value(calibStats,
+    assign_value(buf.timestamp_seconds, fetch_value(calibStats,
         'context.mTimeStamp.mSec', int))
-    assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
+    assign_value(buf.timestamp_nanoseconds, fetch_value(calibStats,
         'context.mTimeStamp.mNanoSec', int))
-    assign_value(buf.timeStamp, buf.timeStamp_seconds[0]*(10**9) +
-            buf.timeStamp_nanoseconds[0])
+    assign_value(buf.timestamp, buf.timestamp_seconds[0]*(10**9) +
+            buf.timestamp_nanoseconds[0])
     assign_value(buf.detector, fetch_value(calibStats,
         'context.mDetId', int))
     assign_value(buf.site, fetch_value(adSimple, 'context.mSite',

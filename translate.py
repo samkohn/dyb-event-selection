@@ -159,9 +159,9 @@ def create_data_TTree(host_file):
     buf.run = unsigned_int_value()
     buf.fileno = unsigned_int_value()
     buf.triggerNumber = int_value()
-    buf.timeStamp_seconds = int_value()
-    buf.timeStamp_nanoseconds = int_value()
-    buf.timeStamp = long_value()
+    buf.timestamp_seconds = int_value()
+    buf.timestamp_nanoseconds = int_value()
+    buf.timestamp = long_value()
     buf.detector = int_value()
     buf.site = int_value()
     buf.triggerType = unsigned_int_value()
@@ -180,11 +180,11 @@ def create_data_TTree(host_file):
     outdata.Branch('run', buf.run, 'run/i')
     outdata.Branch('fileno', buf.fileno, 'fileno/i')
     outdata.Branch('triggerNumber', buf.triggerNumber, 'triggerNumber/I')
-    outdata.Branch('timeStamp_seconds', buf.timeStamp_seconds,
-            'timeStamp_seconds/I')
-    outdata.Branch('timestamp_nanoseconds', buf.timeStamp_nanoseconds,
-            'timeStamp_nanoseconds/I')
-    outdata.Branch('timeStamp', buf.timeStamp, 'timeStamp/L')
+    outdata.Branch('timestamp_seconds', buf.timestamp_seconds,
+            'timestamp_seconds/I')
+    outdata.Branch('timestamp_nanoseconds', buf.timestamp_nanoseconds,
+            'timestamp_nanoseconds/I')
+    outdata.Branch('timestamp', buf.timestamp, 'timestamp/L')
     outdata.Branch('detector', buf.detector, 'detector/I')
     outdata.Branch('site', buf.site, 'site/I')
     outdata.Branch('triggerType', buf.triggerType, 'triggerType/i')
@@ -209,12 +209,12 @@ def copy(buf, calibStats, adSimple, run, fileno):
     assign_value(buf.fileno, fileno)
     assign_value(buf.triggerNumber, fetch_value(calibStats,
         'triggerNumber', int))
-    assign_value(buf.timeStamp_seconds, fetch_value(calibStats,
+    assign_value(buf.timestamp_seconds, fetch_value(calibStats,
         'context.mTimeStamp.mSec', int))
-    assign_value(buf.timeStamp_nanoseconds, fetch_value(calibStats,
+    assign_value(buf.timestamp_nanoseconds, fetch_value(calibStats,
         'context.mTimeStamp.mNanoSec', int))
-    assign_value(buf.timeStamp, buf.timeStamp_seconds[0]*(10**9) +
-            buf.timeStamp_nanoseconds[0])
+    assign_value(buf.timestamp, buf.timestamp_seconds[0]*(10**9) +
+            buf.timestamp_nanoseconds[0])
     assign_value(buf.detector, fetch_value(calibStats,
         'context.mDetId', int))
     assign_value(buf.site, fetch_value(adSimple, 'context.mSite',

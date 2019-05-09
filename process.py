@@ -50,14 +50,16 @@ def create_computed_TTree(name, host_file, title=None):
     fill_buf = TreeBuffer()
     fill_buf.noTree_loopIndex = int_value()
     fill_buf.timestamp = long_value()
+    fill_buf.timestamp_seconds = int_value()
+    fill_buf.timestamp_nanoseconds = int_value()
     fill_buf.detector = int_value()
     fill_buf.site = int_value()
     fill_buf.run = unsigned_int_value()
     fill_buf.fileno = unsigned_int_value()
     fill_buf.triggerNumber = int_value()
-    fill_buf.timeStamp_seconds = int_value()
-    fill_buf.timeStamp_nanoseconds = int_value()
-    fill_buf.timeStamp = long_value()
+    fill_buf.timestamp_seconds = int_value()
+    fill_buf.timestamp_nanoseconds = int_value()
+    fill_buf.timestamp = long_value()
     fill_buf.detector = int_value()
     fill_buf.site = int_value()
     fill_buf.triggerType = unsigned_int_value()
@@ -108,11 +110,11 @@ def create_computed_TTree(name, host_file, title=None):
     outdata.Branch('run', fill_buf.run, 'run/i')
     outdata.Branch('fileno', fill_buf.fileno, 'fileno/i')
     outdata.Branch('triggerNumber', fill_buf.triggerNumber, 'triggerNumber/I')
-    outdata.Branch('timeStamp_seconds', fill_buf.timeStamp_seconds,
-            'timeStamp_seconds/I')
-    outdata.Branch('timestamp_nanoseconds', fill_buf.timeStamp_nanoseconds,
-            'timeStamp_nanoseconds/I')
-    outdata.Branch('timeStamp', fill_buf.timeStamp, 'timeStamp/L')
+    outdata.Branch('timestamp_seconds', fill_buf.timestamp_seconds,
+            'timestamp_seconds/I')
+    outdata.Branch('timestamp_nanoseconds', fill_buf.timestamp_nanoseconds,
+            'timestamp_nanoseconds/I')
+    outdata.Branch('timestamp', fill_buf.timestamp, 'timestamp/L')
     outdata.Branch('detector', fill_buf.detector, 'detector/I')
     outdata.Branch('site', fill_buf.site, 'site/I')
     outdata.Branch('triggerType', fill_buf.triggerType, 'triggerType/i')
@@ -276,7 +278,11 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
 
 def fetch_indata(indata, buf):
     # Fetch the necessary values from the input TTree
-    assign_value(buf.timeStamp, fetch_value(indata, 'timeStamp', int))
+    assign_value(buf.timestamp, fetch_value(indata, 'timestamp', int))
+    assign_value(buf.timestamp_seconds, fetch_value(indata, 'timestamp_seconds',
+        int))
+    assign_value(buf.timestamp_nanoseconds, fetch_value(indata,
+            'timestamp_nanoseconds', int))
     assign_value(buf.triggerType, fetch_value(indata, 'triggerType', int))
     assign_value(buf.detector, fetch_value(indata, 'detector', int))
     assign_value(buf.site, fetch_value(indata, 'site', int))
@@ -295,7 +301,9 @@ def fetch_indata(indata, buf):
 
 def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         ibd_fill_buf, helper, callback=lambda e:None):
-    timestamp = fill_buf.timeStamp[0]
+    timestamp = fill_buf.timestamp[0]
+    timestamp_seconds = fill_buf.timestamp_seconds[0]
+    timestamp_nanoseconds = fill_buf.timestamp_nanoseconds[0]
     triggerType = fill_buf.triggerType[0]
     detector = fill_buf.detector[0]
     site = fill_buf.site[0]
@@ -316,6 +324,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     buf = fill_buf.clone_type()
     assign_value(buf.noTree_loopIndex, event_number)
     assign_value(buf.timestamp, timestamp)
+    assign_value(buf.timestamp_seconds, timestamp_seconds)
+    assign_value(buf.timestamp_nanoseconds, timestamp_nanoseconds)
     assign_value(buf.triggerType, triggerType)
     assign_value(buf.detector, detector)
     assign_value(buf.site, site)

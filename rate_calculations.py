@@ -313,7 +313,7 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
         logging.debug('new total: %s', helper.total_nonvetoed_livetime)
 
 def fetch_data(indata, incomputed):
-    timestamp = fetch_value(indata, 'timeStamp', int)
+    timestamp = fetch_value(indata, 'timestamp', int)
     detector = fetch_value(indata, 'detector', int)
     isWSMuon = fetch_value(incomputed, 'tag_WSMuon', bool)
     isADMuon = fetch_value(incomputed, 'tag_ADMuon', bool)

@@ -22,16 +22,17 @@ while os.access(lockname, os.F_OK):
     time.sleep(0.1)
 subprocess.check_output(['touch', lockname])
 with open(filename, 'r') as f:
+    first_index = int(f.readline().strip())
+    max_index = int(f.readline().strip())
     current_index = int(f.readline().strip())
     next_index = current_index + 1
-    max_index = int(f.readline().strip())
 if current_index > max_index:
     print('echo done')
     subprocess.check_output(['rm', lockname])
     sys.exit(0)
 
 with open(filename, 'w') as f:
-    f.write('%d\n%d\n' % (next_index, max_index))
+    f.write('%d\n%d\n%d\n' % (first_index, max_index, next_index))
 subprocess.check_output(['rm', lockname])
 
 output = subprocess.check_output(['sed', '%dq;d' % current_index,

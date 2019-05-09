@@ -193,6 +193,8 @@ class ProcessHelper(object):
     MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
     PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
     def __init__(self):
+        self.run = 0
+        self.fileno = 0
         # Initialize the machinery for dt_next_* and dt_previous_*
         # attributes. The event_cache stores the TreeBuffer for each event
         # until the next WSMuon and next DelayedLike have been found, thus
@@ -323,6 +325,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
 
     buf = fill_buf.clone_type()
     assign_value(buf.noTree_loopIndex, event_number)
+    assign_value(buf.run, helper.run)
+    assign_value(buf.fileno, helper.fileno)
     assign_value(buf.timestamp, timestamp)
     assign_value(buf.timestamp_seconds, timestamp_seconds)
     assign_value(buf.timestamp_nanoseconds, timestamp_nanoseconds)

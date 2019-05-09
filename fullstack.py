@@ -34,6 +34,8 @@ def main(filename, nevents, start_event, site):
             'IBD candidates (git: %s)')
     calibStats, adSimple = translate.initialize_indata([filename])
     computed_helper = process.ProcessHelper()
+    computed_helper.run = run
+    computed_helper.fileno = fileno
     rate_helper = rate_calculations.RateHelper(run, fileno)
     rate_helper.site = site
     end_event = (calibStats.GetEntries() if nevents == -1 else

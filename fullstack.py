@@ -73,7 +73,13 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--start-event', default=0, type=int)
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('--site', type=int)
+    parser.add_argument('--lineno', type=int, default=0)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.infile, args.num_events, args.start_event, args.site)
+    try:
+        main(args.infile, args.num_events, args.start_event, args.site)
+    except:
+        subprocess.check_output(['touch',
+            '/global/homes/s/skohn/dyb-event-selection-production/'
+            'progress/__possible_error_%d__' % args.lineno])

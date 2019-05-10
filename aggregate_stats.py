@@ -41,6 +41,7 @@ def main(run, files):
         for detector_str, number_IBDs in results['number_IBDs'].items():
             detector = int(detector_str)
             helper.number_IBD_candidates[detector] += number_IBDs
+        helper.site = results['site']
     helper.start_time = 0
     helper.end_time = daq_livetime
     aggregated = helper.compute_results()

@@ -29,7 +29,7 @@ log "deleting progress file $SRC_DIR/progress/__in_progress_${RUNFILE_LINENO}__"
 rm $SRC_DIR/progress/__in_progress_${RUNFILE_LINENO}__
 log "deleted progress file $SRC_DIR/progress/__in_progress_${RUNFILE_LINENO}__"
 log "done"
-NEXT_JOB=`python $SRC_DIR/next_job.py --sublist $SUBLIST --srcdir $SRC_DIR --outdir $OUT_DIR`
-log $NEXT_JOB
+#NEXT_JOB=`python $SRC_DIR/next_job.py --sublist $SUBLIST --srcdir $SRC_DIR --outdir $OUT_DIR`
+#log $NEXT_JOB
 ####$NEXT_JOB
-exit 0
+#exit 0

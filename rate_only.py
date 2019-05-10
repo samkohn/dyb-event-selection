@@ -2,6 +2,7 @@
 Rate-only analysis.
 
 '''
+import math
 
 def n_obs_AD(ibd_rate, livetime):
     return ibd_rate * livetime
@@ -12,10 +13,20 @@ def n_obs_EH(ibd_rate_dict, livetime_dict):
         n_tot += n_obs_AD(ibd_rate_dict[det], livetime_dict[det])
     return n_tot
 
+def n_obs_EH_error(ibdrate_errors_dict, livetime_dict):
+    error = 0
+    for det in ibdrate_errors_dict:
+        error += pow(ibdrate_errors_dict[det] * livetime_dict[det], 2)
+    error = math.sqrt(error)
+    return error
+
 def n_far_exp(w, n_EH1_obs, n_EH2_obs):
     return w['EH1']*n_EH1_obs + w['EH2']*n_EH2_obs
 
-def r_measured(ibd_rates, livetimes):
+def n_far_exp_error(w, EH1_error, EH2_error):
+    return math.sqrt(n_far_exp(w, EH1_error, EH2_error))
+
+def r_measured(ibd_rates, livetimes, ibd_rate_errors):
     '''
     ibd_rates = {'EH1': {1: r1, 2: r2}, 'EH2': ...}
 
@@ -23,11 +34,19 @@ def r_measured(ibd_rates, livetimes):
 
     '''
     n_obs = {EH: n_obs_EH(ibd_rates[EH], livetimes[EH]) for EH in ibd_rates}
+    n_obs_errors = {EH: n_obs_EH_error(ibd_rate_errors[EH], livetimes[EH]) for
+            EH in ibd_rate_errors}
     fkl = create_fkl_table(livetimes)
     w = create_w_weights(fkl)
     exp_EH3 = n_far_exp(w, n_obs['EH1'], n_obs['EH2'])
+    exp_EH3_error = n_far_exp_error(w, n_obs_errors['EH1'],
+            n_obs_errors['EH2'])
     obs_EH3 = n_obs['EH3']
-    return obs_EH3/exp_EH3
+    obs_EH3_error = n_obs_errors['EH3']
+    r = obs_EH3/exp_EH3
+    error = math.sqrt(pow(obs_EH3_error/obs_EH3, 2) +
+            pow(exp_EH3_error/exp_EH3, 2))
+    return r, error
 
 
 distances = {
@@ -103,12 +122,14 @@ def create_beta_weights(fkl_table):
 
 eta = {'EH1': 0.18, 'EH2': 0.206, 'EH3': 0.789}
 
-def sin22theta13(ibd_rates, livetimes):
-    r = r_measured(ibd_rates, livetimes)
+def sin22theta13(ibd_rates, livetimes, ibd_rate_errors):
+    r, r_error = r_measured(ibd_rates, livetimes, ibd_rate_errors)
     fkl = create_fkl_table(livetimes)
     w = create_w_weights(fkl)
     beta = create_beta_weights(fkl)
     eta_far = eta['EH3']
     eta_near = w['EH1']*beta['EH1']*eta['EH1'] +w['EH2']*beta['EH2']*eta['EH2']
-    return (1-r)/(eta_far - r*eta_near)
+    theta13 = (1-r)/(eta_far - r*eta_near)
+    theta13_error = math.sqrt(2) * r_error
+    return (theta13, theta13_error)
 

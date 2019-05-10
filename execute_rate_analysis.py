@@ -43,10 +43,11 @@ for outfile in filelist:
         tmuveto[addet] += result['usable_livetime'][str(ehdet)]
         multeff_weighted[addet] += (
                 result['multiplicity_efficiency'][str(ehdet)]
-                * result['usable_livetime'][str(ehdet)])
+                * result['daq_livetime'])
         bkg_weighted[addet] += (
-                result['accidental_rate_perday'][str(ehdet)] *
-                result['usable_livetime'][str(ehdet)])
+                result['accidental_rate_perday'][str(ehdet)]
+                * result['usable_livetime'][str(ehdet)]
+                * result['multiplicity_efficiency'][str(ehdet)])
 
 ibdrate = {det: 0 for det in DETS}
 ibdrate_error = {det: 0 for det in DETS}
@@ -54,12 +55,13 @@ mueff = {det: 0 for det in DETS}
 multeff = {det: 0 for det in DETS}
 bkg = {det: 0 for det in DETS}
 for det in DETS:
-    multeff[det] = multeff_weighted[det]/tmuveto[det]
-    bkg[det] = bkg_weighted[det]/tmuveto[det]
+    multeff[det] = multeff_weighted[det]/tdaq[det]
     mueff[det] = float(tmuveto[det])/tdaq[det]
+    bkg[det] = bkg_weighted[det]/(tdaq[det] * mueff[det] * multeff[det])
     ibdrate[det] = ibds[det]/(tdaq[det]/NS_PER_DAY * mueff[det] * multeff[det]) - bkg[det]
     ibdrate_error[det] = math.sqrt(ibds[det])/(tdaq[det]/NS_PER_DAY * mueff[det] * multeff[det])
-    print('AD%d: mueff %.1f | multeff %.1f' % (det, 100*mueff[det],
+    print('AD%d: livetime %.1f | mueff %.1f | multeff %.1f' % (det,
+        tdaq[det]/NS_PER_DAY, 100*mueff[det],
         100*multeff[det]))
 
 ibd_rates_final = {

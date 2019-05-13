@@ -27,13 +27,22 @@ with open(filename, 'r') as f:
     current_index = int(f.readline().strip())
     next_index = current_index + 1
 if current_index > max_index:
-    print('echo done')
-    subprocess.check_output(['rm', lockname])
-    sys.exit(0)
+    try:
+        subprocess.check_output(['rm', lockname])
+    except:
+        subprocess.check_output(['touch', ('progress/__possible_error_%d__' %
+            current_index)])
+    finally:
+        print('echo done')
+        sys.exit(0)
 
 with open(filename, 'w') as f:
     f.write('%d\n%d\n%d\n' % (first_index, max_index, next_index))
-subprocess.check_output(['rm', lockname])
+try:
+    subprocess.check_output(['rm', lockname])
+except:
+    subprocess.check_output(['touch', ('progress/__possible_error_%d__' %
+        current_index)])
 
 output = subprocess.check_output(['sed', '%dq;d' % current_index,
     os.path.join(args.srcdir, 'run_list.txt')])

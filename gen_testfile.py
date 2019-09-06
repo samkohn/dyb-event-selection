@@ -156,11 +156,11 @@ def fill_event(calibStats, cs_buf, adSimple, ads_buf,
     calibStats.Fill()
     adSimple.Fill()
 
-def main():
-    outfile = TFile('test.root', 'RECREATE')
+def main(infilename, outfilename):
+    outfile = TFile(outfilename, 'RECREATE')
     calibStats, cs_buf = prep_CalibStats(outfile)
     adSimple, ads_buf = prep_AdSimple(outfile)
-    with open('mockevents.csv', 'r') as eventspec:
+    with open(infilename, 'r') as eventspec:
         event_reader = csv.DictReader(eventspec)
         for row in event_reader:
             fill_event(calibStats, cs_buf, adSimple, ads_buf,
@@ -170,5 +170,10 @@ def main():
     outfile.Close()
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input', default='mockevents.csv')
+    parser.add_argument('-o', '--output', default='test.root')
+    args = parser.parse_args()
     from ROOT import TFile, TTree
-    main()
+    main(args.input, args.output)

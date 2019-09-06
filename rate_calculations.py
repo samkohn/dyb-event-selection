@@ -53,14 +53,15 @@ class RateHelper(object):
                 num in self.number_delayed_singles.items()}
         livetime_days = {n: t/NS_PER_DAY for n, t in
                 self.total_nonvetoed_livetime.items()}
-        ibd_rate_perday = {n: num/livetime_days[n] for n, num in
-                self.number_IBD_candidates.items()}
         dt_mult_cut_sec = 200e-6
         mult_eff = {n: self.multiplicity_eff(
                 prompt_singles_rate_Hz[n],
                 delayed_singles_rate_Hz[n],
                 dt_mult_cut_sec)
             for n in prompt_rate_Hz}
+        ibd_rate_perday = {n:
+                num/(mu_eff[n]*mult_eff[n]*(daq_livetime/NS_PER_DAY)) for n, num in
+                self.number_IBD_candidates.items()}
         acc_rate_perday = {n: S_PER_DAY*self.accidental_rate(
                 prompt_singles_rate_Hz[n],
                 delayed_singles_rate_Hz[n],

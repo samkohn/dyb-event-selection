@@ -25,15 +25,16 @@ class RateHelper(object):
         self.total_nonvetoed_livetime = AD_dict(nADs)
         self.start_time = 0
         self.end_time = 0
-        self.next_livetime_start = AD_dict(nADs)
+        self.next_livetime_start = AD_dict(nADs)  # timestamp of end of current muon veto
         self.number_IBD_candidates = AD_dict(nADs)
         self.number_prompts = AD_dict(nADs)
         self.number_delayeds = AD_dict(nADs)
         self.number_prompt_singles = AD_dict(nADs)
         self.number_delayed_singles = AD_dict(nADs)
-        self.next_singles_livetime_start = AD_dict(nADs)
-        self.last_singles_buffer = AD_dict(nADs)
-        self.last_single_vetoed = AD_dict(nADs, False)
+        self.last_event_timestamp = AD_dict(nADs)
+        self.last_event_maybe_single = AD_dict(nADs, False)
+        self.last_event_isDelayedLike = AD_dict(nADs, False)
+        self.current_singles_livetime_start = AD_dict(nADs)
         self.singles_livetime = AD_dict(nADs)
         self.events_since_last_valid_time = 0
 
@@ -206,6 +207,8 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
             helper.start_time = timestamp
             for key in helper.next_livetime_start:
                 helper.next_livetime_start[key] = timestamp
+            for key in helper.current_singles_livetime_start:
+                helper.current_singles_livetime_start[key] = timestamp
         if event_number == entries - 1:
             helper.end_time = timestamp
 
@@ -228,36 +231,42 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
             singles_dt_ns = int(200e3)
             logging.debug('promptlike. Timestamp: %d', timestamp)
             # Check for muon veto
-            buffer_start_time = max(helper.next_livetime_start[detector],
-                    helper.last_singles_buffer[detector])
-            logging.debug('buffer start time: %d', buffer_start_time)
-            if timestamp > helper.next_singles_livetime_start[detector]:
-                if helper.last_single_vetoed[detector]:
-                    logging.debug('last single was vetoed')
-                    helper.last_singles_buffer[detector] = (
-                            helper.next_singles_livetime_start[detector])
-                    logging.debug('next buffer start time: %d',
-                            helper.last_singles_buffer[detector])
-                    helper.last_single_vetoed[detector] = False
+            if timestamp > helper.next_livetime_start[detector]:
+                logging.debug('not muon-vetoed')
+                # Check if this event is far enough from last event for either
+                # to potentially be single events
+                if (timestamp - singles_dt_ns >
+                        helper.last_event_timestamp[detector]):
+                    logging.debug('far enough from last event to maybe be a single')
+                    # Check if last event was also isolated from
+                    # next-to-last event (if so, it was a single)
+                    if helper.last_event_maybe_single[detector]:
+                        logging.debug('last single-like event was a single')
+                        helper.number_prompt_singles[detector] += 1
+                        if helper.last_event_isDelayedLike[detector]:
+                            helper.number_delayed_singles[detector] += 1
+                    # Flag current event as potentially a single event
+                    helper.last_event_maybe_single[detector] = True
+                    helper.last_event_isDelayedLike[detector] = isDelayedLike
                 else:
-                    logging.debug('last single was not vetoed')
-                    new_time = timestamp-singles_dt_ns - buffer_start_time
-                    helper.singles_livetime[detector] += new_time
-                    logging.debug('new time: %d', new_time)
-                    helper.number_prompt_singles[detector] += 1
-                    if isDelayedLike:
-                        helper.number_delayed_singles[detector] += 1
-                    helper.last_singles_buffer[detector] = (timestamp
-                            - singles_dt_ns)
-                    logging.debug('next buffer start time: %d',
-                            helper.last_singles_buffer[detector])
-            else:
-                logging.debug('current event is vetoed')
-                helper.last_single_vetoed[detector] = True
-                helper.last_singles_buffer[detector] = timestamp+singles_dt_ns
-            helper.next_singles_livetime_start[detector] = (timestamp
-                    + singles_dt_ns)
-            logging.debug('next singles start: %d', timestamp+singles_dt_ns)
+                    logging.debug('not far enough from last event to be a single')
+                    # Add to the total singles livetime all the time from the
+                    # start of the current window up until singles_dt before
+                    # the last event.
+                    new_time = (helper.last_event_timestamp[detector]
+                            - singles_dt_ns
+                            - helper.current_singles_livetime_start[detector])
+                    logging.debug('new singles livetime = max(%d, 0)',
+                            new_time)
+                    helper.singles_livetime[detector] += max(new_time, 0)
+                    # Reset the current singles livetime start to singles_dt
+                    # past the current event
+                    helper.current_singles_livetime_start[detector] = (timestamp
+                            + singles_dt_ns)
+                # Save this event's timestamp whether it might be a single or
+                # not
+                helper.last_event_timestamp[detector] = timestamp
+
         # Deal with intersection between singles and muons
         if isWSMuon or isADMuon or isShowerMuon:
             # Add to singles livetime the time between the last veto and the
@@ -269,16 +278,22 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
             else:
                 detectors = (detector,)
             for det in detectors:
-                window_start = max(helper.last_singles_buffer[det],
-                        helper.next_livetime_start[det])
-                logging.debug('detector %d, window_start: %d', det,
-                        window_start)
-                dt = window_end - window_start
-                if dt > 0:
-                    logging.debug('new time: %d', dt)
-                    helper.singles_livetime[det] += dt
-
-
+                if window_end > helper.next_livetime_start[det]:
+                    window_start = helper.current_singles_livetime_start[det]
+                    logging.debug('detector %d, window_start: %d', det,
+                            window_start)
+                    dt = window_end - window_start
+                    if dt > 0:
+                        logging.debug('new time: %d', dt)
+                        helper.singles_livetime[det] += dt
+                        if isWSMuon:
+                            vetoed_window = muons._WSMUON_VETO_LAST_NS
+                        elif isADMuon:
+                            vetoed_window = muons._ADMUON_VETO_LAST_NS
+                        elif isShowerMuon:
+                            vetoed_window = muons._SHOWER_MUON_VETO_LAST_NS
+                        helper.current_singles_livetime_start[det] = (timestamp
+                                + vetoed_window)
 
         logging.debug('next livetime start: %s', helper.next_livetime_start)
         logging.debug('timestamp: %d', timestamp)

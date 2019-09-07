@@ -9,20 +9,20 @@ import json
 import re
 import subprocess
 
-from ROOT import TTree, TFile, TChain
-
-import translate
-import process
-import rate_calculations
-
 def extract_run_fileno(filename):
     run = int(re.search('\d{7}', filename).group(0))
     fileno = int(re.search('_\d{4}', filename).group(0)[1:])
     return (run, fileno)
 
 def main(filename, nevents, start_event, site):
+    from ROOT import TTree, TFile, TChain
+
+    import translate
+    import process
+    import rate_calculations
     if filename is None:
         filename = "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root"
+        site = 1
 
     run, fileno = extract_run_fileno(filename)
 
@@ -82,7 +82,8 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
     try:
         main(args.infile, args.num_events, args.start_event, args.site)
-    except:
+    except Exception as e:
+        logging.exception(e)
         subprocess.check_output(['touch',
             '/global/homes/s/skohn/dyb-event-selection-production/'
             'progress/__possible_error_%d__' % args.lineno])

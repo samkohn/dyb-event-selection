@@ -7,6 +7,7 @@ import logging
 import argparse
 import json
 from math import exp
+from pprint import pprint
 
 from ROOT import TFile, TTree
 
@@ -123,32 +124,7 @@ def main(filename, site, run, fileno, num_events, start_event, debug):
 
 
 def print_results(helper):
-    print('total DAQ livetime:')
-    daq_livetime = helper.end_time - helper.start_time
-    print(daq_livetime)
-    print('total nonvetoed livetime:')
-    print(helper.total_nonvetoed_livetime)
-    efficiency = {n: float(nonvetoed)/daq_livetime for n, nonvetoed in
-            helper.total_nonvetoed_livetime.items()}
-    print('efficiency:')
-    print(efficiency)
-    nonvetoed_livetime_days = {n: t/(1e9 * 60 * 60 * 24) for n, t in
-            helper.total_nonvetoed_livetime.items()}
-    print('IBD candidates:')
-    print(helper.number_IBD_candidates)
-    print('delayed-like singles:')
-    print(helper.number_delayed_singles)
-    print('prompt-like singles:')
-    print(helper.number_prompt_singles)
-    print('IBD rate per day:')
-    print({n: num/nonvetoed_livetime_days[n] for n, num in
-        helper.number_IBD_candidates.items()})
-    print('delayed-like rate (Hz):')
-    print({n: float(num)/helper.total_nonvetoed_livetime[n]*1e9 for n, num in
-        helper.number_delayeds.items()})
-    print('prompt-like rate (Hz):')
-    print({n: float(num)/helper.total_nonvetoed_livetime[n]*1e9 for n, num in
-        helper.number_prompts.items()})
+    pprint(helper.compute_results())
 
 def callback_adapter(helper, start_event, entries):
     def callback(event_cache):

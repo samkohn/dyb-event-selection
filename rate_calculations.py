@@ -216,6 +216,10 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                     logging.debug('far enough from last event to maybe be a single')
                     # Check if last event was also isolated from
                     # next-to-last event (if so, it was a single)
+                    #
+                    # Note: this ignores the possibility that a muon event
+                    # occurs between this event and the last single-like event,
+                    # but I believe that effect is negligible.
                     if helper.last_event_maybe_single[detector]:
                         logging.debug('last single-like event was a single')
                         helper.number_prompt_singles[detector] += 1

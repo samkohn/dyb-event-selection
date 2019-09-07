@@ -137,6 +137,23 @@ def assign_delayed_like(cs_buf, ads_buf):
     assign_value(ads_buf.y, -0.3)
     assign_value(ads_buf.z, 0.65)
 
+def assign_ADMuon(cs_buf, ads_buf):
+    '''
+    Assign the given TreeBuffers to the prototypical AD Muon event.
+
+    '''
+    assign_value(cs_buf.nHit, 180)
+    assign_value(cs_buf.charge, 5000)
+    assign_value(cs_buf.fQuad, 0.123)
+    assign_value(cs_buf.fMax, 0.210)
+    assign_value(cs_buf.fPSD_t1, 0.912)
+    assign_value(cs_buf.fPSD_t2, 0.956)
+    assign_value(cs_buf.f2inch_maxQ, 2)
+    assign_value(ads_buf.energy, 30)
+    assign_value(ads_buf.x, 0.1)
+    assign_value(ads_buf.y, 0.2)
+    assign_value(ads_buf.z, 0.3)
+
 def fill_event(calibStats, cs_buf, adSimple, ads_buf,
         timestamp, triggerNumber, event_type, detector):
     assign_value(cs_buf.triggerNumber, triggerNumber)
@@ -153,6 +170,8 @@ def fill_event(calibStats, cs_buf, adSimple, ads_buf,
         assign_prompt_like(cs_buf, ads_buf)
     elif event_type == 'delayedlike':
         assign_delayed_like(cs_buf, ads_buf)
+    elif event_type == 'admuon':
+        assign_ADMuon(cs_buf, ads_buf)
     calibStats.Fill()
     adSimple.Fill()
 

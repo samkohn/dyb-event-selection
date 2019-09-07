@@ -17,8 +17,8 @@ def AD_dict(nADs, default=0):
     return {n: default for n in range(1, nADs+1)}
 
 class RateHelper(object):
-    def __init__(self, run, fileno):
-        nADs = 4
+    def __init__(self, run, fileno, site):
+        nADs = {1: 2, 2: 2, 3: 4}[site]
         self.site = None
         self.run = run
         self.fileno = fileno
@@ -102,11 +102,11 @@ class RateHelper(object):
 
 
 
-def main(filename, run, fileno, num_events, start_event, debug):
+def main(filename, site, run, fileno, num_events, start_event, debug):
     infile = TFile(filename, 'READ')
     indata = infile.Get('data')
 
-    helper = RateHelper(run, fileno)
+    helper = RateHelper(run, fileno, site)
 
     total_entries = indata.GetEntries()
     entries = min(num_events+start_event, total_entries) if num_events > 0 else total_entries
@@ -371,8 +371,9 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--filename', default='out.root')
     parser.add_argument('--run', default=0, type=int)
     parser.add_argument('--fileno', default=0, type=int)
+    parser.add_argument('--site', type=int)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.filename, args.run, args.fileno, args.num_events, args.start_event, args.debug)
+    main(args.filename, args.site, args.run, args.fileno, args.num_events, args.start_event, args.debug)
 

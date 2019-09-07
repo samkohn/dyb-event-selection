@@ -11,7 +11,7 @@ import json
 from rate_calculations import RateHelper
 
 def main(run, files):
-    helper = RateHelper(run, 'all')
+    helper = RateHelper(run, 'all', site)
     daq_livetime = 0
     for filename in files:
         with open(filename, 'r') as f:
@@ -53,6 +53,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('files', nargs='+')
     parser.add_argument('-r', '--run', type=int)
+    parser.add_argument('--site', type=int)
     args = parser.parse_args()
-    main(args.run, args.files)
+    main(args.run, args.files, args.site)
 

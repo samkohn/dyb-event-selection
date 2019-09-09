@@ -10,7 +10,7 @@ import json
 
 from rate_calculations import RateHelper
 
-def main(run, files):
+def main(run, files, site):
     helper = RateHelper(run, 'all', site)
     daq_livetime = 0
     for filename in files:

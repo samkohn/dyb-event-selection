@@ -154,6 +154,23 @@ def assign_ADMuon(cs_buf, ads_buf):
     assign_value(ads_buf.y, 0.2)
     assign_value(ads_buf.z, 0.3)
 
+def assign_WSMuon(cs_buf, ads_buf):
+    '''
+    Assign the given TreeBuffers to the prototypical WS Muon event.
+
+    '''
+    assign_value(cs_buf.nHit, 20)
+    assign_value(cs_buf.charge, 1000)
+    assign_value(cs_buf.fQuad, 0)
+    assign_value(cs_buf.fMax, 0)
+    assign_value(cs_buf.fPSD_t1, 1)
+    assign_value(cs_buf.fPSD_t2, 1)
+    assign_value(cs_buf.f2inch_maxQ, 0)
+    assign_value(ads_buf.energy, 0)
+    assign_value(ads_buf.x, 0)
+    assign_value(ads_buf.y, 0)
+    assign_value(ads_buf.z, 0)
+
 def fill_event(calibStats, cs_buf, adSimple, ads_buf,
         timestamp, triggerNumber, event_type, detector):
     assign_value(cs_buf.triggerNumber, triggerNumber)
@@ -172,6 +189,8 @@ def fill_event(calibStats, cs_buf, adSimple, ads_buf,
         assign_delayed_like(cs_buf, ads_buf)
     elif event_type == 'admuon':
         assign_ADMuon(cs_buf, ads_buf)
+    elif event_type == 'wsmuon':
+        assign_WSMuon(cs_buf, ads_buf)
     calibStats.Fill()
     adSimple.Fill()
 

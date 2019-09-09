@@ -200,9 +200,9 @@ def main(infilename, outfilename):
     adSimple, ads_buf = prep_AdSimple(outfile)
     with open(infilename, 'r') as eventspec:
         event_reader = csv.DictReader(eventspec)
-        for row in event_reader:
+        for i, row in enumerate(event_reader):
             fill_event(calibStats, cs_buf, adSimple, ads_buf,
-                    int(row['timestamp']), int(row['trigno']), row['type'],
+                    int(row['timestamp']), i, row['type'],
                     int(row['detector']))
     outfile.Write()
     outfile.Close()

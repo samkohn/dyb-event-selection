@@ -194,6 +194,12 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                 helper.current_singles_livetime_start[key] = timestamp
         if event_number == entries - 1:
             helper.end_time = timestamp
+            if not (isWSMuon or isADMuon or isShowerMuon):
+                for key, window_start_time in (
+                        helper.current_nomuon_livetime_start.items()):
+                    new_time = max(0, timestamp - window_start_time)
+                    helper.total_nonvetoed_livetime[key] += new_time
+
 
         if isIBDDelayed:
             helper.number_IBD_candidates[detector] += 1

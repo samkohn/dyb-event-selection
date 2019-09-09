@@ -49,9 +49,11 @@ class RateHelper(object):
                 num in self.number_prompts.items()}
         delayed_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
                 num in self.number_delayeds.items()}
-        prompt_singles_rate_Hz = {n: (1e9*num)/self.singles_livetime[n] for n,
+        prompt_singles_rate_Hz = {n: ((1e9*num)/self.singles_livetime[n] if num >
+                0 else 0) for n,
                 num in self.number_prompt_singles.items()}
-        delayed_singles_rate_Hz = {n: (1e9*num)/self.singles_livetime[n] for n,
+        delayed_singles_rate_Hz = {n: ((1e9*num)/self.singles_livetime[n] if num >
+                0 else 0) for n,
                 num in self.number_delayed_singles.items()}
         livetime_days = {n: t/NS_PER_DAY for n, t in
                 self.total_nonvetoed_livetime.items()}

@@ -32,7 +32,7 @@ class RateHelper(object):
         self.number_delayeds = AD_dict(nADs)
         self.number_prompt_singles = AD_dict(nADs)
         self.number_delayed_singles = AD_dict(nADs)
-        self.last_event_timestamp = AD_dict(nADs)
+        self.last_promptlike_event_timestamp = AD_dict(nADs)
         self.last_event_maybe_single = AD_dict(nADs, False)
         self.last_event_isDelayedLike = AD_dict(nADs, False)
         self.current_singles_livetime_start = AD_dict(nADs)
@@ -212,7 +212,7 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                 # Check if this event is far enough from last event for either
                 # to potentially be single events
                 if (timestamp - singles_dt_ns >
-                        helper.last_event_timestamp[detector]):
+                        helper.last_promptlike_event_timestamp[detector]):
                     logging.debug('far enough from last event to maybe be a single')
                     # Check if last event was also isolated from
                     # next-to-last event (if so, it was a single)
@@ -233,7 +233,7 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                     # Add to the total singles livetime all the time from the
                     # start of the current window up until singles_dt before
                     # the last event.
-                    new_time = (helper.last_event_timestamp[detector]
+                    new_time = (helper.last_promptlike_event_timestamp[detector]
                             - singles_dt_ns
                             - helper.current_singles_livetime_start[detector])
                     logging.debug('new singles livetime = max(%d, 0)',
@@ -245,7 +245,7 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                             + singles_dt_ns)
                 # Save this event's timestamp whether it might be a single or
                 # not
-                helper.last_event_timestamp[detector] = timestamp
+                helper.last_promptlike_event_timestamp[detector] = timestamp
 
         # Deal with intersection between singles and muons
         if isWSMuon or isADMuon or isShowerMuon:

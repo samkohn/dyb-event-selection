@@ -180,6 +180,11 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
             muon_type = 'Shower'
         logging.debug('muon type: %s', muon_type)
 
+        logging.debug('start of singles livetime windows, before this event: %s',
+                helper.current_singles_livetime_start)
+        logging.debug('end of most recent muon vetoes, before this event: %s',
+                helper.current_nomuon_livetime_start)
+        logging.debug('timestamp: %d', timestamp)
 
         if event_number == start_event:
             helper.start_time = timestamp
@@ -277,9 +282,6 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                         helper.current_singles_livetime_start[det] = (timestamp
                                 + vetoed_window)
 
-        logging.debug('end of most recent muon vetoes, before this event: %s',
-                helper.current_nomuon_livetime_start)
-        logging.debug('timestamp: %d', timestamp)
         if isWSMuon:
             for det, window_start_time in helper.current_nomuon_livetime_start.items():
                 new_livetime = (timestamp - muons._WSMUON_VETO_NEXT_NS
@@ -305,6 +307,8 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
             new_start = timestamp + muons._SHOWER_MUON_VETO_LAST_NS
             if new_start > window_start_time:
                 helper.current_nomuon_livetime_start[detector] = new_start
+        logging.debug('start of singles livetime windows, after this event: %s',
+                helper.current_singles_livetime_start)
         logging.debug('end of most recent muon vetoes, after this event: %s',
                 helper.current_nomuon_livetime_start)
         logging.debug('new non-vetoed livetime total: %s', helper.total_nonvetoed_livetime)

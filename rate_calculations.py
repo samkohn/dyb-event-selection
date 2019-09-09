@@ -256,21 +256,27 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                     # past the current event
                     helper.current_singles_livetime_start[detector] = (timestamp
                             + singles_dt_ns)
+                    helper.last_event_maybe_single[detector] = False
                 # Save this event's timestamp whether it might be a single or
                 # not
                 helper.last_promptlike_event_timestamp[detector] = timestamp
 
         # Deal with intersection between singles and muons
         if isWSMuon or isADMuon or isShowerMuon:
-            # Add to singles livetime the time between the last veto and the
-            # current muon.
             window_end = timestamp
             if isWSMuon:
                 window_end -= muons._WSMUON_VETO_NEXT_NS
                 detectors = helper.current_nomuon_livetime_start.keys()
+                veto_length = muons._WSMUON_VETO_LAST_NS
             else:
                 detectors = (detector,)
+                if isADMuon:
+                    veto_length = muons._ADMUON_VETO_LAST_NS
+                elif isShowerMuon:
+                    veto_length = muons._SHOWER_MUON_VETO_LAST_NS
             for det in detectors:
+                # Add to singles livetime the time between the last veto and the
+                # current muon.
                 if window_end > helper.current_nomuon_livetime_start[det]:
                     window_start = helper.current_singles_livetime_start[det]
                     logging.debug('detector %d, window_start: %d', det,
@@ -279,14 +285,12 @@ def one_iteration(event_number, data_list, helper, start_event, entries):
                     if dt > 0:
                         logging.debug('new time: %d', dt)
                         helper.singles_livetime[det] += dt
-                        if isWSMuon:
-                            vetoed_window = muons._WSMUON_VETO_LAST_NS
-                        elif isADMuon:
-                            vetoed_window = muons._ADMUON_VETO_LAST_NS
-                        elif isShowerMuon:
-                            vetoed_window = muons._SHOWER_MUON_VETO_LAST_NS
-                        helper.current_singles_livetime_start[det] = (timestamp
-                                + vetoed_window)
+                # Update singles livetime window start to be the end of the muon
+                # veto window
+                veto_end = timestamp + veto_length
+                logging.debug('end of veto window: %d', veto_end)
+                if (veto_end > helper.current_singles_livetime_start[det]):
+                    helper.current_singles_livetime_start[det] = veto_end
 
         if isWSMuon:
             for det, window_start_time in helper.current_nomuon_livetime_start.items():

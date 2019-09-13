@@ -28,10 +28,10 @@ def done_with_cache(buf):
     # WSMuon and the next delayed-like events have been processed. (If
     # the event is not an AD event then the delayed-like event does not
     # have to have been processed.)
-    found_next_WSMuon = buf.dt_next_WSMuon[0] != 0
+    found_next_WSMuon = buf.dt_next_WSMuon[0] != -1
     detector = buf.detector[0]
     found_next_DelayedLike = (detector not in AD_DETECTORS
-            or buf.dt_next_DelayedLike[0] != 0)
+            or buf.dt_next_DelayedLike[0] != -1)
     return found_next_WSMuon and found_next_DelayedLike
 
 def create_computed_TTree(name, host_file, title=None):
@@ -249,11 +249,11 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in cache:
-        if cached_event.dt_next_WSMuon[0] == 0:
+        if cached_event.dt_next_WSMuon[0] == -1:
             assign_value(cached_event.dt_next_WSMuon, -1)
             assign_value(cached_event.nHit_next_WSMuon, -1)
             assign_value(cached_event.tag_WSMuonVeto, 0)
-        if cached_event.dt_next_DelayedLike[0] == 0:
+        if cached_event.dt_next_DelayedLike[0] == -1:
             assign_value(cached_event.dt_next_DelayedLike, -1)
         e = cached_event
         ibd_delayed = isIBDDelayed(
@@ -321,6 +321,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     logging.debug('event cache size: %d', len(helper.event_cache))
 
     buf = fill_buf.clone_type()
+
+    # assign copied/input values
     assign_value(buf.noTree_loopIndex, event_number)
     assign_value(buf.run, helper.run)
     assign_value(buf.fileno, helper.fileno)
@@ -341,6 +343,10 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.x, x)
     assign_value(buf.y, y)
     assign_value(buf.z, z)
+
+    # Initialize dt_next_WSMuon and dt_next_DelayedLike to -1
+    assign_value(buf.dt_next_WSMuon, -1)
+    assign_value(buf.dt_next_DelayedLike, -1)
 
     # Compute simple tags and values (those that only require data
     # from the current event)
@@ -431,7 +437,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         for cached_event in helper.event_cache:
             # Some events might already have been assigned, so skip
             # those
-            if cached_event.dt_next_WSMuon[0] != 0:
+            if cached_event.dt_next_WSMuon[0] != -1:
                 continue
             # WSMuons are common across the entire EH/site
             if cached_event.site[0] == site:
@@ -465,7 +471,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         for cached_event in helper.event_cache:
             # Some events might already have been assigned, so skip
             # those
-            if cached_event.dt_next_DelayedLike[0] != 0:
+            if cached_event.dt_next_DelayedLike[0] != -1:
                 continue
             # PromptLikes are restricted to a single AD
             if cached_event.detector[0] == detector:

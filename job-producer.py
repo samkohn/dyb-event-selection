@@ -4,20 +4,6 @@ import os.path
 import subprocess
 import zmq
 
-parser = argparse.ArgumentParser()
-parser.add_argument('runlist')
-parser.add_argument('--task', type=int)
-parser.add_argument('--npertask', type=int)
-parser.add_argument('--nworkers', type=int)
-parser.add_argument('--jobscript')
-args = parser.parse_args()
-runlist = args.runlist
-task_number = args.task
-npertask = args.npertask
-jobscript = args.jobscript
-nworkers = args.nworkers
-
-lines_to_read = range(task_number*npertask+1, (task_number+1)*npertask+1)
 def get_run_info(line_number, filename):
     line_output = subprocess.check_output(['sed', '%dq;d' % line_number,
         filename])
@@ -32,20 +18,26 @@ def get_file_location(run, fileno):
     location = subprocess.check_output([find_file, str(run), str(fileno)])
     return location.strip()
 
-context = zmq.Context()
-producer = context.socket(zmq.REP)
-producer.bind('tcp://*:52837')
-print('bound')
-
-for line in lines_to_read:
-    producer.recv()
+def generate_worker_command(line, runlist, prefix='python '):
     run, fileno, site = get_run_info(line, runlist)
     infile = get_file_location(run, fileno)
-    command = 'python {script} -i {filepath} -n {nevents} --site {site}'.format(
+    command = prefix + '{script} -i {filepath} -n {nevents} --site {site}'.format(
             filepath=infile, nevents=-1, site=site, script=jobscript)
-    producer.send(command)
-    print('sent job command')
+    return command
 
-for _ in range(nworkers):
-    producer.recv()
-    producer.send('DONE')
+parser = argparse.ArgumentParser()
+parser.add_argument('runlist')
+parser.add_argument('ntasks', type=int)
+parser.add_argument('--jobscript')
+parser.add_argument('-o', '--output')
+args = parser.parse_args()
+runlist = args.runlist
+ntasks = args.ntasks
+jobscript = args.jobscript
+outfile = args.output
+lines_to_read = range(1, ntasks+1)
+with open(outfile, 'w') as f:
+    for line in lines_to_read:
+        command = generate_worker_command(line, runlist,
+                prefix='job.sh ')
+        f.write(command + '\n')

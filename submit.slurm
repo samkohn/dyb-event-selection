@@ -1,5 +1,5 @@
 #! /bin/bash -l
-#SBATCH -q regular
+#SBATCH -q premium
 #SBATCH -N 21 -c 64
 #SBATCH -t 01:00:00
 #SBATCH -J taskfarmer_first_2500

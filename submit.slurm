@@ -8,8 +8,6 @@
 #SBATCH --mail-user=skohn@lbl.gov
 #SBATCH --mail-type=ALL
 
-module load python
-python job-producer.py --jobscript $PWD/fullstack.py -o tasks.txt run_list.txt 2500
 export PATH=$PATH:/usr/common/tig/taskfarmer/1.5/bin:$(pwd)
 export THREADS=64
 runcommands.sh tasks.txt

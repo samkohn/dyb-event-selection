@@ -28,14 +28,16 @@ def generate_worker_command(line, runlist, prefix='python '):
 parser = argparse.ArgumentParser()
 parser.add_argument('runlist')
 parser.add_argument('ntasks', type=int)
+parser.add_argument('--start-task', type=int, default=1)
 parser.add_argument('--jobscript')
 parser.add_argument('-o', '--output')
 args = parser.parse_args()
 runlist = args.runlist
 ntasks = args.ntasks
+start_task = args.start_task
 jobscript = args.jobscript
 outfile = args.output
-lines_to_read = range(1, ntasks+1)
+lines_to_read = range(start_task, ntasks+start_task)
 with open(outfile, 'w') as f:
     for line in lines_to_read:
         command = generate_worker_command(line, runlist,

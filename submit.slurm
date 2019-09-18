@@ -9,5 +9,5 @@
 #SBATCH --mail-type=ALL
 
 export PATH=$PATH:/usr/common/tig/taskfarmer/1.5/bin:$(pwd)
-export THREADS=64
+export THREADS=1280
 runcommands.sh tasks.txt

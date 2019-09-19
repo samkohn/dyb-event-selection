@@ -103,7 +103,7 @@ def assign_flasher(cs_buf, ads_buf):
     assign_value(ads_buf.y, 1)
     assign_value(ads_buf.z, 1.45)
 
-def assign_prompt_like(cs_buf, ads_buf):
+def assign_prompt_like(cs_buf, ads_buf, nh):
     '''
     Assign the given TreeBuffers to the prototypical prompt-like event.
 
@@ -115,12 +115,12 @@ def assign_prompt_like(cs_buf, ads_buf):
     assign_value(cs_buf.fPSD_t1, 0.9)
     assign_value(cs_buf.fPSD_t2, 0.95)
     assign_value(cs_buf.f2inch_maxQ, 1)
-    assign_value(ads_buf.energy, 2.1)
+    assign_value(ads_buf.energy, 3.1)
     assign_value(ads_buf.x, 0.5)
     assign_value(ads_buf.y, 1.3)
     assign_value(ads_buf.z, -0.25)
 
-def assign_delayed_like(cs_buf, ads_buf):
+def assign_delayed_like(cs_buf, ads_buf, nh):
     '''
     Assign the given TreeBuffers to the prototypical delayed-like event.
 
@@ -132,7 +132,11 @@ def assign_delayed_like(cs_buf, ads_buf):
     assign_value(cs_buf.fPSD_t1, 0.9)
     assign_value(cs_buf.fPSD_t2, 0.95)
     assign_value(cs_buf.f2inch_maxQ, 1)
-    assign_value(ads_buf.energy, 8.1)
+    if nh:
+        energy = 2.2
+    else:
+        energy = 8.1
+    assign_value(ads_buf.energy, energy)
     assign_value(ads_buf.x, 1.5)
     assign_value(ads_buf.y, -0.3)
     assign_value(ads_buf.z, 0.65)
@@ -172,7 +176,7 @@ def assign_WSMuon(cs_buf, ads_buf):
     assign_value(ads_buf.z, 0)
 
 def fill_event(calibStats, cs_buf, adSimple, ads_buf,
-        timestamp, triggerNumber, event_type, detector):
+        timestamp, triggerNumber, event_type, detector, nh):
     assign_value(cs_buf.triggerNumber, triggerNumber)
     timestamp_seconds = timestamp // int(1e9)
     timestamp_nanoseconds = timestamp % int(1e9)
@@ -184,9 +188,9 @@ def fill_event(calibStats, cs_buf, adSimple, ads_buf,
     if event_type == 'flasher':
         assign_flasher(cs_buf, ads_buf)
     elif event_type == 'promptlike':
-        assign_prompt_like(cs_buf, ads_buf)
+        assign_prompt_like(cs_buf, ads_buf, nh)
     elif event_type == 'delayedlike':
-        assign_delayed_like(cs_buf, ads_buf)
+        assign_delayed_like(cs_buf, ads_buf, nh)
     elif event_type == 'admuon':
         assign_ADMuon(cs_buf, ads_buf)
     elif event_type == 'wsmuon':
@@ -194,7 +198,7 @@ def fill_event(calibStats, cs_buf, adSimple, ads_buf,
     calibStats.Fill()
     adSimple.Fill()
 
-def main(infilename, outfilename):
+def main(infilename, outfilename, nh):
     outfile = TFile(outfilename, 'RECREATE')
     calibStats, cs_buf = prep_CalibStats(outfile)
     adSimple, ads_buf = prep_AdSimple(outfile)
@@ -202,8 +206,8 @@ def main(infilename, outfilename):
         event_reader = csv.DictReader(eventspec)
         for i, row in enumerate(event_reader):
             fill_event(calibStats, cs_buf, adSimple, ads_buf,
-                    int(row['timestamp']), i, row['type'],
-                    int(row['detector']))
+                    int(row['timestamp']), i, row['type'].strip(),
+                    int(row['detector']), nh)
     outfile.Write()
     outfile.Close()
 
@@ -212,6 +216,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', default='mockevents.csv')
     parser.add_argument('-o', '--output', default='test.root')
+    parser.add_argument('--nh', action='store_true')
     args = parser.parse_args()
     from ROOT import TFile, TTree
-    main(args.input, args.output)
+    main(args.input, args.output, args.nh)

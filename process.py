@@ -11,10 +11,11 @@ import logging
 
 from ROOT import TFile, TTree
 from common import *
-from flashers import fID, fPSD, isFlasher
+from flashers import fID, fPSD
+import flashers
 import muons
-from prompts import isPromptLike
-from delayeds import isDelayedLike, isIBDDelayed
+import prompts
+import delayeds
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value, git_describe)
 
@@ -34,7 +35,7 @@ def done_with_cache(buf):
             or buf.dt_next_DelayedLike[0] != -1)
     return found_next_WSMuon and found_next_DelayedLike
 
-def create_computed_TTree(name, host_file, title=None):
+def create_computed_TTree(name, host_file, nh, title=None):
     git_description = git_describe()
     if title is None:
         title = ('Computed quantities by Sam Kohn (git: %s)' %
@@ -99,8 +100,8 @@ def create_computed_TTree(name, host_file, title=None):
     fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
-    fill_buf.num_PromptLikes_400us = unsigned_int_value()
-    fill_buf.dts_PromptLikes_400us = long_value(200)
+    fill_buf.num_recent_PromptLikes = unsigned_int_value()
+    fill_buf.dts_recent_PromptLikes = long_value(200)
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute
@@ -179,17 +180,24 @@ def create_computed_TTree(name, host_file, title=None):
             'num_ShowerMuons_5sec/i')
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
-    outdata.Branch('num_PromptLikes_400us',
-            fill_buf.num_PromptLikes_400us, 'num_PromptLikes_400us/i')
-    outdata.Branch('dts_PromptLikes_400us',
-            fill_buf.dts_PromptLikes_400us,
-            'dts_PromptLikes_400us[num_PromptLikes_400us]/L')
+    if nh:
+        dt_str = '800us'
+    else:
+        dt_str = '400us'
+    outdata.Branch('num_PromptLikes_' + dt_str,
+            fill_buf.num_recent_PromptLikes, 'num_PromptLikes_' + dt_str + '/i')
+    outdata.Branch('dts_PromptLikes_' + dt_str,
+            fill_buf.dts_recent_PromptLikes, 'dts_PromptLikes_' + dt_str +
+            '[num_PromptLikes_' + dt_str + ']/L')
     return outdata, fill_buf
 
 class ProcessHelper(object):
-    MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
-    PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
-    def __init__(self):
+    def __init__(self, nH):
+        MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
+        if nH:
+            self.PROMPT_COUNT_TIME = int(800e3)
+        else:
+            self.PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
         self.run = 0
         self.fileno = 0
         # Initialize the machinery for dt_next_* and dt_previous_*
@@ -211,7 +219,7 @@ class ProcessHelper(object):
         self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque() for n in range(9)}
 
-def main(entries, debug):
+def main(entries, nh, debug):
 
     filename = 'out.root'
     infile = TFile(filename, 'UPDATE')
@@ -220,8 +228,7 @@ def main(entries, debug):
     out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', infile,
             'IBD candidates (git: %s)')
 
-    helper = ProcessHelper()
-
+    helper = ProcessHelper(nh)
     if entries == -1:
         entries = xrange(indata.GetEntries())
     else:
@@ -237,15 +244,19 @@ def main(entries, debug):
         fetch_indata(indata, fill_buf)
 
         one_iteration(event_number, outdata, fill_buf, out_IBDs,
-                ibd_fill_buf, helper, callback)
+                ibd_fill_buf, helper, nh, callback)
     finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
-            helper.event_cache, callback)
+            helper.event_cache, nh, callback)
     outdata.Write()
     out_IBDs.Write()
     infile.Close()
 
 def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
-        cache, callback):
+        cache, nh, callback):
+    if nh:
+        isIBDDelayed = delayeds.isIBDDelayed_nH
+    else:
+        isIBDDelayed = delayeds.isIBDDelayed
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in cache:
@@ -259,7 +270,7 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
         ibd_delayed = isIBDDelayed(
                 e.tag_DelayedLike[0],
                 e.dt_previous_PromptLike[0],
-                e.num_PromptLikes_400us[0],
+                e.num_recent_PromptLikes[0],
                 e.dt_next_DelayedLike[0],
                 e.tag_WSMuonVeto[0],
                 e.tag_ADMuonVeto[0],
@@ -299,7 +310,7 @@ def fetch_indata(indata, buf):
     return buf
 
 def one_iteration(event_number, outdata, fill_buf, out_IBDs,
-        ibd_fill_buf, helper, callback=lambda e:None):
+        ibd_fill_buf, helper, nh, callback=lambda e:None):
     timestamp = fill_buf.timestamp[0]
     timestamp_seconds = fill_buf.timestamp_seconds[0]
     timestamp_nanoseconds = fill_buf.timestamp_nanoseconds[0]
@@ -317,6 +328,31 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     x = fill_buf.x[0]
     y = fill_buf.y[0]
     z = fill_buf.z[0]
+
+    if nh:
+        isFlasher = flashers.isFlasher_nH
+        muon_event_intensity = energy
+        isWSMuon = muons.isWSMuon_nH
+        isADMuon = muons.isADMuon_nH
+        isShowerMuon = muons.isShowerMuon_nH
+        isVetoedByWSMuon = muons.isVetoedByWSMuon_nH
+        isVetoedByADMuon = muons.isVetoedByADMuon_nH
+        isVetoedByShowerMuon = muons.isVetoedByShowerMuon_nH
+        isPromptLike = prompts.isPromptLike_nH
+        isDelayedLike = delayeds.isDelayedLike_nH
+        isIBDDelayed = delayeds.isIBDDelayed_nH
+    else:
+        isFlasher = flashers.isFlasher
+        muon_event_intensity = charge
+        isWSMuon = muons.isWSMuon
+        isADMuon = muons.isADMuon
+        isShowerMuon = muons.isShowerMuon
+        isVetoedByWSMuon = muons.isVetoedByWSMuon
+        isVetoedByADMuon = muons.isVetoedByADMuon
+        isVetoedByShowerMuon = muons.isVetoedByShowerMuon
+        isPromptLike = prompts.isPromptLike
+        isDelayedLike = delayeds.isDelayedLike
+        isIBDDelayed = delayeds.isIBDDelayed
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
@@ -357,11 +393,11 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     event_isFlasher = isFlasher(event_fID, event_fPSD, f2inch_maxQ,
             detector)
     assign_value(buf.tag_flasher, event_isFlasher)
-    event_isWSMuon = muons.isWSMuon(detector, nHit, triggerType)
+    event_isWSMuon = isWSMuon(detector, nHit, triggerType)
     assign_value(buf.tag_WSMuon, event_isWSMuon)
-    event_isADMuon = muons.isADMuon(detector, charge)
+    event_isADMuon = isADMuon(detector, muon_event_intensity)
     assign_value(buf.tag_ADMuon, event_isADMuon)
-    event_isShowerMuon = muons.isShowerMuon(detector, charge)
+    event_isShowerMuon = isShowerMuon(detector, muon_event_intensity)
     assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
     event_isPromptLike = isPromptLike(detector, energy)
     assign_value(buf.tag_PromptLike, event_isPromptLike)
@@ -375,13 +411,13 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     # Ensure the list of previous shower muons only has events more
     # recent than MUON_COUNT_TIME ago
     while len(helper.recent_shower_muons[detector]) > 0 and (timestamp
-            - helper.recent_shower_muons[detector][0] > ProcessHelper.MUON_COUNT_TIME):
+            - helper.recent_shower_muons[detector][0] > helper.MUON_COUNT_TIME):
         helper.recent_shower_muons[detector].popleft()
 
     # Ensure the list of previous prompt-like events only has events
     # more recent than PROMPT_COUNT_TIME ago
     while len(helper.recent_promptlikes[detector]) > 0 and (timestamp -
-            helper.recent_promptlikes[detector][0] > ProcessHelper.PROMPT_COUNT_TIME):
+            helper.recent_promptlikes[detector][0] > helper.PROMPT_COUNT_TIME):
         helper.recent_promptlikes[detector].popleft()
 
     # Compute the dts for both recent muons and recent prompt-likes
@@ -412,18 +448,18 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.z_previous_PromptLike, helper.last_PromptLike_z[detector])
     assign_value(buf.num_ShowerMuons_5sec,
             len(helper.recent_shower_muons[detector]))
-    assign_value(buf.num_PromptLikes_400us,
+    assign_value(buf.num_recent_PromptLikes,
             len(helper.recent_promptlikes[detector]))
     for i, dt in enumerate(recent_showermuon_dts):
         assign_value(buf.dts_ShowerMuons_5sec, dt, i)
     for i, dt in enumerate(recent_promptlike_dts):
-        assign_value(buf.dts_PromptLikes_400us, dt, i)
+        assign_value(buf.dts_recent_PromptLikes, dt, i)
 
     # Compute muon vetoes that only rely on previous events
     assign_value(buf.tag_ADMuonVeto,
-            muons.isVetoedByADMuon(buf.dt_previous_ADMuon[0]))
+            isVetoedByADMuon(buf.dt_previous_ADMuon[0]))
     assign_value(buf.tag_ShowerMuonVeto,
-            muons.isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
+            isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
     # Update the dt_previous_* and dt_next_* values
 
@@ -446,7 +482,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
                         timestamp - cached_event.timestamp[0])
                 assign_value(cached_event.nHit_next_WSMuon, nHit)
                 assign_value(cached_event.tag_WSMuonVeto,
-                        muons.isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
+                        isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                             cached_event.dt_next_WSMuon[0]))
 
     if event_isADMuon:
@@ -506,7 +542,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         ibd_delayed = isIBDDelayed(
                 e.tag_DelayedLike[0],
                 e.dt_previous_PromptLike[0],
-                e.num_PromptLikes_400us[0],
+                e.num_recent_PromptLikes[0],
                 e.dt_next_DelayedLike[0],
                 e.tag_WSMuonVeto[0],
                 e.tag_ADMuonVeto[0],
@@ -529,7 +565,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--events', type=int, default=-1)
+    parser.add_argument('--nh', action='store_true')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.debug)
+    main(args.events, args.nh, args.debug)

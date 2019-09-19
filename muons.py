@@ -61,11 +61,11 @@ def isShowerMuon_nH(event_detector, event_energy):
     return (event_detector in AD_DETECTORS
             and event_energy > _NH_SHOWER_MUON_THRESHOLD)
 
-def isVetoedByWSMuon_nH(dt_last_ws):
+def isVetoedByWSMuon_nH(dt_last_ws, dt_next_ws=None):
     return (dt_last_ws < _NH_WSMUON_VETO_LAST_NS)
 
 def isVetoedByADMuon_nH(dt_last_ad):
-    return (dt_last_ad < _NH_ADMUON_VETO_LAST)
+    return (dt_last_ad < _NH_ADMUON_VETO_LAST_NS)
 
 def isVetoedByShowerMuon_nH(dt_last_shower):
     return (dt_last_shower < _NH_SHOWER_MUON_VETO_LAST_NS)

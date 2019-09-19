@@ -14,7 +14,7 @@ def extract_run_fileno(filename):
     fileno = int(re.search('_\d{4}', filename).group(0)[1:])
     return (run, fileno)
 
-def main(filename, nevents, start_event, site):
+def main(filename, nevents, start_event, site, nh):
     from ROOT import TTree, TFile, TChain
 
     import translate
@@ -30,11 +30,12 @@ def main(filename, nevents, start_event, site):
             'DYB Run %d file %d, git %s' % (run, fileno,
                 translate.git_describe()))
     #outdata, outdata_buf = translate.create_data_TTree(outfile)
-    computed, computed_buf = process.create_computed_TTree('computed', outfile)
-    out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile,
+    computed, computed_buf = process.create_computed_TTree('computed', outfile,
+            nh)
+    out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile, nh,
             'IBD candidates (git: %s)')
     calibStats, adSimple = translate.initialize_indata([filename])
-    computed_helper = process.ProcessHelper()
+    computed_helper = process.ProcessHelper(nh)
     computed_helper.run = run
     computed_helper.fileno = fileno
     rate_helper = rate_calculations.RateHelper(run, fileno, site)
@@ -57,12 +58,12 @@ def main(filename, nevents, start_event, site):
         translate.copy(computed_buf, calibStats, adSimple, run, fileno)
 
         process.one_iteration(entry_number, computed,
-                computed_buf, out_IBDs, ibd_fill_buf, computed_helper,
+                computed_buf, out_IBDs, ibd_fill_buf, computed_helper, nh,
                 callback)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     process.finish_emptying_cache(computed, computed_buf, out_IBDs,
-            ibd_fill_buf, computed_helper.event_cache, callback)
+            ibd_fill_buf, computed_helper.event_cache, nh, callback)
     outfile.Write()
     outfile.Close()
     rate_calculations.print_results(rate_helper)
@@ -77,11 +78,12 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('--site', type=int)
     parser.add_argument('--lineno', type=int, default=0)
+    parser.add_argument('--nh', action='store_true')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
     try:
-        main(args.infile, args.num_events, args.start_event, args.site)
+        main(args.infile, args.num_events, args.start_event, args.site, args.nh)
     except Exception as e:
         logging.exception(e)
         subprocess.check_output(['touch',

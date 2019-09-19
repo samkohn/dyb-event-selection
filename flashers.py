@@ -31,3 +31,12 @@ def isFlasher(event_fID, event_fPSD, f2inch_maxQ, event_detector):
     fPSD_cut = int(event_fPSD >= 0) * 2
     f2inch_cut = int(f2inch_maxQ > 100) * 4
     return fID_cut + fPSD_cut + f2inch_cut
+
+def isFlasher_nH(event_fID, event_fPSD, f2inch_maxQ, event_detector):
+    if event_detector not in AD_DETECTORS:
+        return False
+    if event_fID == _NOT_RELEVANT:
+        return False
+    fID_cut = int(event_fID >= 0)
+    f2inch_cut = int(f2inch_maxQ > 100) * 4
+    return fID_cut + f2inch_cut

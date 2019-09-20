@@ -99,9 +99,9 @@ def assign_flasher(cs_buf, ads_buf):
     assign_value(cs_buf.fPSD_t2, 0.2345)
     assign_value(cs_buf.f2inch_maxQ, 105)
     assign_value(ads_buf.energy, 0.9)
-    assign_value(ads_buf.x, -0.1)
-    assign_value(ads_buf.y, 1)
-    assign_value(ads_buf.z, 1.45)
+    assign_value(ads_buf.x, -100)
+    assign_value(ads_buf.y, 1000)
+    assign_value(ads_buf.z, 1450)
 
 def assign_prompt_like(cs_buf, ads_buf, nh):
     '''
@@ -116,9 +116,9 @@ def assign_prompt_like(cs_buf, ads_buf, nh):
     assign_value(cs_buf.fPSD_t2, 0.95)
     assign_value(cs_buf.f2inch_maxQ, 1)
     assign_value(ads_buf.energy, 3.1)
-    assign_value(ads_buf.x, 0.5)
-    assign_value(ads_buf.y, 1.3)
-    assign_value(ads_buf.z, -0.25)
+    assign_value(ads_buf.x, 500)
+    assign_value(ads_buf.y, 1300)
+    assign_value(ads_buf.z, -250)
 
 def assign_delayed_like(cs_buf, ads_buf, nh):
     '''
@@ -137,9 +137,9 @@ def assign_delayed_like(cs_buf, ads_buf, nh):
     else:
         energy = 8.1
     assign_value(ads_buf.energy, energy)
-    assign_value(ads_buf.x, 1.1)
-    assign_value(ads_buf.y, -0.3)
-    assign_value(ads_buf.z, 0.65)
+    assign_value(ads_buf.x, 1100)
+    assign_value(ads_buf.y, -300)
+    assign_value(ads_buf.z, 650)
 
 def assign_ADMuon(cs_buf, ads_buf):
     '''

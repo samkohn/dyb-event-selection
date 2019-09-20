@@ -137,7 +137,7 @@ def assign_delayed_like(cs_buf, ads_buf, nh):
     else:
         energy = 8.1
     assign_value(ads_buf.energy, energy)
-    assign_value(ads_buf.x, 1.5)
+    assign_value(ads_buf.x, 1.1)
     assign_value(ads_buf.y, -0.3)
     assign_value(ads_buf.z, 0.65)
 

@@ -5,6 +5,7 @@
 #SBATCH -J taskfarmer_first_2500
 #SBATCH -L project,SCRATCH
 #SBATCH -C haswell
+#SBATCH --image=docker:samkohn/pyroot:2
 #SBATCH --mail-user=skohn@lbl.gov
 #SBATCH --mail-type=ALL
 

@@ -406,9 +406,9 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.tag_ADMuon, event_isADMuon)
     event_isShowerMuon = isShowerMuon(detector, muon_event_intensity)
     assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
-    event_isPromptLike = isPromptLike(detector, energy, x, y, z)
+    event_isPromptLike = isPromptLike(detector, energy)
     assign_value(buf.tag_PromptLike, event_isPromptLike)
-    event_isDelayedLike = isDelayedLike(detector, energy, x, y, z)
+    event_isDelayedLike = isDelayedLike(detector, energy)
     assign_value(buf.tag_DelayedLike, event_isDelayedLike)
 
 

@@ -18,11 +18,11 @@ def get_file_location(run, fileno):
     location = subprocess.check_output([find_file, str(run), str(fileno)])
     return location.strip()
 
-def generate_worker_command(line, runlist, prefix='python '):
+def generate_worker_command(line, runlist, nh, prefix='python '):
     run, fileno, site = get_run_info(line, runlist)
     infile = get_file_location(run, fileno)
-    command = prefix + '{script} -i {filepath} -n {nevents} --site {site}'.format(
-            filepath=infile, nevents=-1, site=site, script=jobscript)
+    command = prefix + '{script} -i {filepath} -n {nevents} --site {site} {nh}'.format(
+            filepath=infile, nevents=-1, site=site, script=jobscript, nh=nh)
     return command
 
 parser = argparse.ArgumentParser()
@@ -30,6 +30,7 @@ parser.add_argument('runlist')
 parser.add_argument('ntasks', type=int)
 parser.add_argument('--start-task', type=int, default=1)
 parser.add_argument('--jobscript')
+parser.add_argument('--nh', action='store_true')
 parser.add_argument('-o', '--output')
 args = parser.parse_args()
 runlist = args.runlist
@@ -37,9 +38,10 @@ ntasks = args.ntasks
 start_task = args.start_task
 jobscript = args.jobscript
 outfile = args.output
+nh = '--nh' if args.nh else ''
 lines_to_read = range(start_task, ntasks+start_task)
 with open(outfile, 'w') as f:
     for line in lines_to_read:
-        command = generate_worker_command(line, runlist,
+        command = generate_worker_command(line, runlist, nh,
                 prefix='job.sh ')
         f.write(command + '\n')

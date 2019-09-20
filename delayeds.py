@@ -10,10 +10,13 @@ _IBD_DT_MIN = int(1e3)
 _IBD_DT_MAX = int(200e3)
 _MULT_POST_MIN = int(200e3)
 
-def isDelayedLike(event_detector, event_energy):
-    return (event_detector in AD_DETECTORS
-            and event_energy > _EMIN
+def isDelayedLike(event_detector, event_energy, x, y, z):
+    correct_detector = event_detector in AD_DETECTORS
+    correct_energy = (event_energy > _EMIN
             and event_energy < _EMAX)
+    correct_position = (x**2 + y**2 < IAV_INNER_RADIUS**2
+            and z**2 < IAV_INNER_HALF_HEIGHT**2)
+    return correct_detector and correct_energy and correct_position
 
 def isIBDDelayed(tag_DelayedLike,
         dt_previous_PromptLike, num_PromptLikes_400us,
@@ -38,10 +41,13 @@ _NH_IBD_DT_MIN = int(1e3)
 _NH_IBD_DT_MAX = int(400e3)
 _NH_MULT_POST_MIN = int(400e3)
 
-def isDelayedLike_nH(event_detector, event_energy):
-    return (event_detector in AD_DETECTORS
-            and event_energy > _NH_EMIN
+def isDelayedLike_nH(event_detector, event_energy, x, y, z):
+    correct_detector = event_detector in AD_DETECTORS
+    correct_energy = (event_energy > _NH_EMIN
             and event_energy < _NH_EMAX)
+    correct_position = (x**2 + y**2 < OAV_INNER_RADIUS**2
+            and z**2 < OAV_INNER_HALF_HEIGHT**2)
+    return correct_detector and correct_energy and correct_position
 
 def isIBDDelayed_nH(tag_DelayedLike,
         dt_previous_PromptLike, num_PromptLikes_800us,

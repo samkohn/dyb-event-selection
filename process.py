@@ -8,6 +8,7 @@ from collections import deque
 import time
 import argparse
 import logging
+import math
 
 from ROOT import TFile, TTree
 from common import *
@@ -100,6 +101,7 @@ def create_computed_TTree(name, host_file, nh, title=None):
     fill_buf.x_previous_PromptLike = float_value()
     fill_buf.y_previous_PromptLike = float_value()
     fill_buf.z_previous_PromptLike = float_value()
+    fill_buf.dr_previous_PromptLike = float_value()
     fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
@@ -177,6 +179,8 @@ def create_computed_TTree(name, host_file, nh, title=None):
             'y_previous_PromptLike/F')
     outdata.Branch('z_previous_PromptLike', fill_buf.z_previous_PromptLike,
             'z_previous_PromptLike/F')
+    outdata.Branch('dr_previous_PromptLike',
+            fill_buf.dr_previous_PromptLike, 'dr_previous_PromptLike/L')
     outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
             'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
@@ -449,6 +453,11 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.x_previous_PromptLike, helper.last_PromptLike_x[detector])
     assign_value(buf.y_previous_PromptLike, helper.last_PromptLike_y[detector])
     assign_value(buf.z_previous_PromptLike, helper.last_PromptLike_z[detector])
+    assign_value(buf.dr_previous_PromptLike, math.sqrt(
+        buf.x_previous_PromptLike[0]**2
+        + buf.y_previous_PromptLike[0]**2
+        + buf.z_previous_PromptLike[0]**2
+    ))
     assign_value(buf.num_ShowerMuons_5sec,
             len(helper.recent_shower_muons[detector]))
     assign_value(buf.num_recent_PromptLikes,

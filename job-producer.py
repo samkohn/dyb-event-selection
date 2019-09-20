@@ -2,7 +2,6 @@ import argparse
 import re
 import os.path
 import subprocess
-import zmq
 
 def get_run_info(line_number, filename):
     line_output = subprocess.check_output(['sed', '%dq;d' % line_number,

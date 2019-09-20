@@ -200,7 +200,7 @@ def create_computed_TTree(name, host_file, nh, title=None):
 
 class ProcessHelper(object):
     def __init__(self, nH):
-        MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
+        self.MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
         if nH:
             self.PROMPT_COUNT_TIME = int(800e3)
         else:

@@ -106,7 +106,7 @@ def create_computed_TTree(name, host_file, nh, title=None):
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
     fill_buf.num_recent_PromptLikes = unsigned_int_value()
-    fill_buf.dts_recent_PromptLikes = long_value(200)
+    fill_buf.dts_recent_PromptLikes = long_value(20)
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute

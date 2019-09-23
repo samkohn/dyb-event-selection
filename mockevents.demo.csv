@@ -1,0 +1,10 @@
+type,timestamp,detector
+promptlike ,2000004000,1
+promptlike ,2000015000,2
+delayedlike,2000100000,1
+delayedlike,2000201000,2
+promptlike,2100000000,1
+promptlike,2100000000,2
+promptlike,2110000000,1
+promptlike,2110000000,2
+wsmuon,    2200000000,5

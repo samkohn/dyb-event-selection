@@ -45,16 +45,25 @@ class RateHelper(object):
         daq_livetime = self.end_time - self.start_time
         mu_eff = {n: float(nonvetoed)/daq_livetime for n, nonvetoed in
                 self.total_nonvetoed_livetime.items()}
-        prompt_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
-                num in self.number_prompts.items()}
-        delayed_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
-                num in self.number_delayeds.items()}
-        prompt_singles_rate_Hz = {n: ((1e9*num)/self.singles_livetime[n] if num >
-                0 else 0) for n,
-                num in self.number_prompt_singles.items()}
-        delayed_singles_rate_Hz = {n: ((1e9*num)/self.singles_livetime[n] if num >
-                0 else 0) for n,
-                num in self.number_delayed_singles.items()}
+        if all(livetime > 0 for livetime in
+                self.total_nonvetoed_livetime.values()):
+            prompt_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
+                    num in self.number_prompts.items()}
+            delayed_rate_Hz = {n: (1e9*num)/self.total_nonvetoed_livetime[n] for n,
+                    num in self.number_delayeds.items()}
+        else:
+            prompt_rate_Hz = {n: 0 for n in self.total_nonvetoed_livetime}
+            delayed_rate_Hz = {n: 0 for n in self.total_nonvetoed_livetime}
+        if all(livetime > 0 for livetime in self.singles_livetime.values()):
+            prompt_singles_rate_Hz = {n: ((1e9*num)/self.singles_livetime[n] if num >
+                    0 else 0) for n,
+                    num in self.number_prompt_singles.items()}
+            delayed_singles_rate_Hz = {n: ((1e9*num)/self.singles_livetime[n] if num >
+                    0 else 0) for n,
+                    num in self.number_delayed_singles.items()}
+        else:
+            prompt_singles_rate_Hz = {n: 0 for n in self.singles_livetime}
+            delayed_singles_rate_Hz = {n: 0 for n in self.singles_livetime}
         livetime_days = {n: t/NS_PER_DAY for n, t in
                 self.total_nonvetoed_livetime.items()}
         dt_mult_cut_sec = 200e-6
@@ -63,9 +72,12 @@ class RateHelper(object):
                 delayed_singles_rate_Hz[n],
                 dt_mult_cut_sec)
             for n in prompt_rate_Hz}
-        ibd_rate_perday = {n:
-                num/(mu_eff[n]*mult_eff[n]*(daq_livetime/NS_PER_DAY)) for n, num in
-                self.number_IBD_candidates.items()}
+        if all(eff > 0 for eff in mu_eff.values()):
+            ibd_rate_perday = {n:
+                    num/(mu_eff[n]*mult_eff[n]*(daq_livetime/NS_PER_DAY)) for n, num in
+                    self.number_IBD_candidates.items()}
+        else:
+            ibd_rate_perday = {n: 0 for n in self.number_IBD_candidates}
         acc_rate_perday = {n: S_PER_DAY*self.accidental_rate(
                 prompt_singles_rate_Hz[n],
                 delayed_singles_rate_Hz[n],

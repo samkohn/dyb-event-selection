@@ -212,6 +212,8 @@ class ProcessHelper(object):
         # until the next WSMuon and next DelayedLike have been found, thus
         # preserving the event order between the input and output TTrees.
         self.event_cache = deque()
+        self.first_index_without_next_WSMuon = 0
+        self.go_through_whole_cache = True
         self.last_WSMuon_time = 0
         self.last_WSMuon_nHit = 0
         self.last_ADMuon_time = {n:0 for n in range(9)}
@@ -481,12 +483,34 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         logging.debug("isWSMuon")
         helper.last_WSMuon_time = timestamp
         helper.last_WSMuon_nHit = nHit
+        # Decide which events in the event cache to examine, based on whether
+        # the event cache has been modified recently
+        if helper.go_through_whole_cache:
+            # Then the cache has changed substantially since the last
+            # iteration, so we will just eat the cost of going through the
+            # whole thing.
+            pass
+        else:
+            # Save time by skipping the first chunk of events in the cache that
+            # have already been assigned a next_WSMuon. This is achieved by
+            # "rotating" the event_cache (a deque type) which means shifting
+            # the first n entries to the end, so we start with the new
+            # events that need to be labeled. When we reach an already-labeled
+            # event, we will be able to exit the loop and un-rotate the cache.
+            safe_start_index = helper.first_index_without_next_WSMuon
+            helper.event_cache.rotate(-1 * safe_start_index)
         # Assign dt_next_WSMuon to the events in the event_cache
-        for cached_event in helper.event_cache:
-            # Some events might already have been assigned, so skip
-            # those
+        for i, cached_event in enumerate(helper.event_cache):
+            # Look for events that have already been assigned a next_WSMuon
             if cached_event.dt_next_WSMuon[0] != -1:
-                continue
+                if helper.go_through_whole_cache:
+                    # We are going through every event in the cache, even if
+                    # it's already been assigned
+                    continue
+                else:
+                    # We have reached the end of the "new" events in the cache
+                    # and now we can exit the loop.
+                    break
             # WSMuons are common across the entire EH/site
             if cached_event.site[0] == site:
                 logging.debug('taggedNextWS%d', cached_event.timestamp[0])
@@ -496,6 +520,14 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
                 assign_value(cached_event.tag_WSMuonVeto,
                         isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                             cached_event.dt_next_WSMuon[0]))
+        # Save the last index reached as the new starting location for next
+        # time
+        if helper.go_through_whole_cache:
+            helper.first_index_without_next_WSMuon = i + 1
+            helper.go_through_whole_cache = False
+        else:
+            helper.event_cache.rotate(safe_start_index)
+            helper.first_index_without_next_WSMuon = i + safe_start_index
 
     if event_isADMuon:
         helper.last_ADMuon_time[detector] = timestamp
@@ -546,6 +578,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
             logging.debug('event is not done with cache')
             all_done_with_cache = False
     logging.debug('deleting %d events', num_to_delete)
+    if num_to_delete > 0:
+        helper.go_through_whole_cache = True
     # Remove the oldest events from the cache and fill them into the
     # new TTree, computing the final IBD tags while we're at it.
     for _ in range(num_to_delete):

@@ -20,7 +20,7 @@ def get_file_location(run, fileno):
 def generate_worker_command(line, runlist, nh, prefix='python '):
     run, fileno, site = get_run_info(line, runlist)
     infile = get_file_location(run, fileno)
-    command = prefix + '{script} -i {filepath} -n {nevents} --site {site} {nh}'.format(
+    command = prefix + '{script} -i {filepath} -n {nevents} --site {site}{nh}'.format(
             filepath=infile, nevents=-1, site=site, script=jobscript, nh=nh)
     return command
 
@@ -37,7 +37,7 @@ ntasks = args.ntasks
 start_task = args.start_task
 jobscript = args.jobscript
 outfile = args.output
-nh = '--nh' if args.nh else ''
+nh = ' --nh' if args.nh else ''
 lines_to_read = range(start_task, ntasks+start_task)
 with open(outfile, 'w') as f:
     for line in lines_to_read:

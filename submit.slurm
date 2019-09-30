@@ -1,8 +1,8 @@
 #! /bin/bash -l
 #SBATCH -q premium
-#SBATCH -N 21 -c 64
+#SBATCH -N 6 -c 64
 #SBATCH -t 01:00:00
-#SBATCH -J taskfarmer_first_2500
+#SBATCH -J medium_test_run
 #SBATCH -L project,SCRATCH
 #SBATCH -C haswell
 #SBATCH --image=docker:samkohn/pyroot:2
@@ -10,5 +10,5 @@
 #SBATCH --mail-type=ALL
 
 export PATH=$PATH:/usr/common/tig/taskfarmer/1.5/bin:$(pwd)
-export THREADS=1280
-runcommands.sh tasks.txt
+export THREADS=320
+runcommands.sh tasks_1_100000.txt

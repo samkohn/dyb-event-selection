@@ -223,7 +223,7 @@ class ProcessHelper(object):
         self.last_PromptLike_x = {n:0 for n in range(9)}
         self.last_PromptLike_y = {n:0 for n in range(9)}
         self.last_PromptLike_z = {n:0 for n in range(9)}
-        self.recent_promptlikes = {n:deque(100) for n in range(9)}
+        self.recent_promptlikes = {n:deque([], 100) for n in range(9)}
 
 def main(entries, nh, debug):
 
@@ -520,11 +520,19 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         # Save the last index reached as the new starting location for next
         # time
         if helper.go_through_whole_cache:
-            helper.first_index_without_next_WSMuon = i + 1
-            helper.go_through_whole_cache = False
+            try:
+                helper.first_index_without_next_WSMuon = i + 1
+                helper.go_through_whole_cache = False
+            except UnboundLocalError:
+                helper.first_index_without_next_WSMuon = 0
+                helper.go_through_whole_cache = True
         else:
             helper.event_cache.rotate(safe_start_index)
-            helper.first_index_without_next_WSMuon = i + safe_start_index
+            try:
+                helper.first_index_without_next_WSMuon = i + safe_start_index
+            except UnboundLocalError:
+                helper.first_index_without_next_WSMuon = 0
+                helper.go_through_whole_cache = True
 
     if event_isADMuon:
         helper.last_ADMuon_time[detector] = timestamp

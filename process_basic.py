@@ -162,7 +162,7 @@ def main(entries, debug):
     outdata.Write()
     infile.Close()
 
-def finish_emptying_cache(outdata, fill_buf, cache, callback):
+def finish_emptying_cache(outdata, fill_buf, cache, callback=lambda e:None):
     for cached_event in cache:
         e = cached_event
         coincidence = adevent.hasCoincidence(

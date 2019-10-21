@@ -225,13 +225,13 @@ class ProcessHelper(object):
         self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque([], 100) for n in range(9)}
 
-def main(entries, nh, debug):
+def main(entries, infile, outfile, nh, debug):
 
-    filename = 'out.root'
-    infile = TFile(filename, 'UPDATE')
-    indata = infile.Get('raw_data')
-    outdata, fill_buf = create_computed_TTree('data', infile)
-    out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', infile,
+    infile = TFile(infile, 'READ')
+    indata = infile.Get('slimmed')
+    outfile = TFile(outfile, 'RECREATE')
+    outdata, fill_buf = create_computed_TTree('data', outfile, nh)
+    out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', outfile, nh,
             'IBD candidates (git: %s)')
 
     helper = ProcessHelper(nh)
@@ -253,8 +253,8 @@ def main(entries, nh, debug):
                 ibd_fill_buf, helper, nh, callback)
     finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
             helper.event_cache, nh, callback)
-    outdata.Write()
-    out_IBDs.Write()
+    outfile.Write()
+    outfile.Close()
     infile.Close()
 
 def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
@@ -614,10 +614,12 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input', help='Input file name')
+    parser.add_argument('-o', '--output', help='Output file name')
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--events', type=int, default=-1)
     parser.add_argument('--nh', action='store_true')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.nh, args.debug)
+    main(args.events, args.input, args.output, args.nh, args.debug)

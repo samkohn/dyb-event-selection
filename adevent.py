@@ -4,7 +4,7 @@ This module finds AD events.
 '''
 from common import *
 
-_EMIN = 0.7
+_EMIN = 0.65
 
 def isADEvent(event_detector, event_energy):
     return (event_detector in AD_DETECTORS

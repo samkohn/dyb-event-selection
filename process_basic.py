@@ -5,8 +5,8 @@ Extract from the bare data stream the following:
     - AD events with energy > 12 MeV
     - AD events that survive the Ellipse and 2-inch flasher cuts
     - AD events with the following coincidence criteria:
-        - energy > 0.5 MeV, and
-        - within 1ms of another AD event (whose energy is > 0.5 MeV)
+        - energy > 0.65 MeV, and
+        - within 1ms of another AD event (whose energy is > 0.65 MeV)
 
 '''
 from __future__ import print_function

@@ -16,7 +16,12 @@ def isDelayedLike(event_detector, event_energy):
             and event_energy < _EMAX)
 
 def isIBDDelayed(tag_DelayedLike,
-        dt_previous_PromptLike, num_PromptLikes_400us,
+        dt_previous_PromptLike,
+        muonVeto_previous_PromptLike,
+        num_PromptLikes_400us,
+        dts_recent_PromptLikes,
+        dt_next_ADevent,
+        dt_next_WSMuon,
         dt_next_DelayedLike, tag_WSMuonVeto, tag_ADMuonVeto,
         tag_ShowerMuonVeto, tag_flasher):
     if not tag_DelayedLike:
@@ -32,19 +37,24 @@ def isIBDDelayed(tag_DelayedLike,
             or dt_next_DelayedLike == -1)
     return (passesDtCut and passesMultPre and passesMultPost)
 
-_NH_EMIN = 1.9
-_NH_EMAX = 2.74
-_NH_IBD_DT_MIN = int(1e3)
-_NH_IBD_DT_MAX = int(400e3)
-_NH_MULT_POST_MIN = int(400e3)
+_NH_DMC_EMIN = 1.9
+_NH_DMC_EMAX = 2.74
+_NH_DMC_IBD_DT_MIN = int(1e3)
+_NH_DMC_IBD_DT_MAX = int(400e3)
+_NH_DMC_MULT_POST_MIN = int(400e3)
 
-def isDelayedLike_nH(event_detector, event_energy):
+def isDelayedLike_nH_DMC(event_detector, event_energy):
     return (event_detector in AD_DETECTORS
-            and event_energy > _NH_EMIN
-            and event_energy < _NH_EMAX)
+            and event_energy > _NH_DMC_EMIN
+            and event_energy < _NH_DMC_EMAX)
 
-def isIBDDelayed_nH(tag_DelayedLike,
-        dt_previous_PromptLike, num_PromptLikes_800us,
+def isIBDDelayed_nH_DMC(tag_DelayedLike,
+        dt_previous_PromptLike,
+        muonVeto_previous_PromptLike,
+        num_PromptLikes_800us,
+        dts_PromptLikes_800us,
+        dt_next_ADevent,
+        dt_next_WSMuon,
         dt_next_DelayedLike, tag_WSMuonVeto, tag_ADMuonVeto,
         tag_ShowerMuonVeto, tag_flasher):
     if not tag_DelayedLike:
@@ -53,9 +63,47 @@ def isIBDDelayed_nH(tag_DelayedLike,
         return False
     if tag_WSMuonVeto or tag_ADMuonVeto or tag_ShowerMuonVeto:
         return False
-    passesDtCut = (dt_previous_PromptLike > _NH_IBD_DT_MIN
-            and dt_previous_PromptLike < _NH_IBD_DT_MAX)
+    passesDtCut = (dt_previous_PromptLike > _NH_DMC_IBD_DT_MIN
+            and dt_previous_PromptLike < _NH_DMC_IBD_DT_MAX)
     passesMultPre = num_PromptLikes_800us == 1
-    passesMultPost = (dt_next_DelayedLike > _NH_MULT_POST_MIN
+    passesMultPost = (dt_next_DelayedLike > _NH_DMC_MULT_POST_MIN
             or dt_next_DelayedLike == -1)
     return (passesDtCut and passesMultPre and passesMultPost)
+
+_NH_THU_DT_MIN = int(1e3)
+_NH_THU_DT_MAX = int(400e3)
+_NH_THU_MULT_PRE_MIN = int(400e3)
+_NH_THU_MULT_POST_MIN = int(400e3)
+
+def isDelayedLike_nH_THU(event_detector, event_energy):
+    return isDelayedLike_nH_DMC(event_detector, event_energy)
+
+def isIBDDelayed_nH_THU(tag_DelayedLike,
+        dt_previous_PromptLike,
+        muonVeto_previous_PromptLike,
+        num_ADevents_800us,
+        dts_ADevents_800us,
+        dt_next_ADevent,
+        dt_next_WSMuon,
+        dt_next_DelayedLike, tag_WSMuonVeto, tag_ADMuonVeto,
+        tag_ShowerMuonVeto, tag_flasher):
+    if not tag_DelayedLike:
+        return False
+    if tag_flasher not in (0, 2):
+        return False
+    if (tag_WSMuonVeto
+            or tag_ADMuonVeto
+            or tag_ShowerMuonVeto
+            or muonVeto_previous_PromptLike):
+        return False
+    passesDtCut = (dt_previous_PromptLike > _NH_THU_DT_MIN
+            and dt_previous_PromptLike < _NH_THU_DT_MAX)
+    passesMultPre = all(dt == dt_previous_PromptLike
+            or dt > dt_previous_PromptLike + _NH_THU_MULT_PRE_MIN
+            for dt in dts_ADevents_800us[:num_ADevents_800us])
+    passesMultPost = ((dt_next_ADevent + dt_previous_PromptLike
+            > _NH_THU_MULT_POST_MIN)
+        and (dt_next_WSMuon + dt_previous_PromptLike
+            > _NH_THU_MULT_POST_MIN))
+    return passesDtCut and passesMultPre and passesMultPost
+

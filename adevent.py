@@ -6,6 +6,9 @@ from common import *
 
 _EMIN = 0.65
 
+def isAnyADEvent(event_detector):
+    return event_detector in AD_DETECTORS
+
 def isADEvent(event_detector, event_energy):
     return (event_detector in AD_DETECTORS
             and event_energy >= _EMIN)

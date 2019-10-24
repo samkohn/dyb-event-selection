@@ -17,6 +17,7 @@ import flashers
 import muons
 import prompts
 import delayeds
+from adevent import isAnyADEvent
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value, git_describe)
 
@@ -34,9 +35,11 @@ def done_with_cache(buf):
     detector = buf.detector[0]
     found_next_DelayedLike = (detector not in AD_DETECTORS
             or buf.dt_next_DelayedLike[0] != -1)
-    return found_next_WSMuon and found_next_DelayedLike
+    found_next_ADevent = (buf.dt_next_ADevent[0] != -1
+            or detector not in AD_DETECTORS)
+    return found_next_WSMuon and found_next_DelayedLike and found_next_ADevent
 
-def create_computed_TTree(name, host_file, nh, title=None):
+def create_computed_TTree(name, host_file, selection_name, title=None):
     git_description = git_describe()
     if title is None:
         title = ('Computed quantities by Sam Kohn (git: %s)' %
@@ -95,10 +98,12 @@ def create_computed_TTree(name, host_file, nh, title=None):
     fill_buf.charge_previous_ShowerMuon = float_value()
     fill_buf.dt_previous_PromptLike = long_value()
     fill_buf.energy_previous_PromptLike = float_value()
+    fill_buf.muonVeto_previous_PromptLike = unsigned_int_value()
     fill_buf.x_previous_PromptLike = float_value()
     fill_buf.y_previous_PromptLike = float_value()
     fill_buf.z_previous_PromptLike = float_value()
     fill_buf.dr_previous_PromptLike = float_value()
+    fill_buf.dt_next_ADevent = long_value()
     fill_buf.dt_next_DelayedLike = long_value()
     fill_buf.num_ShowerMuons_5sec = unsigned_int_value()
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
@@ -170,6 +175,9 @@ def create_computed_TTree(name, host_file, nh, title=None):
     outdata.Branch('energy_previous_PromptLike',
             fill_buf.energy_previous_PromptLike,
             'energy_previous_PromptLike/F')
+    outdata.Branch('muonVeto_previous_PromptLike',
+            fill_buf.muonVeto_previous_PromptLike,
+            'muonVeto_previous_PromptLike/i')
     outdata.Branch('x_previous_PromptLike', fill_buf.x_previous_PromptLike,
             'x_previous_PromptLike/F')
     outdata.Branch('y_previous_PromptLike', fill_buf.y_previous_PromptLike,
@@ -177,22 +185,28 @@ def create_computed_TTree(name, host_file, nh, title=None):
     outdata.Branch('z_previous_PromptLike', fill_buf.z_previous_PromptLike,
             'z_previous_PromptLike/F')
     outdata.Branch('dr_previous_PromptLike',
-            fill_buf.dr_previous_PromptLike, 'dr_previous_PromptLike/L')
+            fill_buf.dr_previous_PromptLike, 'dr_previous_PromptLike/F')
+    outdata.Branch('dt_next_ADevent', fill_buf.dt_next_ADevent,
+            'dt_next_ADevent/L')
     outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
             'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
             'num_ShowerMuons_5sec/i')
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
-    if nh:
-        dt_str = '800us'
+    if selection_name == 'nh_THU':
+        name_str = 'ADevents_800us'
+    elif selection_name == 'nh_DMC':
+        name_str = 'PromptLikes_800us'
+    elif selection_name == 'ngd':
+        name_str = 'PromptLikes_400us'
     else:
-        dt_str = '400us'
-    outdata.Branch('num_PromptLikes_' + dt_str,
-            fill_buf.num_recent_PromptLikes, 'num_PromptLikes_' + dt_str + '/i')
-    outdata.Branch('dts_PromptLikes_' + dt_str,
-            fill_buf.dts_recent_PromptLikes, 'dts_PromptLikes_' + dt_str +
-            '[num_PromptLikes_' + dt_str + ']/L')
+        raise ValueError('Invalid selection name: ' + selection_name)
+    outdata.Branch('num_' + name_str,
+            fill_buf.num_recent_PromptLikes, 'num_' + name_str + '/i')
+    outdata.Branch('dts_' + name_str,
+            fill_buf.dts_recent_PromptLikes, 'dts_' + name_str +
+            '[num_' + name_str + ']/L')
     return outdata, fill_buf
 
 class ProcessHelper(object):
@@ -210,7 +224,8 @@ class ProcessHelper(object):
         # preserving the event order between the input and output TTrees.
         self.event_cache = deque()
         self.first_index_without_next_WSMuon = 0
-        self.go_through_whole_cache = True
+        self.go_through_whole_cache_WSMuon = True
+        self.go_through_whole_cache_ADevent = True
         self.last_WSMuon_time = 0
         self.last_WSMuon_nHit = 0
         self.last_ADMuon_time = {n:0 for n in range(9)}
@@ -220,21 +235,23 @@ class ProcessHelper(object):
         self.recent_shower_muons = {n:deque() for n in range(9)}
         self.last_PromptLike_time = {n:-1 for n in range(9)}
         self.last_PromptLike_energy = {n:-1 for n in range(9)}
+        self.last_PromptLike_muonVeto = {n: False for n in range(9)}
         self.last_PromptLike_x = {n:0 for n in range(9)}
         self.last_PromptLike_y = {n:0 for n in range(9)}
         self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque([], 100) for n in range(9)}
 
-def main(entries, infile, outfile, nh, debug):
+def main(entries, infile, outfile, selection_name, debug):
 
     infile = TFile(infile, 'READ')
     indata = infile.Get('slimmed')
     outfile = TFile(outfile, 'RECREATE')
-    outdata, fill_buf = create_computed_TTree('data', outfile, nh)
-    out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', outfile, nh,
+    outdata, fill_buf = create_computed_TTree('data', outfile, selection_name)
+    out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', outfile,
+            selection_name,
             'IBD candidates (git: %s)')
 
-    helper = ProcessHelper(nh)
+    helper = ProcessHelper(selection_name)
     if entries == -1:
         entries = xrange(indata.GetEntries())
     else:
@@ -244,25 +261,30 @@ def main(entries, infile, outfile, nh, debug):
     def callback(event_cache):
         logging.debug(event_cache.noTree_loopIndex[0])
     for event_number in entries:
+        logging.debug('event %d', event_number)
         # Load the current event in the input TTree
         indata.LoadTree(event_number)
         indata.GetEntry(event_number)
         fetch_indata(indata, fill_buf)
 
         one_iteration(event_number, outdata, fill_buf, out_IBDs,
-                ibd_fill_buf, helper, nh, callback)
+                ibd_fill_buf, helper, selection_name, callback)
     finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
-            helper.event_cache, nh, callback)
+            helper.event_cache, selection_name, callback)
     outfile.Write()
     outfile.Close()
     infile.Close()
 
 def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
-        cache, nh, callback):
-    if nh:
-        isIBDDelayed = delayeds.isIBDDelayed_nH
-    else:
+        cache, selection_name, callback):
+    if selection_name == 'nh_THU':
+        isIBDDelayed = delayeds.isIBDDelayed_nH_THU
+    elif selection_name == 'nh_DMC':
+        isIBDDelayed = delayeds.isIBDDelayed_nH_DMC
+    elif selection_name == 'ngd':
         isIBDDelayed = delayeds.isIBDDelayed
+    else:
+        raise ValueError('Invalid selection name: ' + selection_name)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     for cached_event in cache:
@@ -276,7 +298,11 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
         ibd_delayed = isIBDDelayed(
                 e.tag_DelayedLike[0],
                 e.dt_previous_PromptLike[0],
+                e.muonVeto_previous_PromptLike[0],
                 e.num_recent_PromptLikes[0],
+                e.dts_recent_PromptLikes,
+                e.dt_next_ADevent[0],
+                e.dt_next_WSMuon[0],
                 e.dt_next_DelayedLike[0],
                 e.tag_WSMuonVeto[0],
                 e.tag_ADMuonVeto[0],
@@ -316,7 +342,7 @@ def fetch_indata(indata, buf):
     return buf
 
 def one_iteration(event_number, outdata, fill_buf, out_IBDs,
-        ibd_fill_buf, helper, nh, callback=lambda e:None):
+        ibd_fill_buf, helper, selection_name, callback=lambda e:None):
     timestamp = fill_buf.timestamp[0]
     timestamp_seconds = fill_buf.timestamp_seconds[0]
     timestamp_nanoseconds = fill_buf.timestamp_nanoseconds[0]
@@ -335,7 +361,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     y = fill_buf.y[0]
     z = fill_buf.z[0]
 
-    if nh:
+    if selection_name == 'nh_THU' or selection_name == 'nh_DMC':
         isFlasher = flashers.isFlasher_nH
         muon_event_intensity = energy
         isWSMuon = muons.isWSMuon_nH
@@ -345,9 +371,13 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         isVetoedByADMuon = muons.isVetoedByADMuon_nH
         isVetoedByShowerMuon = muons.isVetoedByShowerMuon_nH
         isPromptLike = prompts.isPromptLike_nH
-        isDelayedLike = delayeds.isDelayedLike_nH
-        isIBDDelayed = delayeds.isIBDDelayed_nH
-    else:
+        if selection_name == 'nh_THU':
+            isIBDDelayed = delayeds.isIBDDelayed_nH_THU
+            isDelayedLike = delayeds.isDelayedLike_nH_THU
+        else:
+            isIBDDelayed = delayeds.isIBDDelayed_nH_DMC
+            isDelayedLike = delayeds.isDelayedLike_nH_DMC
+    elif selection_name == 'ngd':
         isFlasher = flashers.isFlasher
         muon_event_intensity = charge
         isWSMuon = muons.isWSMuon
@@ -359,6 +389,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         isPromptLike = prompts.isPromptLike
         isDelayedLike = delayeds.isDelayedLike
         isIBDDelayed = delayeds.isIBDDelayed
+    else:
+        raise ValueError('Invalid selection name: ' + selection_name)
 
     logging.debug('event cache size: %d', len(helper.event_cache))
 
@@ -389,6 +421,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     # Initialize dt_next_WSMuon and dt_next_DelayedLike to -1
     assign_value(buf.dt_next_WSMuon, -1)
     assign_value(buf.dt_next_DelayedLike, -1)
+    assign_value(buf.dt_next_ADevent, -1)
 
     # Compute simple tags and values (those that only require data
     # from the current event)
@@ -449,13 +482,15 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
             helper.last_PromptLike_time[detector])
     assign_value(buf.energy_previous_PromptLike,
             helper.last_PromptLike_energy[detector])
+    assign_value(buf.muonVeto_previous_PromptLike,
+            helper.last_PromptLike_muonVeto[detector])
     assign_value(buf.x_previous_PromptLike, helper.last_PromptLike_x[detector])
     assign_value(buf.y_previous_PromptLike, helper.last_PromptLike_y[detector])
     assign_value(buf.z_previous_PromptLike, helper.last_PromptLike_z[detector])
     assign_value(buf.dr_previous_PromptLike, math.sqrt(
-        buf.x_previous_PromptLike[0]**2
-        + buf.y_previous_PromptLike[0]**2
-        + buf.z_previous_PromptLike[0]**2
+        (buf.x_previous_PromptLike[0]-x)**2
+        + (buf.y_previous_PromptLike[0]-y)**2
+        + (buf.z_previous_PromptLike[0]-z)**2
     ))
     assign_value(buf.num_ShowerMuons_5sec,
             len(helper.recent_shower_muons[detector]))
@@ -474,6 +509,57 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
 
     # Update the dt_previous_* and dt_next_* values
 
+    if isAnyADEvent(detector) and not event_isFlasher:
+        logging.debug("isADEvent")
+        # Decide which events in the event cache to examine, based on whether
+        # the event cache has been modified recently
+        if helper.go_through_whole_cache_ADevent:
+            # Then the cache has changed substantially since the last
+            # iteration, so we will just eat the cost of going through the
+            # whole thing.
+            pass
+        else:
+            # Save time by skipping the first chunk of events in the cache that
+            # have already been assigned a next_WSMuon. This is achieved by
+            # "rotating" the event_cache (a deque type) which means shifting
+            # the first n entries to the end, so we start with the new
+            # events that need to be labeled. When we reach an already-labeled
+            # event, we will be able to exit the loop and un-rotate the cache.
+            safe_start_index = helper.first_index_without_next_ADevent
+            helper.event_cache.rotate(-1 * safe_start_index)
+        # Assign dt_next_WSMuon to the events in the event_cache
+        for i, cached_event in enumerate(helper.event_cache):
+            # Look for events that have already been assigned a next_WSMuon
+            if cached_event.dt_next_ADevent[0] != -1:
+                if helper.go_through_whole_cache_ADevent:
+                    # We are going through every event in the cache, even if
+                    # it's already been assigned
+                    continue
+                else:
+                    # We have reached the end of the "new" events in the cache
+                    # and now we can exit the loop.
+                    break
+            if cached_event.detector[0] == detector:
+                logging.debug('taggedNextADevent%d', cached_event.timestamp[0])
+                assign_value(cached_event.dt_next_ADevent,
+                        timestamp - cached_event.timestamp[0])
+        # Save the last index reached as the new starting location for next
+        # time
+        if helper.go_through_whole_cache_ADevent:
+            try:
+                helper.first_index_without_next_ADevent = i + 1
+                helper.go_through_whole_cache_ADevent = False
+            except UnboundLocalError:
+                helper.first_index_without_next_ADevent = 0
+                helper.go_through_whole_cache_ADevent = True
+        else:
+            helper.event_cache.rotate(safe_start_index)
+            try:
+                helper.first_index_without_next_ADevent = i + safe_start_index
+            except UnboundLocalError:
+                helper.first_index_without_next_ADevent = 0
+                helper.go_through_whole_cache_ADevent = True
+
     # This comes after values are assigned to the buffer because we
     # don't want dt_previous_* to be 0.
     if event_isWSMuon:
@@ -482,7 +568,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         helper.last_WSMuon_nHit = nHit
         # Decide which events in the event cache to examine, based on whether
         # the event cache has been modified recently
-        if helper.go_through_whole_cache:
+        if helper.go_through_whole_cache_WSMuon:
             # Then the cache has changed substantially since the last
             # iteration, so we will just eat the cost of going through the
             # whole thing.
@@ -500,7 +586,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         for i, cached_event in enumerate(helper.event_cache):
             # Look for events that have already been assigned a next_WSMuon
             if cached_event.dt_next_WSMuon[0] != -1:
-                if helper.go_through_whole_cache:
+                if helper.go_through_whole_cache_WSMuon:
                     # We are going through every event in the cache, even if
                     # it's already been assigned
                     continue
@@ -519,20 +605,20 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
                             cached_event.dt_next_WSMuon[0]))
         # Save the last index reached as the new starting location for next
         # time
-        if helper.go_through_whole_cache:
+        if helper.go_through_whole_cache_WSMuon:
             try:
                 helper.first_index_without_next_WSMuon = i + 1
-                helper.go_through_whole_cache = False
+                helper.go_through_whole_cache_WSMuon = False
             except UnboundLocalError:
                 helper.first_index_without_next_WSMuon = 0
-                helper.go_through_whole_cache = True
+                helper.go_through_whole_cache_WSMuon = True
         else:
             helper.event_cache.rotate(safe_start_index)
             try:
                 helper.first_index_without_next_WSMuon = i + safe_start_index
             except UnboundLocalError:
                 helper.first_index_without_next_WSMuon = 0
-                helper.go_through_whole_cache = True
+                helper.go_through_whole_cache_WSMuon = True
 
     if event_isADMuon:
         helper.last_ADMuon_time[detector] = timestamp
@@ -545,6 +631,13 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     if event_isPromptLike and not event_isFlasher:
         helper.last_PromptLike_time[detector] = timestamp
         helper.last_PromptLike_energy[detector] = energy
+        # Figure out if this event is too soon after a recent muon. This
+        # particular veto is used only in certain analyses. The WSMuon
+        # term is weird because I don't care about dt_next_WSMuon, so I
+        # can use a shortcut veto check function.
+        helper.last_PromptLike_muonVeto[detector] = (buf.tag_ADMuonVeto[0]
+                + buf.tag_ShowerMuonVeto[0]
+                + isVetoedByWSMuon(buf.dt_previous_WSMuon, float('inf')) > 0)
         helper.last_PromptLike_x[detector] = x
         helper.last_PromptLike_y[detector] = y
         helper.last_PromptLike_z[detector] = z
@@ -584,7 +677,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
             all_done_with_cache = False
     logging.debug('deleting %d events', num_to_delete)
     if num_to_delete > 0:
-        helper.go_through_whole_cache = True
+        helper.go_through_whole_cache_ADevent = True
+        helper.go_through_whole_cache_WSMuon = True
     # Remove the oldest events from the cache and fill them into the
     # new TTree, computing the final IBD tags while we're at it.
     for _ in range(num_to_delete):
@@ -593,7 +687,11 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         ibd_delayed = isIBDDelayed(
                 e.tag_DelayedLike[0],
                 e.dt_previous_PromptLike[0],
+                e.muonVeto_previous_PromptLike[0],
                 e.num_recent_PromptLikes[0],
+                e.dts_recent_PromptLikes,
+                e.dt_next_ADevent[0],
+                e.dt_next_WSMuon[0],
                 e.dt_next_DelayedLike[0],
                 e.tag_WSMuonVeto[0],
                 e.tag_ADMuonVeto[0],
@@ -618,8 +716,8 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', help='Output file name')
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--events', type=int, default=-1)
-    parser.add_argument('--nh', action='store_true')
+    parser.add_argument('--selection', choices=['ngd', 'nh_THU', 'nh_DMC'])
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.input, args.output, args.nh, args.debug)
+    main(args.events, args.input, args.output, args.selection, args.debug)

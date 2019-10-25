@@ -15,7 +15,7 @@ def extract_run_fileno(filename):
     fileno = int(re.search('_\d{4}', filename).group(0)[1:])
     return (run, fileno)
 
-def main(filename, outdir, nevents, start_event, site, selection_name):
+def main(filename, outdir, nevents, start_event, selection_name):
     from ROOT import TTree, TFile, TChain
 
     import translate
@@ -81,17 +81,9 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--start-event', default=0, type=int)
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('--selection')
-    parser.add_argument('--site', type=int)
-    parser.add_argument('--lineno', type=int, default=0)
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    try:
-        outdir = os.path.abspath(os.path.expanduser(args.outdir))
-        main(args.infile, outdir, args.num_events, args.start_event, args.site,
-                args.selection)
-    except Exception as e:
-        logging.exception(e)
-        subprocess.check_output(['touch',
-            '/global/homes/s/skohn/dyb-event-selection-production/'
-            'progress/__possible_error_%d__' % args.lineno])
+    outdir = os.path.abspath(os.path.expanduser(args.outdir))
+    main(args.infile, outdir, args.num_events, args.start_event, args.selection)
+

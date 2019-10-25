@@ -24,13 +24,25 @@ def generate_worker_command(line, runlist, nh, prefix='python '):
             filepath=infile, nevents=-1, site=site, script=jobscript, nh=nh)
     return command
 
+def generate_worker_command_basic(line, runlist, selection_name, outdir,
+        prefix='python '):
+    run, fileno, site = get_run_info(line, runlist)
+    infile = get_file_location(run, fileno)
+    command = prefix + ('{script} -i {filepath} -o {outdir}'
+        '--selection {name}').format(script=jobscript, filepath=infile,
+                nevents=-1, outdir=outdir, name=selection_name)
+    return command
+
 parser = argparse.ArgumentParser()
 parser.add_argument('runlist')
 parser.add_argument('ntasks', type=int)
 parser.add_argument('--start-task', type=int, default=1)
 parser.add_argument('--jobscript')
-parser.add_argument('--nh', action='store_true')
+group = parser.add_mutually_exclusive_group()
+group.add_argument('--nh', action='store_true')
+group.add_argument('--selection')
 parser.add_argument('-o', '--output')
+parser.add_argument('--outdir', default='./')
 args = parser.parse_args()
 runlist = args.runlist
 ntasks = args.ntasks
@@ -38,9 +50,14 @@ start_task = args.start_task
 jobscript = args.jobscript
 outfile = args.output
 nh = ' --nh' if args.nh else ''
+selection = args.selection
 lines_to_read = range(start_task, ntasks+start_task)
 with open(outfile, 'w') as f:
     for line in lines_to_read:
-        command = generate_worker_command(line, runlist, nh,
-                prefix='job.sh ')
+        if len(nh) > 0:
+            command = generate_worker_command(line, runlist, nh,
+                    prefix='job.sh ')
+        else:
+            command = generate_worker_command_basic(line, runlist, selection,
+                    args.outdir)
         f.write(command + '\n')

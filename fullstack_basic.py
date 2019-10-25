@@ -71,7 +71,7 @@ def main(filename, outdir, nevents, start_event, selection_name):
     outfilepath = os.path.join(outdir, 'out_%s' % selection_name, 'out_%s_%d_%04d.root'
             % (selection_name, run, fileno))
 
-    process.main(-1, infilepath, outfilepath, selection_name, False)
+    process.main(nevents, infilepath, outfilepath, selection_name, False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

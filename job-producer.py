@@ -29,7 +29,7 @@ def generate_worker_command_basic(line, runlist, selection_name, outdir,
     run, fileno, site = get_run_info(line, runlist)
     infile = get_file_location(run, fileno)
     command = prefix + ('{script} -i {filepath} -o {outdir}'
-        '--selection {name}').format(script=jobscript, filepath=infile,
+        ' --selection {name}').format(script=jobscript, filepath=infile,
                 nevents=-1, outdir=outdir, name=selection_name)
     return command
 
@@ -59,5 +59,5 @@ with open(outfile, 'w') as f:
                     prefix='job.sh ')
         else:
             command = generate_worker_command_basic(line, runlist, selection,
-                    args.outdir)
+                    args.outdir, prefix='job.sh ')
         f.write(command + '\n')

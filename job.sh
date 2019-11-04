@@ -1,4 +1,4 @@
 #! /bin/bash -l
 
-cd $SCRATCH/dyb20
+cd $SCRATCH/dyb22
 shifter python "$@"

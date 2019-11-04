@@ -17,11 +17,13 @@ def get_file_location(run, fileno):
     location = subprocess.check_output([find_file, str(run), str(fileno)])
     return location.strip()
 
-def generate_worker_command(line, runlist, nh, prefix='python '):
+def generate_worker_command(line, runlist, selection_name, prefix='python '):
     run, fileno, site = get_run_info(line, runlist)
     infile = get_file_location(run, fileno)
-    command = prefix + '{script} -i {filepath} -n {nevents} --site {site}{nh}'.format(
-            filepath=infile, nevents=-1, site=site, script=jobscript, nh=nh)
+    command = prefix + ('{script} -i {filepath} -n {nevents} --site {site} '
+    '--selection {selection}').format(
+            filepath=infile, nevents=-1, site=site, script=jobscript,
+            selection=selection_name)
     return command
 
 def generate_worker_command_basic(line, runlist, selection_name, outdir,
@@ -38,9 +40,8 @@ parser.add_argument('runlist')
 parser.add_argument('ntasks', type=int)
 parser.add_argument('--start-task', type=int, default=1)
 parser.add_argument('--jobscript')
-group = parser.add_mutually_exclusive_group()
-group.add_argument('--nh', action='store_true')
-group.add_argument('--selection')
+parser.add_argument('--selection')
+parser.add_argument('--basic', action='store_true')
 parser.add_argument('-o', '--output')
 parser.add_argument('--outdir', default='./')
 args = parser.parse_args()
@@ -49,15 +50,14 @@ ntasks = args.ntasks
 start_task = args.start_task
 jobscript = args.jobscript
 outfile = args.output
-nh = ' --nh' if args.nh else ''
 selection = args.selection
 lines_to_read = range(start_task, ntasks+start_task)
 with open(outfile, 'w') as f:
     for line in lines_to_read:
-        if len(nh) > 0:
-            command = generate_worker_command(line, runlist, nh,
-                    prefix='job.sh ')
-        else:
+        if args.basic:
             command = generate_worker_command_basic(line, runlist, selection,
                     args.outdir, prefix='job.sh ')
+        else:
+            command = generate_worker_command(line, runlist, selection,
+                    prefix='job.sh ')
         f.write(command + '\n')

@@ -210,9 +210,9 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     return outdata, fill_buf
 
 class ProcessHelper(object):
-    def __init__(self, nH):
+    def __init__(self, selection_name):
         self.MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
-        if nH:
+        if 'nh' in selection_name:
             self.PROMPT_COUNT_TIME = int(800e3)
         else:
             self.PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
@@ -248,8 +248,7 @@ def main(entries, infile, outfile, selection_name, debug):
     outfile = TFile(outfile, 'RECREATE')
     outdata, fill_buf = create_computed_TTree('data', outfile, selection_name)
     out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', outfile,
-            selection_name,
-            'IBD candidates (git: %s)')
+            selection_name, 'IBD candidates (git: %s)')
 
     helper = ProcessHelper(selection_name)
     if entries == -1:

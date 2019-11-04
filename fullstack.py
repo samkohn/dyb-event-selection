@@ -14,7 +14,7 @@ def extract_run_fileno(filename):
     fileno = int(re.search('_\d{4}', filename).group(0)[1:])
     return (run, fileno)
 
-def main(filename, nevents, start_event, site, nh):
+def main(filename, nevents, start_event, site, selection_name):
     from ROOT import TTree, TFile, TChain
 
     import translate
@@ -31,11 +31,11 @@ def main(filename, nevents, start_event, site, nh):
                 translate.git_describe()))
     #outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree('computed', outfile,
-            nh)
-    out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile, nh,
-            'IBD candidates (git: %s)')
+            selection_name)
+    out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile,
+            selection_name, 'IBD candidates (git: %s)')
     calibStats, adSimple = translate.initialize_indata([filename])
-    computed_helper = process.ProcessHelper(nh)
+    computed_helper = process.ProcessHelper(selection_name)
     computed_helper.run = run
     computed_helper.fileno = fileno
     rate_helper = rate_calculations.RateHelper(run, fileno, site)
@@ -58,12 +58,13 @@ def main(filename, nevents, start_event, site, nh):
         translate.copy(computed_buf, calibStats, adSimple, run, fileno)
 
         process.one_iteration(entry_number, computed,
-                computed_buf, out_IBDs, ibd_fill_buf, computed_helper, nh,
-                callback)
+                computed_buf, out_IBDs, ibd_fill_buf, computed_helper,
+                selection_name, callback)
     # After the event loop is finished, fill the remaining events from
     # the event_cache into the output TTree
     process.finish_emptying_cache(computed, computed_buf, out_IBDs,
-            ibd_fill_buf, computed_helper.event_cache, nh, callback)
+            ibd_fill_buf, computed_helper.event_cache, selection_name,
+            callback)
     outfile.Write()
     outfile.Close()
     rate_calculations.print_results(rate_helper)
@@ -78,12 +79,13 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('--site', type=int)
     parser.add_argument('--lineno', type=int, default=0)
-    parser.add_argument('--nh', action='store_true')
+    parser.add_argument('--selection')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
     try:
-        main(args.infile, args.num_events, args.start_event, args.site, args.nh)
+        main(args.infile, args.num_events, args.start_event, args.site,
+                args.selection)
     except Exception as e:
         logging.exception(e)
         subprocess.check_output(['touch',

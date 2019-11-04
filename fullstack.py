@@ -26,7 +26,7 @@ def main(filename, nevents, start_event, site, selection_name):
 
     run, fileno = extract_run_fileno(filename)
 
-    outfile = TFile('out_%d_%d.root' % (run, fileno), 'RECREATE',
+    outfile = TFile('out_%d_%04d.root' % (run, fileno), 'RECREATE',
             'DYB Run %d file %d, git %s' % (run, fileno,
                 translate.git_describe()))
     #outdata, outdata_buf = translate.create_data_TTree(outfile)

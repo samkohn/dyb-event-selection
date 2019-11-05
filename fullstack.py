@@ -68,7 +68,7 @@ def main(filename, nevents, start_event, site, selection_name):
     outfile.Write()
     outfile.Close()
     rate_calculations.print_results(rate_helper)
-    with open('out_%d_%d.json' % (run, fileno), 'w') as f:
+    with open('out_%d_%04d.json' % (run, fileno), 'w') as f:
         json.dump(rate_helper.compute_results(), f)
 
 if __name__ == '__main__':

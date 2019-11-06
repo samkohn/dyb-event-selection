@@ -4,6 +4,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--outdir')
+parser.add_argument('--max-tasks', type=int)
 args = parser.parse_args()
 outdir = args.outdir
 
@@ -12,19 +13,23 @@ os.chdir(outdir)
 context = zmq.Context()
 worker = context.socket(zmq.REQ)
 worker.setsockopt(zmq.RCVTIMEO, 5000)
-worker.connect('tcp://localhost:52837')
+worker.connect('tcp://0.0.0.0:52837')
 print('connected')
 
 ntasks_recv = 0
-while True:
-    worker.send('GIMME')
+task_id = 0
+while ntasks_recv < args.max_tasks:
+    worker.send(b'{}'.format(task_id))
     print('sent command')
-    line = worker.recv()
+    task_id, line = worker.recv_multipart()
     print('received command')
     if line == 'DONE':
         break
     ntasks_recv += 1
     print(line)
     os.system(line)
+
+worker.send(b'{}DONE'.format(task_id))
+worker.recv()
 
 print('received %d tasks' % ntasks_recv)

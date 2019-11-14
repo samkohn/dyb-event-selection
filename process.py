@@ -17,11 +17,11 @@ import flashers
 import muons
 import prompts
 import delayeds
-from adevent import isAnyADEvent
+from adevent import isADEvent_THU
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value, git_describe)
 
-def done_with_cache(buf):
+def done_with_cache(buf, selection_name):
     '''
     Test whether an event should be removed from the event cache, based
     on whether certain values have been assigned to it.
@@ -36,7 +36,8 @@ def done_with_cache(buf):
     found_next_DelayedLike = (detector not in AD_DETECTORS
             or buf.dt_next_DelayedLike[0] != -1)
     found_next_ADevent = (buf.dt_next_ADevent[0] != -1
-            or detector not in AD_DETECTORS)
+            or detector not in AD_DETECTORS
+            or selection_name != 'nh_THU')
     return found_next_WSMuon and found_next_DelayedLike and found_next_ADevent
 
 def create_computed_TTree(name, host_file, selection_name, title=None):
@@ -186,8 +187,9 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
             'z_previous_PromptLike/F')
     outdata.Branch('dr_previous_PromptLike',
             fill_buf.dr_previous_PromptLike, 'dr_previous_PromptLike/F')
-    outdata.Branch('dt_next_ADevent', fill_buf.dt_next_ADevent,
-            'dt_next_ADevent/L')
+    if selection_name == 'nh_THU':
+        outdata.Branch('dt_next_ADevent', fill_buf.dt_next_ADevent,
+                'dt_next_ADevent/L')
     outdata.Branch('dt_next_DelayedLike', fill_buf.dt_next_DelayedLike,
             'dt_next_DelayedLike/L')
     outdata.Branch('num_ShowerMuons_5sec', fill_buf.num_ShowerMuons_5sec,
@@ -508,56 +510,57 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
 
     # Update the dt_previous_* and dt_next_* values
 
-    if isAnyADEvent(detector) and not event_isFlasher:
-        logging.debug("isADEvent")
-        # Decide which events in the event cache to examine, based on whether
-        # the event cache has been modified recently
-        if helper.go_through_whole_cache_ADevent:
-            # Then the cache has changed substantially since the last
-            # iteration, so we will just eat the cost of going through the
-            # whole thing.
-            pass
-        else:
-            # Save time by skipping the first chunk of events in the cache that
-            # have already been assigned a next_WSMuon. This is achieved by
-            # "rotating" the event_cache (a deque type) which means shifting
-            # the first n entries to the end, so we start with the new
-            # events that need to be labeled. When we reach an already-labeled
-            # event, we will be able to exit the loop and un-rotate the cache.
-            safe_start_index = helper.first_index_without_next_ADevent
-            helper.event_cache.rotate(-1 * safe_start_index)
-        # Assign dt_next_WSMuon to the events in the event_cache
-        for i, cached_event in enumerate(helper.event_cache):
-            # Look for events that have already been assigned a next_WSMuon
-            if cached_event.dt_next_ADevent[0] != -1:
-                if helper.go_through_whole_cache_ADevent:
-                    # We are going through every event in the cache, even if
-                    # it's already been assigned
-                    continue
-                else:
-                    # We have reached the end of the "new" events in the cache
-                    # and now we can exit the loop.
-                    break
-            if cached_event.detector[0] == detector:
-                logging.debug('taggedNextADevent%d', cached_event.timestamp[0])
-                assign_value(cached_event.dt_next_ADevent,
-                        timestamp - cached_event.timestamp[0])
-        # Save the last index reached as the new starting location for next
-        # time
-        if helper.go_through_whole_cache_ADevent:
-            try:
-                helper.first_index_without_next_ADevent = i + 1
-                helper.go_through_whole_cache_ADevent = False
-            except UnboundLocalError:
-                helper.first_index_without_next_ADevent = 0
-                helper.go_through_whole_cache_ADevent = True
-        else:
-            helper.event_cache.rotate(safe_start_index)
-            try:
-                helper.first_index_without_next_ADevent = i + safe_start_index
-            except UnboundLocalError:
-                helper.first_index_without_next_ADevent = 0
-                helper.go_through_whole_cache_ADevent = True
+    if selection_name == 'nh_THU':
+        if isADEvent_THU(detector, energy) and not event_isFlasher:
+            logging.debug("isADEvent")
+            # Decide which events in the event cache to examine, based on whether
+            # the event cache has been modified recently
+            if helper.go_through_whole_cache_ADevent:
+                # Then the cache has changed substantially since the last
+                # iteration, so we will just eat the cost of going through the
+                # whole thing.
+                pass
+            else:
+                # Save time by skipping the first chunk of events in the cache that
+                # have already been assigned a next_WSMuon. This is achieved by
+                # "rotating" the event_cache (a deque type) which means shifting
+                # the first n entries to the end, so we start with the new
+                # events that need to be labeled. When we reach an already-labeled
+                # event, we will be able to exit the loop and un-rotate the cache.
+                safe_start_index = helper.first_index_without_next_ADevent
+                helper.event_cache.rotate(-1 * safe_start_index)
+            # Assign dt_next_WSMuon to the events in the event_cache
+            for i, cached_event in enumerate(helper.event_cache):
+                # Look for events that have already been assigned a next_WSMuon
+                if cached_event.dt_next_ADevent[0] != -1:
+                    if helper.go_through_whole_cache_ADevent:
+                        # We are going through every event in the cache, even if
+                        # it's already been assigned
+                        continue
+                    else:
+                        # We have reached the end of the "new" events in the cache
+                        # and now we can exit the loop.
+                        break
+                if cached_event.detector[0] == detector:
+                    logging.debug('taggedNextADevent%d', cached_event.timestamp[0])
+                    assign_value(cached_event.dt_next_ADevent,
+                            timestamp - cached_event.timestamp[0])
+            # Save the last index reached as the new starting location for next
+            # time
+            if helper.go_through_whole_cache_ADevent:
+                try:
+                    helper.first_index_without_next_ADevent = i + 1
+                    helper.go_through_whole_cache_ADevent = False
+                except UnboundLocalError:
+                    helper.first_index_without_next_ADevent = 0
+                    helper.go_through_whole_cache_ADevent = True
+            else:
+                helper.event_cache.rotate(safe_start_index)
+                try:
+                    helper.first_index_without_next_ADevent = i + safe_start_index
+                except UnboundLocalError:
+                    helper.first_index_without_next_ADevent = 0
+                    helper.go_through_whole_cache_ADevent = True
 
     # This comes after values are assigned to the buffer because we
     # don't want dt_previous_* to be 0.
@@ -668,7 +671,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     cache_size = len(helper.event_cache)
     while all_done_with_cache and num_to_delete < cache_size:
         cached_event = helper.event_cache[num_to_delete]
-        if done_with_cache(cached_event):
+        if done_with_cache(cached_event, selection_name):
             logging.debug('event is done with cache')
             num_to_delete += 1
         else:

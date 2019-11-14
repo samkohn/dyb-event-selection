@@ -27,7 +27,10 @@ while ntasks_recv < args.max_tasks:
         break
     ntasks_recv += 1
     print(line)
-    os.system(line)
+    try:
+        os.system(line)
+    except:
+        task_id *= -1
 
 worker.send(b'{}DONE'.format(task_id))
 worker.recv()

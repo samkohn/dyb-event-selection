@@ -47,6 +47,13 @@ def finish_task(task_id):
     ''', (task_id,))
     conn.commit()
 
+def error_task(task_id):
+    c.execute('''UPDATE tasks
+    SET Status = "error"
+    WHERE TaskID = ?
+    ''', (task_id,))
+    conn.commit()
+
 task_id = 0
 while task_id is not None:
     request = producer.recv()
@@ -56,8 +63,12 @@ while task_id is not None:
     else:
         finished_id = int(request)
     print('received request')
-    if finished_id != 0:
+    if finished_id < 0:
+        error_task(-1 * finished_id)
+    elif finished_id > 0:
         finish_task(finished_id)
+    else:
+        pass
     if worker_done:
         producer.send_multipart([b'0', b'DONE'])
     else:

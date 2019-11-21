@@ -98,12 +98,13 @@ def isIBDDelayed_nH_THU(tag_DelayedLike,
         return False
     passesDtCut = (dt_previous_PromptLike > _NH_THU_DT_MIN
             and dt_previous_PromptLike < _NH_THU_DT_MAX)
-    passesMultPre = all(dt == dt_previous_PromptLike
-            or dt > dt_previous_PromptLike + _NH_THU_MULT_PRE_MIN
-            for dt in dts_ADevents_800us[:num_ADevents_800us])
-    passesMultPost = ((dt_next_ADevent + dt_previous_PromptLike
-            > _NH_THU_MULT_POST_MIN)
-        and (dt_next_WSMuon + dt_previous_PromptLike
-            > _NH_THU_MULT_POST_MIN))
+    passesMultPre = (num_ADevents_800us > 0
+            and all(dt == dt_previous_PromptLike
+                or dt > dt_previous_PromptLike + _NH_THU_MULT_PRE_MIN
+                for dt in dts_ADevents_800us[:num_ADevents_800us]))
+    passesMultPost = (((dt_next_ADevent + dt_previous_PromptLike
+            > _NH_THU_MULT_POST_MIN) or dt_next_ADevent == -1)
+        and ((dt_next_WSMuon + dt_previous_PromptLike
+            > _NH_THU_MULT_POST_MIN) or dt_next_WSMuon == -1))
     return passesDtCut and passesMultPre and passesMultPost
 

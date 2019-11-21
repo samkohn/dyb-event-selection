@@ -242,6 +242,7 @@ class ProcessHelper(object):
         self.last_PromptLike_y = {n:0 for n in range(9)}
         self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque([], 100) for n in range(9)}
+        self.coincidence_window_start = {n:0 for n in range(9)}
 
 def main(entries, infile, outfile, selection_name, debug):
 
@@ -292,7 +293,8 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
         if cached_event.dt_next_WSMuon[0] == -1:
             assign_value(cached_event.dt_next_WSMuon, -1)
             assign_value(cached_event.nHit_next_WSMuon, -1)
-            assign_value(cached_event.tag_WSMuonVeto, 0)
+            # Leave tag_WSMuonVeto as-is
+            # assign_value(cached_event.tag_WSMuonVeto, 0)
         if cached_event.dt_next_DelayedLike[0] == -1:
             assign_value(cached_event.dt_next_DelayedLike, -1)
         e = cached_event
@@ -459,6 +461,38 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     while len(helper.recent_promptlikes[detector]) > 0 and (timestamp -
             helper.recent_promptlikes[detector][0] > helper.PROMPT_COUNT_TIME):
         helper.recent_promptlikes[detector].popleft()
+    # for the THU analysis, ensure that all recent AD events are more
+    # recent than the end of the previous coincidence window and muon
+    # veto windows. This is accomplished by removing events after we
+    # reach the end of one of these windows.
+    if (timestamp - helper.coincidence_window_start[detector] >
+            delayeds._NH_THU_MULT_PRE_MIN):
+        while len(helper.recent_promptlikes[detector]) > 0 and (
+                helper.recent_promptlikes[detector][0] -
+                helper.coincidence_window_start[detector] <
+                delayeds._NH_THU_MULT_PRE_MIN):
+            helper.recent_promptlikes[detector].popleft()
+    if (timestamp - helper.last_WSMuon_time >
+            muons._NH_WSMUON_VETO_LAST_NS):
+        while len(helper.recent_promptlikes[detector]) > 0 and (
+                helper.recent_promptlikes[detector][0] -
+                helper.last_WSMuon_time <
+                muons._NH_WSMUON_VETO_LAST_NS):
+            helper.recent_promptlikes[detector].popleft()
+    if (timestamp - helper.last_ADMuon_time[detector] >
+            muons._NH_ADMUON_VETO_LAST_NS):
+        while len(helper.recent_promptlikes[detector]) > 0 and (
+                helper.recent_promptlikes[detector][0] -
+                helper.last_ADMuon_time[detector] <
+                muons._NH_ADMUON_VETO_LAST_NS):
+            helper.recent_promptlikes[detector].popleft()
+    if (timestamp - helper.last_ShowerMuon_time[detector] >
+            muons._NH_SHOWER_MUON_VETO_LAST_NS):
+        while len(helper.recent_promptlikes[detector]) > 0 and (
+                helper.recent_promptlikes[detector][0] -
+                helper.last_ShowerMuon_time[detector] <
+                muons._NH_SHOWER_MUON_VETO_LAST_NS):
+            helper.recent_promptlikes[detector].popleft()
 
     # Compute the dts for both recent muons and recent prompt-likes
     recent_showermuon_dts = [timestamp - muon_time for muon_time in
@@ -508,11 +542,21 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.tag_ShowerMuonVeto,
             isVetoedByShowerMuon(buf.dt_previous_ShowerMuon[0]))
 
+    # Compute a temporary tag for WS Muon veto based only on the
+    # dt_previous_WSMuon. It may be updated when the next WS Muon is processed.
+    assign_value(buf.tag_WSMuonVeto, isVetoedByWSMuon(buf.dt_previous_WSMuon[0],
+        float('inf')))
+
     # Update the dt_previous_* and dt_next_* values
 
     if selection_name == 'nh_THU':
         if isADEvent_THU(detector, energy) and not event_isFlasher:
             logging.debug("isADEvent")
+            # Update the coincidence window start time, if this event is not
+            # already within a coincicence window
+            if (timestamp - helper.coincidence_window_start[detector] >
+                    delayeds._NH_THU_MULT_PRE_MIN):
+                helper.coincidence_window_start[detector] = timestamp
             # Decide which events in the event cache to examine, based on whether
             # the event cache has been modified recently
             if helper.go_through_whole_cache_ADevent:
@@ -639,7 +683,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         # can use a shortcut veto check function.
         helper.last_PromptLike_muonVeto[detector] = (buf.tag_ADMuonVeto[0]
                 + buf.tag_ShowerMuonVeto[0]
-                + isVetoedByWSMuon(buf.dt_previous_WSMuon, float('inf')) > 0)
+                + isVetoedByWSMuon(buf.dt_previous_WSMuon[0], float('inf')) > 0)
         helper.last_PromptLike_x[detector] = x
         helper.last_PromptLike_y[detector] = y
         helper.last_PromptLike_z[detector] = z

@@ -137,9 +137,9 @@ def assign_delayed_like(cs_buf, ads_buf, nh):
     else:
         energy = 8.1
     assign_value(ads_buf.energy, energy)
-    assign_value(ads_buf.x, 1100)
-    assign_value(ads_buf.y, -300)
-    assign_value(ads_buf.z, 650)
+    assign_value(ads_buf.x, 500)
+    assign_value(ads_buf.y, 1200)
+    assign_value(ads_buf.z, -50)
 
 def assign_ADMuon(cs_buf, ads_buf):
     '''

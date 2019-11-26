@@ -558,54 +558,19 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
             if (timestamp - helper.coincidence_window_start[detector] >
                     delayeds._NH_THU_MULT_PRE_MIN):
                 helper.coincidence_window_start[detector] = timestamp
-            # Decide which events in the event cache to examine, based on whether
-            # the event cache has been modified recently
-            if helper.go_through_whole_cache_ADevent:
-                # Then the cache has changed substantially since the last
-                # iteration, so we will just eat the cost of going through the
-                # whole thing.
-                pass
-            else:
-                # Save time by skipping the first chunk of events in the cache that
-                # have already been assigned a next_WSMuon. This is achieved by
-                # "rotating" the event_cache (a deque type) which means shifting
-                # the first n entries to the end, so we start with the new
-                # events that need to be labeled. When we reach an already-labeled
-                # event, we will be able to exit the loop and un-rotate the cache.
-                safe_start_index = helper.first_index_without_next_ADevent
-                helper.event_cache.rotate(-1 * safe_start_index)
-            # Assign dt_next_WSMuon to the events in the event_cache
-            for i, cached_event in enumerate(helper.event_cache):
-                # Look for events that have already been assigned a next_WSMuon
+            # Assign dt_next_ADevent to events in the event_cache
+            for cached_event in helper.event_cache:
+                # Some events might already have been assigned, so skip
+                # those
                 if cached_event.dt_next_ADevent[0] != -1:
-                    if helper.go_through_whole_cache_ADevent:
-                        # We are going through every event in the cache, even if
-                        # it's already been assigned
-                        continue
-                    else:
-                        # We have reached the end of the "new" events in the cache
-                        # and now we can exit the loop.
-                        break
+                    continue
+                # ADevents are restricted to a single AD
                 if cached_event.detector[0] == detector:
-                    logging.debug('taggedNextADevent%d', cached_event.timestamp[0])
+                    logging.debug('taggedNextADevent%d',
+                            cached_event.timestamp[0])
                     assign_value(cached_event.dt_next_ADevent,
-                            timestamp - cached_event.timestamp[0])
-            # Save the last index reached as the new starting location for next
-            # time
-            if helper.go_through_whole_cache_ADevent:
-                try:
-                    helper.first_index_without_next_ADevent = i + 1
-                    helper.go_through_whole_cache_ADevent = False
-                except UnboundLocalError:
-                    helper.first_index_without_next_ADevent = 0
-                    helper.go_through_whole_cache_ADevent = True
-            else:
-                helper.event_cache.rotate(safe_start_index)
-                try:
-                    helper.first_index_without_next_ADevent = i + safe_start_index
-                except UnboundLocalError:
-                    helper.first_index_without_next_ADevent = 0
-                    helper.go_through_whole_cache_ADevent = True
+                            timestamp
+                            - cached_event.timestamp[0])
 
     # This comes after values are assigned to the buffer because we
     # don't want dt_previous_* to be 0.

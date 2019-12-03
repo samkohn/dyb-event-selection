@@ -367,6 +367,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     timestamp_seconds = fill_buf.timestamp_seconds[0]
     timestamp_nanoseconds = fill_buf.timestamp_nanoseconds[0]
     triggerType = fill_buf.triggerType[0]
+    triggerNumber = fill_buf.triggerNumber[0]
     detector = fill_buf.detector[0]
     site = fill_buf.site[0]
     nHit = fill_buf.nHit[0]
@@ -424,6 +425,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.timestamp_seconds, timestamp_seconds)
     assign_value(buf.timestamp_nanoseconds, timestamp_nanoseconds)
     assign_value(buf.triggerType, triggerType)
+    assign_value(buf.triggerNumber, triggerNumber)
     assign_value(buf.detector, detector)
     assign_value(buf.site, site)
     assign_value(buf.nHit, nHit)

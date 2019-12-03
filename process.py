@@ -110,6 +110,9 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.dts_ShowerMuons_5sec = long_value(20)
     fill_buf.num_recent_PromptLikes = unsigned_int_value()
     fill_buf.dts_recent_PromptLikes = long_value(100)
+    if selection_name == 'nh_THU':
+        fill_buf.num_recent_ADevents_all = unsigned_int_value()
+        fill_buf.dts_recent_ADevents_all = long_value(100)
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute
@@ -197,7 +200,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     outdata.Branch('dts_ShowerMuons_5sec', fill_buf.dts_ShowerMuons_5sec,
             'dts_ShowerMuons_5sec[num_ShowerMuons_5sec]/L')
     if selection_name == 'nh_THU':
-        name_str = 'ADevents_800us'
+        name_str = 'ADevents_800us_restricted'
     elif selection_name == 'nh_DMC':
         name_str = 'PromptLikes_800us'
     elif selection_name == 'ngd':
@@ -209,6 +212,13 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     outdata.Branch('dts_' + name_str,
             fill_buf.dts_recent_PromptLikes, 'dts_' + name_str +
             '[num_' + name_str + ']/L')
+    if selection_name == 'nh_THU':
+        outdata.Branch('num_ADevents_800us_all',
+                fill_buf.num_recent_ADevents_all,
+                'num_ADevents_800us_all/i')
+        outdata.Branch('dts_ADevents_800us_all',
+                fill_buf.dts_recent_ADevents_all,
+                'dts_ADevents_800us_all[num_ADevents_800us_all]/L')
     return outdata, fill_buf
 
 class ProcessHelper(object):
@@ -243,6 +253,12 @@ class ProcessHelper(object):
         self.last_PromptLike_z = {n:0 for n in range(9)}
         self.recent_promptlikes = {n:deque([], 100) for n in range(9)}
         self.coincidence_window_start = {n:0 for n in range(9)}
+        if selection_name == 'nh_THU':
+            # Keep track of all recent ADevents (within a fixed time delay) even though the nh_THU
+            # selection requires ignoring any recent ADevents that occur within
+            # a previous coincidence window (e.g. t0, t0 + 300us <--- ignored
+            # by t0+500us)
+            self.recent_ADevents_all = {n:deque([], 100) for n in range(9)}
 
 def main(entries, infile, outfile, selection_name, debug):
 
@@ -462,44 +478,52 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     while len(helper.recent_promptlikes[detector]) > 0 and (timestamp -
             helper.recent_promptlikes[detector][0] > helper.PROMPT_COUNT_TIME):
         helper.recent_promptlikes[detector].popleft()
-    # for the THU analysis, ensure that all recent AD events are more
-    # recent than the end of the previous coincidence window and muon
-    # veto windows. This is accomplished by removing events after we
-    # reach the end of one of these windows.
-    if (timestamp - helper.coincidence_window_start[detector] >
-            delayeds._NH_THU_MULT_PRE_MIN):
-        while len(helper.recent_promptlikes[detector]) > 0 and (
-                helper.recent_promptlikes[detector][0] -
-                helper.coincidence_window_start[detector] <
+
+    if selection_name == 'nh_THU':
+        while len(helper.recent_ADevents_all[detector]) > 0 and (timestamp -
+                helper.recent_ADevents_all[detector][0] > helper.PROMPT_COUNT_TIME):
+            helper.recent_ADevents_all[detector].popleft()
+        # for the THU analysis, ensure that all recent AD events are more
+        # recent than the end of the previous coincidence window and muon
+        # veto windows. This is accomplished by removing events after we
+        # reach the end of one of these windows.
+        if (timestamp - helper.coincidence_window_start[detector] >
                 delayeds._NH_THU_MULT_PRE_MIN):
-            helper.recent_promptlikes[detector].popleft()
-    if (timestamp - helper.last_WSMuon_time >
-            muons._NH_WSMUON_VETO_LAST_NS):
-        while len(helper.recent_promptlikes[detector]) > 0 and (
-                helper.recent_promptlikes[detector][0] -
-                helper.last_WSMuon_time <
+            while len(helper.recent_promptlikes[detector]) > 0 and (
+                    helper.recent_promptlikes[detector][0] -
+                    helper.coincidence_window_start[detector] <
+                    delayeds._NH_THU_MULT_PRE_MIN):
+                helper.recent_promptlikes[detector].popleft()
+        if (timestamp - helper.last_WSMuon_time >
                 muons._NH_WSMUON_VETO_LAST_NS):
-            helper.recent_promptlikes[detector].popleft()
-    if (timestamp - helper.last_ADMuon_time[detector] >
-            muons._NH_ADMUON_VETO_LAST_NS):
-        while len(helper.recent_promptlikes[detector]) > 0 and (
-                helper.recent_promptlikes[detector][0] -
-                helper.last_ADMuon_time[detector] <
+            while len(helper.recent_promptlikes[detector]) > 0 and (
+                    helper.recent_promptlikes[detector][0] -
+                    helper.last_WSMuon_time <
+                    muons._NH_WSMUON_VETO_LAST_NS):
+                helper.recent_promptlikes[detector].popleft()
+        if (timestamp - helper.last_ADMuon_time[detector] >
                 muons._NH_ADMUON_VETO_LAST_NS):
-            helper.recent_promptlikes[detector].popleft()
-    if (timestamp - helper.last_ShowerMuon_time[detector] >
-            muons._NH_SHOWER_MUON_VETO_LAST_NS):
-        while len(helper.recent_promptlikes[detector]) > 0 and (
-                helper.recent_promptlikes[detector][0] -
-                helper.last_ShowerMuon_time[detector] <
+            while len(helper.recent_promptlikes[detector]) > 0 and (
+                    helper.recent_promptlikes[detector][0] -
+                    helper.last_ADMuon_time[detector] <
+                    muons._NH_ADMUON_VETO_LAST_NS):
+                helper.recent_promptlikes[detector].popleft()
+        if (timestamp - helper.last_ShowerMuon_time[detector] >
                 muons._NH_SHOWER_MUON_VETO_LAST_NS):
-            helper.recent_promptlikes[detector].popleft()
+            while len(helper.recent_promptlikes[detector]) > 0 and (
+                    helper.recent_promptlikes[detector][0] -
+                    helper.last_ShowerMuon_time[detector] <
+                    muons._NH_SHOWER_MUON_VETO_LAST_NS):
+                helper.recent_promptlikes[detector].popleft()
 
     # Compute the dts for both recent muons and recent prompt-likes
     recent_showermuon_dts = [timestamp - muon_time for muon_time in
             helper.recent_shower_muons[detector]]
     recent_promptlike_dts = [timestamp - prompt_time for prompt_time
             in helper.recent_promptlikes[detector]]
+    if selection_name == 'nh_THU':
+        recent_ADevents_all_dts = [timestamp - ADevent_time for ADevent_time in
+                helper.recent_ADevents_all[detector]]
 
     # Assign the values for dt_previous_* and for the lists of
     # recent muons and prompt-likes.
@@ -536,6 +560,12 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         assign_value(buf.dts_ShowerMuons_5sec, dt, i)
     for i, dt in enumerate(recent_promptlike_dts):
         assign_value(buf.dts_recent_PromptLikes, dt, i)
+    if selection_name == 'nh_THU':
+        assign_value(buf.num_recent_ADevents_all,
+                len(helper.recent_ADevents_all[detector]))
+        for i, dt in enumerate(recent_ADevents_all_dts):
+            assign_value(buf.dts_recent_ADevents_all, dt, i)
+
 
     # Compute muon vetoes that only rely on previous events
     assign_value(buf.tag_ADMuonVeto,
@@ -558,6 +588,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
             if (timestamp - helper.coincidence_window_start[detector] >
                     delayeds._NH_THU_MULT_PRE_MIN):
                 helper.coincidence_window_start[detector] = timestamp
+            helper.recent_promptlikes[detector].append(timestamp)
+            helper.recent_ADevents_all[detector].append(timestamp)
             # Assign dt_next_ADevent to events in the event_cache
             for cached_event in helper.event_cache:
                 # Some events might already have been assigned, so skip
@@ -653,7 +685,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         helper.last_PromptLike_x[detector] = x
         helper.last_PromptLike_y[detector] = y
         helper.last_PromptLike_z[detector] = z
-        helper.recent_promptlikes[detector].append(timestamp)
+        if selection_name != 'nh_THU':
+            helper.recent_promptlikes[detector].append(timestamp)
     # Don't include prompt-like delayed events
     if event_isDelayedLike and not event_isFlasher:
         logging.debug("isDelayedLike")

@@ -113,6 +113,8 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     if selection_name == 'nh_THU':
         fill_buf.num_recent_ADevents_all = unsigned_int_value()
         fill_buf.dts_recent_ADevents_all = long_value(100)
+        fill_buf.coincidence_number = int_value()
+        fill_buf.dt_coinc_window_start = float_value()
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute
@@ -219,6 +221,10 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
         outdata.Branch('dts_ADevents_800us_all',
                 fill_buf.dts_recent_ADevents_all,
                 'dts_ADevents_800us_all[num_ADevents_800us_all]/L')
+        outdata.Branch('coincidence_number', fill_buf.coincidence_number,
+                'coincidence_number/I')
+        outdata.Branch('dt_coinc_window_start', fill_buf.dt_coinc_window_start,
+                'dt_coinc_window_start/F')
     return outdata, fill_buf
 
 class ProcessHelper(object):
@@ -331,6 +337,21 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
         logging.debug('cached event: %s', cached_event)
         logging.debug('isIBDDelayed: %s', ibd_delayed)
         assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
+        if selection_name == 'nh_THU':
+            # Compute the number of sub-events in this event's coincidence
+            # window, if it is an appropriate event
+            if e.dt_coinc_window_start[0] != -1:
+                if (e.dt_coinc_window_start[0]
+                        + e.dt_next_ADevent[0] >
+                        delayeds._NH_THU_MULT_POST_MIN
+                        or e.dt_next_ADevent[0] == -1):
+                    # Count how many recent events there are within the
+                    # coincidence window
+                    coinc_count = len([x for x in e.dts_recent_PromptLikes if x
+                        <= e.dt_coinc_window_start[0] and x > 0]) + 1 # 1 for current event
+                    assign_value(e.coincidence_number, coinc_count)
+                else:
+                    pass
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
@@ -590,6 +611,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
             if (timestamp - helper.coincidence_window_start[detector] >
                     delayeds._NH_THU_MULT_PRE_MIN):
                 helper.coincidence_window_start[detector] = timestamp
+            assign_value(buf.dt_coinc_window_start, timestamp -
+                    helper.coincidence_window_start[detector])
             helper.recent_promptlikes[detector].append(timestamp)
             helper.recent_ADevents_all[detector].append(timestamp)
             # Assign dt_next_ADevent to events in the event_cache
@@ -605,6 +628,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
                     assign_value(cached_event.dt_next_ADevent,
                             timestamp
                             - cached_event.timestamp[0])
+        else:
+            assign_value(buf.dt_coinc_window_start, -1)
 
     # This comes after values are assigned to the buffer because we
     # don't want dt_previous_* to be 0.
@@ -748,6 +773,21 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         logging.debug('cached event: %s', cached_event)
         logging.debug('isIBDDelayed: %s', ibd_delayed)
         assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
+        if selection_name == 'nh_THU':
+            # Compute the number of sub-events in this event's coincidence
+            # window, if it is an appropriate event
+            if e.dt_coinc_window_start[0] != -1:
+                if (e.dt_coinc_window_start[0]
+                        + e.dt_next_ADevent[0] >
+                        delayeds._NH_THU_MULT_POST_MIN
+                        or e.dt_next_ADevent[0] == -1):
+                    # Count how many recent events there are within the
+                    # coincidence window
+                    coinc_count = len([x for x in e.dts_recent_PromptLikes if x
+                        <= e.dt_coinc_window_start[0] and x > 0]) + 1 # 1 for current event
+                    assign_value(e.coincidence_number, coinc_count)
+                else:
+                    pass
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()

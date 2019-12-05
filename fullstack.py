@@ -47,7 +47,7 @@ def main(filename, nevents, start_event, site, selection_name):
         return
 
     callback = rate_calculations.callback_adapter(rate_helper, start_event,
-            end_event)
+            end_event, selection_name)
     for entry_number in range(start_event, end_event):
         logging.debug('Event %d', entry_number)
         calibStats.LoadTree(entry_number)

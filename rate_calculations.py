@@ -13,6 +13,7 @@ from ROOT import TFile, TTree
 
 from translate import fetch_value
 import muons
+import delayeds
 
 def AD_dict(nADs, default=0):
     return {n: default for n in range(1, nADs+1)}
@@ -117,7 +118,8 @@ class RateHelper(object):
 
 
 
-def main(filename, site, run, fileno, num_events, start_event, debug):
+def main(filename, site, run, fileno, num_events, start_event, debug,
+        selection_name):
     infile = TFile(filename, 'READ')
     indata = infile.Get('data')
 
@@ -130,7 +132,11 @@ def main(filename, site, run, fileno, num_events, start_event, debug):
         indata.GetEntry(event_number)
         logging.debug('Event %d', event_number)
         data_list = fetch_data(indata)
-        one_iteration(event_number, data_list, helper, start_event, entries)
+        if selection_name == 'nh_THU':
+            one_iteration_nh_THU(event_number, data_list, helper, start_event,
+                    entries)
+        else:
+            one_iteration(event_number, data_list, helper, start_event, entries)
     print_results(helper)
     outname = filename.split('.')[0] + '.json'
     with open(outname, 'w') as f:
@@ -140,14 +146,18 @@ def main(filename, site, run, fileno, num_events, start_event, debug):
 def print_results(helper):
     pprint(helper.compute_results())
 
-def callback_adapter(helper, start_event, entries):
+def callback_adapter(helper, start_event, entries, selection_name):
     def callback(event_cache):
+        is_crosstrigger = (event_cache.triggerType[0] & 0x2) != 0
         data_list = []
         data_list.append(event_cache.timestamp[0])
         data_list.append(event_cache.detector[0])
-        data_list.append(event_cache.tag_WSMuon[0])
-        data_list.append(event_cache.tag_ADMuon[0])
-        data_list.append(event_cache.tag_ShowerMuon[0])
+        data_list.append(event_cache.tag_WSMuon[0] if not is_crosstrigger else
+                0)
+        data_list.append(event_cache.tag_ADMuon[0] if not is_crosstrigger else
+                0)
+        data_list.append(event_cache.tag_ShowerMuon[0] if not is_crosstrigger
+                else 0)
         data_list.append(event_cache.tag_IBDDelayed[0])
         data_list.append(event_cache.tag_PromptLike[0])
         data_list.append(event_cache.tag_DelayedLike[0])
@@ -160,8 +170,94 @@ def callback_adapter(helper, start_event, entries):
         data_list.append(event_cache.dt_previous_ADMuon[0])
         data_list.append(event_cache.dt_previous_ShowerMuon[0])
         event_number = event_cache.noTree_loopIndex[0]
-        one_iteration(event_number, data_list, helper, start_event, entries)
+        if selection_name == 'nh_THU':
+            one_iteration_nh_THU(event_number, data_list, helper, start_event,
+                    entries)
+        else:
+            one_iteration(event_number, data_list, helper, start_event, entries)
     return callback
+
+def one_iteration_nh_THU(event_number, data_list, helper, start_event,
+        entries):
+        (
+            timestamp,
+            detector,
+            isWSMuon,
+            isADMuon,
+            isShowerMuon,
+            isIBDDelayed,
+            isPromptLike,
+            isDelayedLike,
+            isWSMuonVetoed,
+            isADMuonVetoed,
+            isShowerMuonVetoed,
+            isFlasher,
+            dt_last_WSMuon,
+            dt_next_WSMuon,
+            dt_last_ADMuon,
+            dt_last_ShowerMuon
+            ) = data_list
+
+        muon_type = 'None'
+        if isWSMuon:
+            muon_type = 'WS'
+        if isADMuon:
+            muon_type = 'AD'
+        if isShowerMuon:
+            muon_type = 'Shower'
+        if isIBDDelayed:
+            helper.number_IBD_candidates[detector] += 1
+        logging.debug('muon type: %s', muon_type)
+
+        logging.debug('end of most recent muon vetoes, before this event: %s',
+                helper.current_nomuon_livetime_start)
+        logging.debug('timestamp: %d', timestamp)
+
+        if event_number == start_event:
+            helper.start_time = timestamp
+            for key in helper.current_nomuon_livetime_start:
+                helper.current_nomuon_livetime_start[key] = timestamp
+        if event_number == entries - 1:
+            helper.end_time = timestamp
+            if not (isWSMuon or isADMuon or isShowerMuon):
+                for key, window_start_time in (
+                        helper.current_nomuon_livetime_start.items()):
+                    new_time = max(0, timestamp - window_start_time)
+                    helper.total_nonvetoed_livetime[key] += new_time
+
+        if isWSMuon:
+            for det in helper.current_nomuon_livetime_start:
+                current_start = helper.current_nomuon_livetime_start[det]
+                if current_start < timestamp - delayeds._NH_THU_MULT_POST_MIN:
+                    helper.total_nonvetoed_livetime[det] += (timestamp
+                            - current_start - delayeds._NH_THU_MULT_POST_MIN)
+                    helper.current_nomuon_livetime_start[det] = (timestamp
+                            + muons._NH_WSMUON_VETO_LAST_NS)
+                else:
+                    helper.current_nomuon_livetime_start[det] = max(
+                            current_start, timestamp + muons._NH_WSMUON_VETO_LAST_NS)
+        if isADMuon:
+            current_start = helper.current_nomuon_livetime_start[detector]
+            if current_start < timestamp - delayeds._NH_THU_MULT_POST_MIN:
+                helper.total_nonvetoed_livetime[detector] += (timestamp
+                        - current_start - delayeds._NH_THU_MULT_POST_MIN)
+                helper.current_nomuon_livetime_start[detector] = (timestamp
+                        + muons._NH_ADMUON_VETO_LAST_NS)
+            else:
+                helper.current_nomuon_livetime_start[detector] = max(
+                        current_start, timestamp + muons._NH_ADMUON_VETO_LAST_NS)
+        if isShowerMuon:
+            current_start = helper.current_nomuon_livetime_start[detector]
+            if current_start < timestamp - delayeds._NH_THU_MULT_POST_MIN:
+                helper.total_nonvetoed_livetime[detector] += (timestamp
+                        - current_start - delayeds._NH_THU_MULT_POST_MIN)
+                helper.current_nomuon_livetime_start[detector] = (timestamp
+                        + muons._NH_SHOWER_MUON_VETO_LAST_NS)
+            else:
+                helper.current_nomuon_livetime_start[detector] = max(
+                        current_start, timestamp
+                        + muons._NH_SHOWER_MUON_VETO_LAST_NS)
+
 
 def one_iteration(event_number, data_list, helper, start_event, entries):
         (
@@ -382,8 +478,10 @@ if __name__ == '__main__':
     parser.add_argument('--run', default=0, type=int)
     parser.add_argument('--fileno', default=0, type=int)
     parser.add_argument('--site', type=int)
+    parser.add_argument('--selection', default='ngd')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.filename, args.site, args.run, args.fileno, args.num_events, args.start_event, args.debug)
+    main(args.filename, args.site, args.run, args.fileno, args.num_events,
+            args.start_event, args.debug, args.selection)
 

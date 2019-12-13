@@ -1,3 +1,4 @@
+from __future__ import print_function
 import zmq
 import os
 import argparse
@@ -27,8 +28,11 @@ while ntasks_recv < args.max_tasks:
         break
     ntasks_recv += 1
     print(line)
+    task_id = int(task_id)
     try:
-        os.system(line)
+        result = os.system(line)
+        if result != 0:
+            task_id *= -1
     except:
         task_id *= -1
 

@@ -3,16 +3,27 @@ import argparse
 import sqlite3
 import datetime
 
-with sqlite3.Connection('example.db') as conn:
+parser = argparse.ArgumentParser(description='Get history for given TaskIDs. '
+        'TaskIDs can be provided as command-line arguments or piped in '
+        'as output from another command, one TaskID per line.')
+parser.add_argument('database')
+parser.add_argument('tasks', nargs='*', metavar='task')
+args = parser.parse_args()
+
+with sqlite3.Connection(args.database) as conn:
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    for line in sys.stdin:
+    if len(args.tasks) == 0:
+        task_ids = sys.stdin
+    else:
+        task_ids = args.tasks
+    for task_id_str in task_ids:
         c.execute('''SELECT * FROM history
             WHERE TaskID = ?
             ORDER BY Timestamp''',
-            (int(line.strip()),))
+            (int(task_id_str.strip()),))
         print('-'*40)
-        print('TaskID {}'.format(line.strip()))
+        print('TaskID {}'.format(task_id_str.strip()))
         for row in c.fetchall():
             print('{:<24}{:<15}'.format(
                 datetime.datetime.fromtimestamp(row['Timestamp']).isoformat(' '),

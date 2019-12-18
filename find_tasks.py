@@ -2,14 +2,24 @@ from __future__ import print_function
 import argparse
 import sqlite3
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description='Get the TaskID and/or Status '
+        'for the requested tasks. If both --taskid and --status are given, '
+        'each line of output will contain both the TaskID and Status for '
+        'a particular task.')
+parser.add_argument('database')
 group = parser.add_mutually_exclusive_group()
-group.add_argument('--search')
-group.add_argument('--runfile', type=int, nargs=2)
-group.add_argument('--run', type=int, default=0)
-group.add_argument('--all', action='store_true')
-parser.add_argument('--taskid', action='store_true')
-parser.add_argument('--status', action='store_true')
+group.add_argument('--search',
+        help='SQLite match string (WHERE Command LIKE <search>)')
+group.add_argument('--runfile', type=int, nargs=2,
+        help='Run and file numbers for a particular command')
+group.add_argument('--run', type=int, default=0,
+        help='All the commands with the given run number')
+group.add_argument('--all', action='store_true',
+        help='All tasks')
+parser.add_argument('--taskid', action='store_true',
+        help='Print the TaskID for matching tasks, one per line')
+parser.add_argument('--status', action='store_true',
+        help='Print the Status for matching tasks, one per line')
 args = parser.parse_args()
 if args.search is not None:
     search = args.search
@@ -20,7 +30,7 @@ elif args.all:
 else:
     search = '%{:07}%{:04}%'.format(*args.runfile)
 
-with sqlite3.Connection('example.db') as conn:
+with sqlite3.Connection(args.database) as conn:
     c = conn.cursor()
     if args.taskid and not args.status:
         c.execute('SELECT TaskID FROM tasks WHERE Command LIKE ?', (search,))

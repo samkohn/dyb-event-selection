@@ -3,7 +3,8 @@ import time
 import argparse
 import sqlite3
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(description='Update the status of the '
+        'tasks specified by the supplied TaskIDs (over stdin/pipe).')
 parser.add_argument('newstatus')
 args = parser.parse_args()
 

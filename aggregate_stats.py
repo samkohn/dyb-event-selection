@@ -8,9 +8,8 @@ import argparse
 import os
 import json
 
-from rate_calculations import RateHelper
-
 def main(run, files, site):
+    from rate_calculations import RateHelper
     helper = RateHelper(run, 'all', site)
     daq_livetime = 0
     for filename in files:

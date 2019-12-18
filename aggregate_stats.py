@@ -45,7 +45,7 @@ def main(run, files, site):
     helper.end_time = daq_livetime
     aggregated = helper.compute_results()
     print(aggregated)
-    with open('out_%d_all.json' % run, 'w') as f:
+    with open('out_%d.json' % run, 'w') as f:
         json.dump(aggregated, f)
 
 

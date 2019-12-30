@@ -10,14 +10,15 @@ def current_time():
 def next_task(cursor):
     try:
         cursor.execute('BEGIN EXCLUSIVE TRANSACTION')
-        cursor.execute('''SELECT TaskID, Command, h.Status
-            FROM tasks JOIN history AS h USING (TaskID)
-            WHERE Timestamp = (SELECT MAX(Timestamp)
-                FROM history as h2
-                WHERE h2.TaskID = h.TaskID)
-                AND h.Status = "not started"
-            ORDER BY TaskID ASC
-            LIMIT 1''')
+        cursor.execute('''SELECT TaskID, Command, Status
+            FROM (
+                SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TaskID
+                    ORDER BY Timestamp DESC) rn
+                FROM tasks JOIN history USING (TaskID)
+            )
+            WHERE rn = 1 AND Status = "not started"''')
         row = cursor.fetchone()
         if row is None:
             cursor.execute('COMMIT')

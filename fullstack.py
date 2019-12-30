@@ -32,8 +32,14 @@ def main(filename, nevents, start_event, site, selection_name):
     #outdata, outdata_buf = translate.create_data_TTree(outfile)
     computed, computed_buf = process.create_computed_TTree('computed', outfile,
             selection_name)
-    out_IBDs, ibd_fill_buf = process.create_computed_TTree('ibds', outfile,
-            selection_name, 'IBD candidates (git: %s)')
+    if selection_name == 'nh_THU':
+        ttree_name = 'ad_events'
+        ttree_description = 'AD events (git: %s)'
+    else:
+        ttree_name = 'ibds'
+        ttree_description = 'IBD candidates (git: %s)'
+    out_IBDs, ibd_fill_buf = process.create_computed_TTree(ttree_name, outfile,
+            selection_name, ttree_description)
     calibStats, adSimple = translate.initialize_indata([filename])
     computed_helper = process.ProcessHelper(selection_name)
     computed_helper.run = run

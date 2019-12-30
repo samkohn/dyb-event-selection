@@ -158,9 +158,10 @@ def callback_adapter(helper, start_event, entries, selection_name):
                 0)
         data_list.append(event_cache.tag_ShowerMuon[0] if not is_crosstrigger
                 else 0)
-        data_list.append(event_cache.tag_IBDDelayed[0])
         data_list.append(event_cache.tag_PromptLike[0])
-        data_list.append(event_cache.tag_DelayedLike[0])
+        if selection_name != 'nh_THU':
+            data_list.append(event_cache.tag_IBDDelayed[0])
+            data_list.append(event_cache.tag_DelayedLike[0])
         data_list.append(event_cache.tag_WSMuonVeto[0])
         data_list.append(event_cache.tag_ADMuonVeto[0])
         data_list.append(event_cache.tag_ShowerMuonVeto[0])
@@ -185,9 +186,7 @@ def one_iteration_nh_THU(event_number, data_list, helper, start_event,
             isWSMuon,
             isADMuon,
             isShowerMuon,
-            isIBDDelayed,
             isPromptLike,
-            isDelayedLike,
             isWSMuonVetoed,
             isADMuonVetoed,
             isShowerMuonVetoed,
@@ -205,8 +204,6 @@ def one_iteration_nh_THU(event_number, data_list, helper, start_event,
             muon_type = 'AD'
         if isShowerMuon:
             muon_type = 'Shower'
-        if isIBDDelayed:
-            helper.number_IBD_candidates[detector] += 1
         logging.debug('muon type: %s', muon_type)
 
         logging.debug('end of most recent muon vetoes, before this event: %s',

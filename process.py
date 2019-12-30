@@ -33,7 +33,8 @@ def done_with_cache(buf, selection_name):
     # have to have been processed.)
     found_next_WSMuon = buf.dt_next_WSMuon[0] != -1
     detector = buf.detector[0]
-    found_next_DelayedLike = (detector not in AD_DETECTORS
+    found_next_DelayedLike = (selection_name == 'nh_THU'
+            or detector not in AD_DETECTORS
             or buf.dt_next_DelayedLike[0] != -1)
     found_next_ADevent = (buf.dt_next_ADevent[0] != -1
             or detector not in AD_DETECTORS
@@ -86,9 +87,13 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.tag_WSMuonVeto = unsigned_int_value()
     fill_buf.tag_ADMuonVeto = unsigned_int_value()
     fill_buf.tag_ShowerMuonVeto = unsigned_int_value()
+    fill_buf.tag_AnyMuonVeto = unsigned_int_value()
     fill_buf.tag_PromptLike = unsigned_int_value()
-    fill_buf.tag_DelayedLike = unsigned_int_value()
-    fill_buf.tag_IBDDelayed = unsigned_int_value()
+    if selection_name == 'nh_THU':
+        fill_buf.tag_ADevent = unsigned_int_value()
+    else:
+        fill_buf.tag_DelayedLike = unsigned_int_value()
+        fill_buf.tag_IBDDelayed = unsigned_int_value()
     fill_buf.dt_previous_WSMuon = long_value()
     fill_buf.nHit_previous_WSMuon = int_value()
     fill_buf.dt_next_WSMuon = long_value()
@@ -153,12 +158,17 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
             'tag_ADMuonVeto/i')
     outdata.Branch('tag_ShowerMuonVeto', fill_buf.tag_ShowerMuonVeto,
             'tag_ShowerMuonVeto/i')
+    outdata.Branch('tag_AnyMuonVeto', fill_buf.tag_AnyMuonVeto,
+            'tag_AnyMuonVeto/i')
     outdata.Branch('tag_PromptLike', fill_buf.tag_PromptLike,
             'tag_PromptLike/i')
-    outdata.Branch('tag_DelayedLike', fill_buf.tag_DelayedLike,
-            'tag_DelayedLike/i')
-    outdata.Branch('tag_IBDDelayed', fill_buf.tag_IBDDelayed,
-            'tag_IBDDelayed/i')
+    if selection_name == 'nh_THU':
+        outdata.Branch('tag_ADevent', fill_buf.tag_ADevent, 'tag_ADevent/i')
+    else:
+        outdata.Branch('tag_DelayedLike', fill_buf.tag_DelayedLike,
+                'tag_DelayedLike/i')
+        outdata.Branch('tag_IBDDelayed', fill_buf.tag_IBDDelayed,
+                'tag_IBDDelayed/i')
     outdata.Branch('dt_previous_WSMuon', fill_buf.dt_previous_WSMuon,
             'dt_previous_WSMuon/L')
     outdata.Branch('nHit_previous_WSMuon', fill_buf.nHit_previous_WSMuon,
@@ -272,8 +282,14 @@ def main(entries, infile, outfile, selection_name, debug):
     indata = infile.Get('slimmed')
     outfile = TFile(outfile, 'RECREATE')
     outdata, fill_buf = create_computed_TTree('data', outfile, selection_name)
-    out_IBDs, ibd_fill_buf = create_computed_TTree('ibds', outfile,
-            selection_name, 'IBD candidates (git: %s)')
+    if selection_name == 'nh_THU':
+        ttree_name = 'ad_events'
+        ttree_description = 'AD events (git: %s)'
+    else:
+        ttree_name = 'ibds'
+        ttree_description = 'IBD candidates (git: %s)'
+    out_IBDs, ibd_fill_buf = create_computed_TTree(ttree_name, outfile,
+            selection_name, ttree_description)
 
     helper = ProcessHelper(selection_name)
     if entries == -1:
@@ -317,26 +333,31 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
             assign_value(cached_event.nHit_next_WSMuon, -1)
             # Leave tag_WSMuonVeto as-is
             # assign_value(cached_event.tag_WSMuonVeto, 0)
+            assign_value(cached_event.tag_AnyMuonVeto,
+                    cached_event.tag_WSMuonVeto[0]
+                    or cached_event.tag_ADMuonVeto[0]
+                    or cached_event.tag_ShowerMuonVeto[0])
         if cached_event.dt_next_DelayedLike[0] == -1:
             assign_value(cached_event.dt_next_DelayedLike, -1)
         e = cached_event
-        ibd_delayed = isIBDDelayed(
-                e.tag_DelayedLike[0],
-                e.dt_previous_PromptLike[0],
-                e.dr_previous_PromptLike[0],
-                e.muonVeto_previous_PromptLike[0],
-                e.num_recent_PromptLikes[0],
-                e.dts_recent_PromptLikes,
-                e.dt_next_ADevent[0],
-                e.dt_next_WSMuon[0],
-                e.dt_next_DelayedLike[0],
-                e.tag_WSMuonVeto[0],
-                e.tag_ADMuonVeto[0],
-                e.tag_ShowerMuonVeto[0],
-                e.tag_flasher[0])
-        logging.debug('cached event: %s', cached_event)
-        logging.debug('isIBDDelayed: %s', ibd_delayed)
-        assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
+        if selection_name != 'nh_THU':
+            ibd_delayed = isIBDDelayed(
+                    e.tag_DelayedLike[0],
+                    e.dt_previous_PromptLike[0],
+                    e.dr_previous_PromptLike[0],
+                    e.muonVeto_previous_PromptLike[0],
+                    e.num_recent_PromptLikes[0],
+                    e.dts_recent_PromptLikes,
+                    e.dt_next_ADevent[0],
+                    e.dt_next_WSMuon[0],
+                    e.dt_next_DelayedLike[0],
+                    e.tag_WSMuonVeto[0],
+                    e.tag_ADMuonVeto[0],
+                    e.tag_ShowerMuonVeto[0],
+                    e.tag_flasher[0])
+            logging.debug('cached event: %s', cached_event)
+            logging.debug('isIBDDelayed: %s', ibd_delayed)
+            assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
         if selection_name == 'nh_THU':
             # Compute the number of sub-events in this event's coincidence
             # window, if it is an appropriate event
@@ -352,10 +373,13 @@ def finish_emptying_cache(outdata, fill_buf, out_IBDs, ibd_fill_buf,
                     assign_value(e.coincidence_number, coinc_count)
                 else:
                     pass
+            if isADEvent_THU(e.detector[0], e.energy[0]):
+                cached_event.copyTo(ibd_fill_buf)
+                out_IBDs.Fill()
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
-        if ibd_delayed:
+        if selection_name != 'nh_THU' and ibd_delayed:
             cached_event.copyTo(ibd_fill_buf)
             out_IBDs.Fill()
 
@@ -463,7 +487,8 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
 
     # Initialize dt_next_WSMuon and dt_next_DelayedLike to -1
     assign_value(buf.dt_next_WSMuon, -1)
-    assign_value(buf.dt_next_DelayedLike, -1)
+    if selection_name != 'nh_THU':
+        assign_value(buf.dt_next_DelayedLike, -1)
     assign_value(buf.dt_next_ADevent, -1)
 
     # Compute simple tags and values (those that only require data
@@ -483,8 +508,9 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     assign_value(buf.tag_ShowerMuon, event_isShowerMuon)
     event_isPromptLike = isPromptLike(detector, energy)
     assign_value(buf.tag_PromptLike, event_isPromptLike)
-    event_isDelayedLike = isDelayedLike(detector, energy)
-    assign_value(buf.tag_DelayedLike, event_isDelayedLike)
+    if selection_name != 'nh_THU':
+        event_isDelayedLike = isDelayedLike(detector, energy)
+        assign_value(buf.tag_DelayedLike, event_isDelayedLike)
 
 
     # Compute tags and values that count the number of previous
@@ -606,6 +632,7 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     if selection_name == 'nh_THU':
         if isADEvent_THU(detector, energy) and not event_isFlasher:
             logging.debug("isADEvent")
+            assign_value(buf.tag_ADevent, 1)
             # Update the coincidence window start time, if this event is not
             # already within a coincicence window
             if (timestamp - helper.coincidence_window_start[detector] >
@@ -674,6 +701,10 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
                 assign_value(cached_event.tag_WSMuonVeto,
                         isVetoedByWSMuon(cached_event.dt_previous_WSMuon[0],
                             cached_event.dt_next_WSMuon[0]))
+                assign_value(cached_event.tag_AnyMuonVeto,
+                        cached_event.tag_WSMuonVeto[0]
+                        or cached_event.tag_ADMuonVeto[0]
+                        or cached_event.tag_ShowerMuonVeto[0])
         # Save the last index reached as the new starting location for next
         # time
         if helper.go_through_whole_cache_WSMuon:
@@ -714,22 +745,23 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
         helper.last_PromptLike_z[detector] = z
         if selection_name != 'nh_THU':
             helper.recent_promptlikes[detector].append(timestamp)
-    # Don't include prompt-like delayed events
-    if event_isDelayedLike and not event_isFlasher:
-        logging.debug("isDelayedLike")
-        # Assign dt_next_PromptLike to events in the event_cache
-        for cached_event in helper.event_cache:
-            # Some events might already have been assigned, so skip
-            # those
-            if cached_event.dt_next_DelayedLike[0] != -1:
-                continue
-            # PromptLikes are restricted to a single AD
-            if cached_event.detector[0] == detector:
-                logging.debug('taggedNextDelayed%d',
-                        cached_event.timestamp[0])
-                assign_value(cached_event.dt_next_DelayedLike,
-                        timestamp
-                        - cached_event.timestamp[0])
+    # Don't include delayed-like flasher events
+    if selection_name != 'nh_THU':
+        if event_isDelayedLike and not event_isFlasher:
+            logging.debug("isDelayedLike")
+            # Assign dt_next_PromptLike to events in the event_cache
+            for cached_event in helper.event_cache:
+                # Some events might already have been assigned, so skip
+                # those
+                if cached_event.dt_next_DelayedLike[0] != -1:
+                    continue
+                # PromptLikes are restricted to a single AD
+                if cached_event.detector[0] == detector:
+                    logging.debug('taggedNextDelayed%d',
+                            cached_event.timestamp[0])
+                    assign_value(cached_event.dt_next_DelayedLike,
+                            timestamp
+                            - cached_event.timestamp[0])
 
     # Determine which of the oldest events are ready to go into the
     # new TTree. It is possible (due to different ADs) that the
@@ -756,23 +788,24 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
     for _ in range(num_to_delete):
         cached_event = helper.event_cache.popleft()
         e = cached_event
-        ibd_delayed = isIBDDelayed(
-                e.tag_DelayedLike[0],
-                e.dt_previous_PromptLike[0],
-                e.dr_previous_PromptLike[0],
-                e.muonVeto_previous_PromptLike[0],
-                e.num_recent_PromptLikes[0],
-                e.dts_recent_PromptLikes,
-                e.dt_next_ADevent[0],
-                e.dt_next_WSMuon[0],
-                e.dt_next_DelayedLike[0],
-                e.tag_WSMuonVeto[0],
-                e.tag_ADMuonVeto[0],
-                e.tag_ShowerMuonVeto[0],
-                e.tag_flasher[0])
-        logging.debug('cached event: %s', cached_event)
-        logging.debug('isIBDDelayed: %s', ibd_delayed)
-        assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
+        if selection_name != 'nh_THU':
+            ibd_delayed = isIBDDelayed(
+                    e.tag_DelayedLike[0],
+                    e.dt_previous_PromptLike[0],
+                    e.dr_previous_PromptLike[0],
+                    e.muonVeto_previous_PromptLike[0],
+                    e.num_recent_PromptLikes[0],
+                    e.dts_recent_PromptLikes,
+                    e.dt_next_ADevent[0],
+                    e.dt_next_WSMuon[0],
+                    e.dt_next_DelayedLike[0],
+                    e.tag_WSMuonVeto[0],
+                    e.tag_ADMuonVeto[0],
+                    e.tag_ShowerMuonVeto[0],
+                    e.tag_flasher[0])
+            logging.debug('cached event: %s', cached_event)
+            logging.debug('isIBDDelayed: %s', ibd_delayed)
+            assign_value(cached_event.tag_IBDDelayed, ibd_delayed)
         if selection_name == 'nh_THU':
             # Compute the number of sub-events in this event's coincidence
             # window, if it is an appropriate event
@@ -788,10 +821,13 @@ def one_iteration(event_number, outdata, fill_buf, out_IBDs,
                     assign_value(e.coincidence_number, coinc_count)
                 else:
                     pass
+            if isADEvent_THU(e.detector[0], e.energy[0]):
+                cached_event.copyTo(ibd_fill_buf)
+                out_IBDs.Fill()
         callback(cached_event)
         cached_event.copyTo(fill_buf)
         outdata.Fill()
-        if ibd_delayed:
+        if selection_name != 'nh_THU' and ibd_delayed:
             cached_event.copyTo(ibd_fill_buf)
             out_IBDs.Fill()
 

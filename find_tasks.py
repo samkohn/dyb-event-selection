@@ -43,8 +43,7 @@ with sqlite3.Connection(args.database) as conn:
                 FROM history as h2
                 WHERE h.TaskID = h2.TaskID)
             AND Command LIKE ?
-            ORDER BY h.rowid DESC
-            LIMIT 1''',
+            ORDER BY TaskID ASC''',
             (search,))
         if args.taskid and args.status:
             for row in c.fetchall():

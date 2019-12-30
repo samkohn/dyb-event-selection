@@ -62,7 +62,7 @@ if __name__ == '__main__':
     print('bound')
     with sqlite3.connect(args.database, isolation_level=None) as conn:
         conn.row_factory = sqlite3.Row
-        c = conn.cursor()
+        cursor = conn.cursor()
         while True:
             request = producer.recv()
             worker_done = request[-4:] == b'DONE'

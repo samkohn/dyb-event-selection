@@ -18,7 +18,8 @@ def next_task(cursor):
                     ORDER BY Timestamp DESC) rn
                 FROM tasks JOIN history USING (TaskID)
             )
-            WHERE rn = 1 AND Status = "not started"''')
+            WHERE rn = 1 AND Status = "not started"
+            ORDER BY TaskID''')
         row = cursor.fetchone()
         if row is None:
             cursor.execute('COMMIT')

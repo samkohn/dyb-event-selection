@@ -38,12 +38,16 @@ with sqlite3.Connection(args.database) as conn:
                 print(row[0])
     else:
         c.execute('''SELECT TaskID, Status
-            FROM history AS h JOIN tasks USING (TaskID)
-            WHERE Timestamp = (SELECT MAX(Timestamp)
-                FROM history as h2
-                WHERE h.TaskID = h2.TaskID)
+            FROM (
+                SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TaskID
+                    ORDER BY Timestamp DESC) rn
+                FROM tasks JOIN history USING (TaskID)
+            )
+            WHERE rn = 1
             AND Command LIKE ?
-            ORDER BY TaskID ASC''',
+            ORDER BY TaskID''',
             (search,))
         if args.taskid and args.status:
             for row in c.fetchall():

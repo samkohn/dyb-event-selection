@@ -68,7 +68,6 @@ def main(infilename, outfile, AD, ttree_name):
     phase = 1
     first_event = {}
     second_event = {}
-    #AD = 2
     while first_half_index < halfway and second_half_index < entries:
         if phase == 1:
             # Increment first_half_index until we get a good single
@@ -128,4 +127,5 @@ if __name__ == '__main__':
     parser.add_argument('ad', type=int)
     parser.add_argument('--ttree-name', default='computed')
     args = parser.parse_args()
+
     main(args.infile, args.outfile, args.ad, args.ttree_name)

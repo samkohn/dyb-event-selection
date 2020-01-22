@@ -20,6 +20,8 @@ parser.add_argument('--taskid', action='store_true',
         help='Print the TaskID for matching tasks, one per line')
 parser.add_argument('--status', action='store_true',
         help='Print the Status for matching tasks, one per line')
+parser.add_argument('--time', action='store_true',
+        help='Print the last updated Timestamp for matching tasks, one per line')
 args = parser.parse_args()
 if args.search is not None:
     search = args.search
@@ -30,24 +32,32 @@ elif args.all:
 else:
     search = '%{:07}%{:04}%'.format(*args.runfile)
 
+toprint = []
+if args.taskid:
+    toprint.append(0)
+if args.status:
+    toprint.append(1)
+if args.time:
+    toprint.append(2)
+
 with sqlite3.Connection(args.database) as conn:
     c = conn.cursor()
-    if args.taskid and not args.status:
+    if args.taskid and not args.status and not args.time:
         c.execute('SELECT TaskID FROM tasks WHERE Command LIKE ?', (search,))
         for row in c.fetchall():
                 print(row[0])
     else:
-        c.execute('''SELECT TaskID, Status
-            FROM history AS h JOIN tasks USING (TaskID)
-            WHERE Timestamp = (SELECT MAX(Timestamp)
-                FROM history as h2
-                WHERE h.TaskID = h2.TaskID)
+        c.execute('''SELECT TaskID, Status, Timestamp
+            FROM (
+                SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TaskID
+                    ORDER BY Timestamp DESC) rn
+                FROM tasks JOIN history USING (TaskID)
+            )
+            WHERE rn = 1
             AND Command LIKE ?
-            ORDER BY TaskID ASC''',
+            ORDER BY TaskID''',
             (search,))
-        if args.taskid and args.status:
-            for row in c.fetchall():
-                print(*row)
-        elif args.status:
-            for row in c.fetchall():
-                print(row[1])
+        for row in c.fetchall():
+            print(*[row[index] for index in toprint])

@@ -19,7 +19,7 @@ def git_describe(directory=None):
         output = subprocess.check_output(['git', 'describe',
             '--always', '--long', '--dirty']).strip()
         os.chdir(current_dir)
-        return output
+        return output.decode()
 
 
 class TreeBuffer(object):

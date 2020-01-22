@@ -23,8 +23,9 @@ def main(filename, update_db):
     runNo = ch.run
     site = ch.site
     ch.Draw('>>basic_eventlist', 'energy < 12 && energy > 1.5 && '
-        '!(tag_WSMuonVeto || tag_ADMuonVeto || tag_ShowerMuonVeto) && '
-        '!tag_flasher && (dt_coinc_window_start + dt_next_WSMuon > 400000)',
+        '!tag_AnyMuonVeto && '
+        '(tag_flasher == 0 || tag_flasher == 2) && '
+        '(dt_coinc_window_start + dt_next_WSMuon > 400000)',
         'goff')
     basic_eventlist = ROOT.gDirectory.Get('basic_eventlist')
     ch.SetEventList(basic_eventlist)
@@ -53,7 +54,8 @@ def main(filename, update_db):
                     (runNo, AD, int(counts), livetimes[str(AD)], rate, error,
                         rate_error))
             conn.commit()
-    conn.close()
+    if update_db:
+        conn.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

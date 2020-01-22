@@ -30,6 +30,8 @@ def main(infilename, outfile, AD, ttree_name):
     outfile = ROOT.TFile(outfile, 'RECREATE')
     acc, acc_buf = process.create_computed_TTree('accidentals', outfile,
             'nh_THU', 'Accidentals sample (git: %s)')
+    all_acc, all_acc_buf = process.create_computed_TTree('all_pairs',
+            outfile, 'nh_THU', 'All paired singles (git: %s)')
     outfile.cd()
     acc_spectrum_hist = ROOT.TH2F('acc_spectrum', 'acc_spectrum',
             210, 1.5, 12, 210, 1.5, 12)
@@ -98,14 +100,16 @@ def main(infilename, outfile, AD, ttree_name):
         if phase == 3:
             # Compare event distances and fill the tree
             event_dr = distance(first_event, second_event)
+            all_acc_buf.energy[0] = first_event['energy']
+            all_acc_buf.energy_previous_PromptLike[0] = second_event['energy']
+            all_acc_buf.detector[0] = first_event['detector']
+            all_acc_buf.dr_previous_PromptLike[0] = event_dr
             if event_dr < 500:
                 acc_spectrum_hist.Fill(first_event['energy'],
                         second_event['energy'])
                 acc_spectrum_hist.Fill(second_event['energy'],
                         first_event['energy'])
-                acc_buf.energy[0] = first_event['energy']
-                acc_buf.energy_previous_PromptLike[0] = second_event['energy']
-                acc_buf.detector[0] = first_event['detector']
+                all_acc_buf.copyTo(acc_buf)
                 acc.Fill()
                 print('Found an accidental')
             else:
@@ -113,6 +117,7 @@ def main(infilename, outfile, AD, ttree_name):
                         second_event['energy'])
                 eps_distance_hist.Fill(second_event['energy'],
                         first_event['energy'])
+            all_acc.Fill()
             first_half_index += 1
             second_half_index += 1
             phase = 1

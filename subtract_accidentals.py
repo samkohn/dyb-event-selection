@@ -16,19 +16,20 @@ def coinc_rate(rs, rmu, tc):
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 
-def main(datafilename, accfilename, rs, rmu, livetime, acc_rate):
+def main(datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
     import ROOT
     if acc_rate is None:
         base_rate = coinc_rate(rs, rmu, 0.0004)
     else:
         base_rate = acc_rate
     datafile = ROOT.TFile(datafilename, 'READ')
-    raw_spectrum = ROOT.TH2F('raw', 'raw', 210, 1.5, 12, 210, 1.5, 12)
+    raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', 210, 1.5, 12, 210, 1.5, 12)
     ad_events = datafile.Get('ad_events')
-    ad_events.Draw('energy:energy_previous_PromptLike >> raw',
+    ad_events.Draw('energy:energy_previous_PromptLike >> raw_spec', (
             'coincidence_number == 2 && dr_previous_PromptLike < 500 &&'
+            'detector == {} &&'
             '!tag_AnyMuonVeto && (tag_flasher == 0'
-            '|| tag_flasher == 2) && energy < 12 && energy >= 1.5',
+            '|| tag_flasher == 2) && energy < 12 && energy >= 1.5').format(ad),
             'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
     acc_spectrum = accfile.Get('acc_spectrum')
@@ -77,5 +78,5 @@ if __name__ == '__main__':
                 'RunNo = ? AND DetNo = ?', (run_number, args.ad))
         muon_rate, = c.fetchone()
 
-    main(args.datafile, args.accfile, singles_rate, muon_rate, livetime,
+    main(args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
             args.override_acc_rate)

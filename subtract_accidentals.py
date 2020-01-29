@@ -25,11 +25,15 @@ def main(datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
     datafile = ROOT.TFile(datafilename, 'READ')
     raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', 210, 1.5, 12, 210, 1.5, 12)
     ad_events = datafile.Get('ad_events')
-    ad_events.Draw('energy:energy_previous_PromptLike >> raw_spec', (
-            'coincidence_number == 2 && dr_previous_PromptLike < 500 &&'
-            'detector == {} &&'
+    ad_events.Draw(">>eventlist", ('detector == {} && '
+            'energy < 12 && energy > 1.5 &&'
+            'coincidence_number == 2 &&'
             '!tag_AnyMuonVeto && (tag_flasher == 0'
-            '|| tag_flasher == 2) && energy < 12 && energy >= 1.5').format(ad),
+            '|| tag_flasher == 2)').format(ad), 'goff')
+    eventlist = ROOT.gDirectory.Get('eventlist')
+    ad_events.SetEventList(eventlist)
+    ad_events.Draw('energy:energy_previous_PromptLike >> raw_spec',
+            'dr_previous_PromptLike < 500',
             'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
     acc_spectrum = accfile.Get('acc_spectrum')
@@ -49,8 +53,29 @@ def main(datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
     print(num_acc_events)
     print(raw_spectrum.GetEntries())
     final_spectrum.Draw('colz')
-    outfile.Write()
+    outfile.cd()
+    dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', 100, 0, 5000)
+    dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', 100, 0, 5000)
+    ed_vs_dr_actual = ROOT.TH2F('ed_dr_data', 'ed_dr_data', 100, 0, 5000, 210,
+            1.5, 12)
+    ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data', 100, 0, 5000, 210,
+            1.5, 12)
+    ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', 100, 0, 5000, 210,
+            1.5, 12)
+    ad_events.Draw('dr_previous_PromptLike >> dr_data', 'dr_previous_PromptLike < 5000')
+    scale_factor = base_rate * eps_distance * livetime / num_acc_events
+    bg_pairs = accfile.Get('all_pairs')
+    bg_pairs.Draw('dr_previous_PromptLike >> dr_bg', (str(scale_factor) +
+            ' * 2 * (dr_previous_PromptLike < 5000 && ' +
+            'dr_previous_PromptLike >= 0)'), 'same')
     ROOT.gPad.Print('test.pdf')
+    ad_events.Draw('energy:dr_previous_PromptLike >> ed_dr_data',
+            'dr_previous_PromptLike < 5000 && dr_previous_PromptLike >= 0')
+    ad_events.Draw('energy_previous_PromptLike:dr_previous_PromptLike >> ep_dr_data',
+            'dr_previous_PromptLike < 5000 && dr_previous_PromptLike >= 0')
+    bg_pairs.Draw('energy:dr_previous_PromptLike >> ed_dr_bg', (str(scale_factor) +
+            ' * 2 * (dr_previous_PromptLike < 5000)'))
+    outfile.Write()
     datafile.Close()
 
 

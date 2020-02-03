@@ -9,6 +9,8 @@ import time
 import argparse
 import logging
 import math
+import os.path
+import json
 
 from ROOT import TFile, TTree
 from common import *
@@ -44,6 +46,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.detector = int_value(buffer_depth)
     fill_buf.dt_to_prompt = long_value(buffer_depth)
     fill_buf.dr_to_prompt = float_value(buffer_depth)
+    fill_buf.dt_cluster_to_prev_ADevent = long_value()
     fill_buf.site = int_value()
     fill_buf.run = unsigned_int_value()
     fill_buf.fileno = unsigned_int_value()
@@ -62,20 +65,9 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.z = float_value(buffer_depth)
     fill_buf.fID = float_value(buffer_depth)
     fill_buf.fPSD = float_value(buffer_depth)
-    fill_buf.tag_flasher = unsigned_int_value(buffer_depth)
-    fill_buf.tag_WSMuon = unsigned_int_value()
-    fill_buf.tag_ADMuon = unsigned_int_value(buffer_depth)
-    fill_buf.tag_ShowerMuon = unsigned_int_value(buffer_depth)
-    fill_buf.tag_WSMuonVeto = unsigned_int_value(buffer_depth)
-    fill_buf.tag_ADMuonVeto = unsigned_int_value(buffer_depth)
-    fill_buf.tag_ShowerMuonVeto = unsigned_int_value(buffer_depth)
-    fill_buf.tag_AnyMuonVeto = unsigned_int_value(buffer_depth)
     fill_buf.dt_previous_WSMuon = long_value(buffer_depth)
-    fill_buf.nHit_previous_WSMuon = int_value(buffer_depth)
     fill_buf.dt_previous_ADMuon = long_value(buffer_depth)
-    fill_buf.charge_previous_ADMuon = float_value(buffer_depth)
     fill_buf.dt_previous_ShowerMuon = long_value(buffer_depth)
-    fill_buf.charge_previous_ShowerMuon = float_value(buffer_depth)
 
     def branch_multiple(name, typecode):
         outdata.Branch(name, getattr(fill_buf, name), '{}[multiplicity]/{}'.format(
@@ -96,6 +88,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('detector', 'I')
     branch_multiple('dt_to_prompt', 'L')
     branch_multiple('dr_to_prompt', 'F')
+    branch('dt_cluster_to_prev_ADevent', 'L')
     branch('site', 'I')
     branch('run', 'i')
     branch('fileno', 'i')
@@ -114,63 +107,124 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('z', 'F')
     branch_multiple('fID', 'F')
     branch_multiple('fPSD', 'F')
-    branch_multiple('tag_flasher', 'i')
-    branch_multiple('tag_WSMuon', 'i')
-    branch_multiple('tag_ADMuon', 'i')
-    branch_multiple('tag_ShowerMuon', 'i')
-    branch_multiple('tag_WSMuonVeto', 'i')
-    branch_multiple('tag_ADMuonVeto', 'i')
-    branch_multiple('tag_ShowerMuonVeto', 'i')
-    branch_multiple('tag_AnyMuonVeto', 'i')
     branch_multiple('dt_previous_WSMuon', 'L')
-    branch_multiple('nHit_previous_WSMuon', 'L')
     branch_multiple('dt_previous_ADMuon', 'L')
-    branch_multiple('charge_previous_ADMuon', 'F')
     branch_multiple('dt_previous_ShowerMuon', 'L')
-    branch_multiple('charge_previous_ShowerMuon', 'F')
     return outdata, fill_buf
 
 def isValidTriggerType(triggerType):
     return (triggerType & 0x1100) > 0
 
+def isValidEvent(indata, fill_buf, index, last_WSMuon_timestamp,
+        last_ADMuon_timestamp, last_ShowerMuon_timestamp):
+    if not isValidTriggerType(indata.triggerType):
+        return (False, ['trigger: {}'.format(indata.triggerType)])
+    if indata.detector not in (1, 5, 6):
+        return (False, ['detector'])
+    if not(indata.tag_flasher == 0 or indata.tag_flasher == 2):
+        return (False, ['flasher'])
+    reasons = []
+    if muons.isWSMuon_nH(indata.detector, indata.nHit, indata.triggerType):
+        reasons.append('wsmuon')
+    if muons.isADMuon_nH(indata.detector, indata.energy):
+        reasons.append('admuon')
+    if muons.isShowerMuon_nH(indata.detector, indata.energy):
+        reasons.append('showermuon')
+    isAnyMuonVeto = assign_muons(indata, fill_buf, index,
+            last_WSMuon_timestamp, last_ADMuon_timestamp,
+            last_ShowerMuon_timestamp)
+    if isAnyMuonVeto:
+        reasons.append('anymuonveto')
+    detector = indata.detector
+    energy = indata.energy
+    if not isADEvent_THU(detector, energy):
+        reasons.append('not_adevent')
+    return (len(reasons) == 0, reasons)
+
+class TimeTracker:
+    def __init__(self, start_time, pre_veto):
+        self.total_good_time = 0
+        self.total_vetoed_time = 0
+        self.end_of_veto_window = start_time
+        self.last_event_tracked = start_time
+        self.pre_veto = pre_veto
+
+    def __repr__(self):
+        return 'Good: {}, Vetoed: {}, Now: {}, Window end: {}'.format(
+                self.total_good_time, self.total_vetoed_time,
+                self.last_event_tracked, self.end_of_veto_window)
+
+    def export(self):
+        total_time = self.total_good_time + self.total_vetoed_time
+        return {
+                'usable_livetime': self.total_good_time,
+                'vetoed_livetime': self.total_vetoed_time,
+                'daq_livetime': total_time,
+                'good_fraction': self.total_good_time/total_time,
+                }
+
+    def log_new_veto(self, timestamp, veto_length):
+        pre_veto = self.pre_veto
+        potential_new_end = timestamp + veto_length
+        # If already in a veto window
+        if timestamp - pre_veto < self.end_of_veto_window:
+            new_time = timestamp - self.last_event_tracked
+            self.total_vetoed_time += new_time
+            if potential_new_end < self.end_of_veto_window:
+                pass
+            else:
+                self.end_of_veto_window = potential_new_end
+        else:
+            dt_last_event_to_window_end = (self.end_of_veto_window
+                    - self.last_event_tracked)
+            dt_window_end_to_pre_veto = (timestamp - self.end_of_veto_window -
+                    pre_veto)
+            dt_pre_veto_to_now = pre_veto
+            self.total_vetoed_time += dt_last_event_to_window_end
+            self.total_vetoed_time += dt_pre_veto_to_now
+            self.total_good_time += dt_window_end_to_pre_veto
+            self.end_of_veto_window = potential_new_end
+        self.last_event_tracked = timestamp
+        return
+
+
+def log_WSMuon(tracker, timestamp):
+    tracker.log_new_veto(timestamp, muons._NH_WSMUON_VETO_LAST_NS)
+    return
+
+def log_ADMuon(tracker, timestamp):
+    tracker.log_new_veto(timestamp, muons._NH_ADMUON_VETO_LAST_NS)
+    return
+
+def log_ShowerMuon(tracker, timestamp):
+    tracker.log_new_veto(timestamp, muons._NH_SHOWER_MUON_VETO_LAST_NS)
+    return
+
 def main_loop(indata, outdata, fill_buf, debug, limit):
+    indata.GetEntry(0)
+    time_tracker = TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX)
     loopIndex = 0
     last_WSMuon_timestamp = 0
     last_ADMuon_timestamp = 0
     last_ShowerMuon_timestamp = 0
+    last_ADevent_timestamp = 0
     while loopIndex < limit:
         indata.GetEntry(loopIndex)
-        if not isValidTriggerType(indata.triggerType):
-            loopIndex += 1
-            continue
-        if indata.detector not in (1, 5, 6):
-            loopIndex += 1
-            continue
-        if not(indata.tag_flasher == 0 or indata.tag_flasher == 2):
-            loopIndex += 1
-            continue
-        isWSMuon = False
-        isADMuon = False
-        isShowerMuon = False
-        if muons.isWSMuon_nH(indata.detector, indata.nHit, indata.triggerType):
-            last_WSMuon_timestamp = indata.timestamp
-            isWSMuon = True
-        if muons.isADMuon_nH(indata.detector, indata.energy):
-            last_ADMuon_timestamp = indata.timestamp
-            isADMuon = True
-        if muons.isShowerMuon_nH(indata.detector, indata.energy):
-            last_ShowerMuon_timestamp = indata.timestamp
-            isShowerMuon = True
-        isAnyMuonVeto = assign_muons(indata, fill_buf, 0,
+        isValid, reasons = isValidEvent(indata, fill_buf, 0,
                 last_WSMuon_timestamp, last_ADMuon_timestamp,
-                last_ShowerMuon_timestamp,
-                isWSMuon, isADMuon, isShowerMuon)
-        if isAnyMuonVeto:
-            loopIndex += 1
-            continue
-        detector = indata.detector
-        energy = indata.energy
-        if not isADEvent_THU(detector, energy):
+                last_ShowerMuon_timestamp)
+        if not isValid:
+            if 'wsmuon' in reasons:
+                last_WSMuon_timestamp = indata.timestamp
+                log_WSMuon(time_tracker, indata.timestamp)
+            if 'admuon' in reasons:
+                last_ADMuon_timestamp = indata.timestamp
+                log_ADMuon(time_tracker, indata.timestamp)
+            if 'showermuon' in reasons:
+                last_ShowerMuon_timestamp = indata.timestamp
+                log_ShowerMuon(time_tracker, indata.timestamp)
+            if any('muon' in r for r in reasons) and 'not_adevent' not in reasons:
+                last_ADevent_timestamp = indata.timestamp
             loopIndex += 1
             continue
         prompt_timestamp = indata.timestamp
@@ -178,6 +232,9 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
         prompt_y = indata.y
         prompt_z = indata.z
         multiplicity = 1
+        assign_value(fill_buf.dt_cluster_to_prev_ADevent, indata.timestamp -
+                last_ADevent_timestamp)
+        last_ADevent_timestamp = indata.timestamp
         assign_value(fill_buf.site, indata.site)
         assign_value(fill_buf.run, indata.run)
         assign_value(fill_buf.fileno, indata.fileno)
@@ -188,18 +245,40 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
         loopIndex += 1
         if loopIndex == limit:
             break
+        muonVeto = False
         indata.GetEntry(loopIndex)
         while indata.timestamp - prompt_timestamp < 400e3:
-            if not (isValidTriggerType(indata.triggerType)
-                    and indata.detector == 1
-                    and isADEvent_THU(indata.detector, indata.energy)):
+            if multiplicity == 10:
+                print('multiplicity overflow')
+                multiplicity -= 1
+            isValid, reasons = isValidEvent(indata, fill_buf, multiplicity,
+                    last_WSMuon_timestamp, last_ADMuon_timestamp,
+                    last_ShowerMuon_timestamp)
+            if not isValid:
+                if 'wsmuon' in reasons:
+                    last_WSMuon_timestamp = indata.timestamp
+                    log_WSMuon(time_tracker, indata.timestamp)
+                    muonVeto = True
+                if 'admuon' in reasons:
+                    last_ADMuon_timestamp = indata.timestamp
+                    log_ADMuon(time_tracker, indata.timestamp)
+                    muonVeto = True
+                if 'showermuon' in reasons:
+                    last_ShowerMuon_timestamp = indata.timestamp
+                    log_ShowerMuon(time_tracker, indata.timestamp)
+                    muonVeto = True
+                if (any('muon' in r for r in reasons)
+                        and 'not_adevent' not in reasons):
+                    last_ADevent_timestamp = indata.timestamp
                 loopIndex += 1
-                if loopIndex == limit:
+                if muonVeto or loopIndex == limit:
                     break
-                indata.GetEntry(loopIndex)
-                continue
+                else:
+                    indata.GetEntry(loopIndex)
+                    continue
             logging.debug('  Inner loop: %d', loopIndex)
             multiplicity += 1
+            last_ADevent_timestamp = indata.timestamp
             assign_event(indata, fill_buf, multiplicity-1)
             assign_value(fill_buf.dt_to_prompt,
                     indata.timestamp - prompt_timestamp,
@@ -216,8 +295,9 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
                 break
             indata.GetEntry(loopIndex)
         assign_value(fill_buf.multiplicity, multiplicity)
-        logging.debug(fill_buf.multiplicity)
-        outdata.Fill()
+        if not muonVeto:
+            outdata.Fill()
+    return time_tracker
 
 
 
@@ -245,21 +325,20 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'z')
 
 def assign_muons(source, buf, index, time_last_WSMuon, time_last_ADMuon,
-        time_last_ShowerMuon, isWSMuon, isADMuon, isShowerMuon):
-    assign_value(buf.tag_WSMuon, isWSMuon)
-    assign_value(buf.tag_ADMuon, isADMuon)
-    assign_value(buf.tag_ShowerMuon, isShowerMuon)
+        time_last_ShowerMuon):
+    dt_previous_WSMuon = source.timestamp - time_last_WSMuon
+    assign_value(buf.dt_previous_WSMuon, dt_previous_WSMuon, index)
     isWSMuonVeto = muons.isVetoedByWSMuon_nH(source.timestamp -
             time_last_WSMuon)
+    dt_previous_ADMuon = source.timestamp - time_last_ADMuon
+    assign_value(buf.dt_previous_ADMuon, dt_previous_ADMuon, index)
     isADMuonVeto = muons.isVetoedByADMuon_nH(source.timestamp -
             time_last_ADMuon)
+    dt_previous_ShowerMuon = source.timestamp - time_last_ShowerMuon
+    assign_value(buf.dt_previous_ShowerMuon, dt_previous_ShowerMuon, index)
     isShowerMuonVeto = muons.isVetoedByShowerMuon_nH(source.timestamp -
             time_last_ShowerMuon)
     isAnyMuonVeto = isWSMuonVeto or isADMuonVeto or isShowerMuonVeto
-    assign_value(buf.tag_WSMuonVeto, isWSMuonVeto)
-    assign_value(buf.tag_ADMuonVeto, isADMuonVeto)
-    assign_value(buf.tag_ShowerMuonVeto, isShowerMuonVeto)
-    assign_value(buf.tag_AnyMuonVeto, isAnyMuonVeto)
     return isAnyMuonVeto
 
 def prepare_indata_branches(indata):
@@ -289,12 +368,12 @@ def prepare_indata_branches(indata):
     indata.SetBranchStatus('tag_flasher', 1)
 
 
-def main(entries, infile, outfile, debug):
+def main(entries, infile, outfilename, debug):
 
     infile = TFile(infile, 'READ')
     indata = infile.Get('computed')
     prepare_indata_branches(indata)
-    outfile = TFile(outfile, 'RECREATE')
+    outfile = TFile(outfilename, 'RECREATE')
     ttree_name = 'ad_events'
     ttree_description = 'AD events (git: %s)'
     outdata, fill_buf = create_computed_TTree(ttree_name, outfile,
@@ -302,10 +381,12 @@ def main(entries, infile, outfile, debug):
 
     if entries == -1:
         entries = indata.GetEntries()
-    main_loop(indata, outdata, fill_buf, debug, entries)
+    tracker = main_loop(indata, outdata, fill_buf, debug, entries)
     outfile.Write()
     outfile.Close()
     infile.Close()
+    with open(os.path.splitext(outfilename)[0] + '.json', 'w') as f:
+        json.dump(tracker.export(), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

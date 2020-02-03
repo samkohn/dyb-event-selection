@@ -21,26 +21,6 @@ from adevent import isADEvent_THU
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value, git_describe)
 
-def done_with_cache(buf, selection_name):
-    '''
-    Test whether an event should be removed from the event cache, based
-    on whether certain values have been assigned to it.
-
-    '''
-    # An event is done if it is a flasher, or if not, then if the next
-    # WSMuon and the next delayed-like events have been processed. (If
-    # the event is not an AD event then the delayed-like event does not
-    # have to have been processed.)
-    found_next_WSMuon = buf.dt_next_WSMuon[0] != -1
-    detector = buf.detector[0]
-    found_next_DelayedLike = (selection_name == 'nh_THU'
-            or detector not in AD_DETECTORS
-            or buf.dt_next_DelayedLike[0] != -1)
-    found_next_ADevent = (buf.dt_next_ADevent[0] != -1
-            or detector not in AD_DETECTORS
-            or selection_name != 'nh_THU')
-    return found_next_WSMuon and found_next_DelayedLike and found_next_ADevent
-
 def create_computed_TTree(name, host_file, selection_name, title=None):
     git_description = git_describe()
     if title is None:
@@ -281,45 +261,6 @@ def assign_muons(source, buf, index, time_last_WSMuon, time_last_ADMuon,
     assign_value(buf.tag_ShowerMuonVeto, isShowerMuonVeto)
     assign_value(buf.tag_AnyMuonVeto, isAnyMuonVeto)
     return isAnyMuonVeto
-
-class ProcessHelper(object):
-    def __init__(self, selection_name):
-        self.MUON_COUNT_TIME = 5*10**9  # 5 seconds, in nanoseconds
-        if 'nh' in selection_name:
-            self.PROMPT_COUNT_TIME = int(800e3)
-        else:
-            self.PROMPT_COUNT_TIME = int(400e3)  # 400 us, in nanoseconds
-        self.run = 0
-        self.fileno = 0
-        # Initialize the machinery for dt_next_* and dt_previous_*
-        # attributes. The event_cache stores the TreeBuffer for each event
-        # until the next WSMuon and next DelayedLike have been found, thus
-        # preserving the event order between the input and output TTrees.
-        self.event_cache = deque()
-        self.first_index_without_next_WSMuon = 0
-        self.go_through_whole_cache_WSMuon = True
-        self.go_through_whole_cache_ADevent = True
-        self.last_WSMuon_time = 0
-        self.last_WSMuon_nHit = 0
-        self.last_ADMuon_time = {n:0 for n in range(9)}
-        self.last_ADMuon_charge = {n:0 for n in range(9)}
-        self.last_ShowerMuon_time = {n:0 for n in range(9)}
-        self.last_ShowerMuon_charge = {n:0 for n in range(9)}
-        self.recent_shower_muons = {n:deque() for n in range(9)}
-        self.last_PromptLike_time = {n:-1 for n in range(9)}
-        self.last_PromptLike_energy = {n:-1 for n in range(9)}
-        self.last_PromptLike_muonVeto = {n: False for n in range(9)}
-        self.last_PromptLike_x = {n:0 for n in range(9)}
-        self.last_PromptLike_y = {n:0 for n in range(9)}
-        self.last_PromptLike_z = {n:0 for n in range(9)}
-        self.recent_promptlikes = {n:deque([], 100) for n in range(9)}
-        self.coincidence_window_start = {n:0 for n in range(9)}
-        if selection_name == 'nh_THU':
-            # Keep track of all recent ADevents (within a fixed time delay) even though the nh_THU
-            # selection requires ignoring any recent ADevents that occur within
-            # a previous coincidence window (e.g. t0, t0 + 300us <--- ignored
-            # by t0+500us)
-            self.recent_ADevents_all = {n:deque([], 100) for n in range(9)}
 
 def prepare_indata_branches(indata):
     indata.SetBranchStatus('*', 0)

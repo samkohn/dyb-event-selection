@@ -7,8 +7,6 @@ import argparse
 import os
 import subprocess
 
-from ROOT import TTree, TFile, TChain
-
 def git_describe(directory=None):
     if directory is None:
         directory = os.path.dirname(__file__)
@@ -76,10 +74,11 @@ def float_value(length=1):
     return array('f', [0]*length)
 
 def fetch_value(ttree, branch_name, type_cast=None):
-    try:
+    branch_object = ttree.GetBranch(branch_name)
+    if 'TBranchElement' in str(type(branch_object)):
+        new_value = type_cast(branch_object.GetValue(0, 0))
+    else:
         new_value = type_cast(getattr(ttree, branch_name))
-    except TypeError:
-        new_value = fetch_annoying_value(ttree, branch_name, type_cast)
     return new_value
 
 def assign_value(buf_value, new_value, index=0):
@@ -89,6 +88,7 @@ def fetch_annoying_value(ttree, branch_name, type_cast):
     return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
 def main(filenames, nevents):
+    from ROOT import TFile
     if len(filenames) == 0:
         filenames = [
                 "/project/projectdirs/dayabay/data/exp/dayabay/2015/p15a/Neutrino/0126/recon.Neutrino.0050958.Physics.EH1-Merged.P15A-P._0001.root",
@@ -118,6 +118,7 @@ def main(filenames, nevents):
     outfile.Close()
 
 def initialize_indata(filenames):
+    from ROOT import TChain
     calibStats = TChain('/Event/Data/CalibStats')
     adSimple = TChain('/Event/Rec/AdSimple')
     for filename in filenames:
@@ -150,6 +151,7 @@ def initialize_indata(filenames):
     return calibStats, adSimple
 
 def create_data_TTree(host_file):
+    from ROOT import TTree
     host_file.cd()
     git_description = git_describe()
     outdata = TTree('raw_data', 'Daya Bay Data by Sam Kohn (git: %s)' %

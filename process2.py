@@ -9,10 +9,10 @@ import time
 import argparse
 import logging
 import math
+import os
 import os.path
 import json
 
-from ROOT import TFile, TTree
 from common import *
 from flashers import fID, fPSD
 import flashers
@@ -21,9 +21,12 @@ import prompts
 import delayeds
 from adevent import isADEvent_THU
 from translate import (TreeBuffer, float_value, assign_value,
-        fetch_value, int_value, unsigned_int_value, long_value, git_describe)
+        fetch_value, int_value, unsigned_int_value, long_value, git_describe,
+        create_data_TTree, copy as raw_copy, initialize_indata as
+        raw_initialize)
 
 def create_computed_TTree(name, host_file, selection_name, title=None):
+    from ROOT import TTree
     git_description = git_describe()
     if title is None:
         title = ('Computed quantities by Sam Kohn (git: %s)' %
@@ -105,8 +108,6 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('x', 'F')
     branch_multiple('y', 'F')
     branch_multiple('z', 'F')
-    branch_multiple('fID', 'F')
-    branch_multiple('fPSD', 'F')
     branch_multiple('dt_previous_WSMuon', 'L')
     branch_multiple('dt_previous_ADMuon', 'L')
     branch_multiple('dt_previous_ShowerMuon', 'L')
@@ -121,7 +122,11 @@ def isValidEvent(indata, fill_buf, index, last_WSMuon_timestamp,
         return (False, ['trigger: {}'.format(indata.triggerType)])
     if indata.detector not in (1, 5, 6):
         return (False, ['detector'])
-    if not(indata.tag_flasher == 0 or indata.tag_flasher == 2):
+    event_fID = fID(indata.fMax, indata.fQuad)
+    event_fPSD = None
+    isFlasher = flashers.isFlasher_nH(event_fID, event_fPSD,
+            indata.f2inch_maxQ, indata.detector)
+    if int(isFlasher) != 0:
         return (False, ['flasher'])
     reasons = []
     if muons.isWSMuon_nH(indata.detector, indata.nHit, indata.triggerType):
@@ -148,11 +153,16 @@ class TimeTracker:
         self.end_of_veto_window = start_time
         self.last_event_tracked = start_time
         self.pre_veto = pre_veto
+        self.start_time = start_time
+        self.closed = False
 
     def __repr__(self):
-        return 'Good: {}, Vetoed: {}, Now: {}, Window end: {}'.format(
+        total_time = self.last_event_tracked - self.start_time
+        return 'Good: {}, Vetoed: {}, Now: {}, Window end: {}, Efficiency: {:.3}'.format(
                 self.total_good_time, self.total_vetoed_time,
-                self.last_event_tracked, self.end_of_veto_window)
+                self.last_event_tracked-self.start_time,
+                self.end_of_veto_window-self.start_time,
+                self.total_good_time/total_time)
 
     def export(self):
         total_time = self.total_good_time + self.total_vetoed_time
@@ -161,9 +171,26 @@ class TimeTracker:
                 'vetoed_livetime': self.total_vetoed_time,
                 'daq_livetime': total_time,
                 'good_fraction': self.total_good_time/total_time,
-                }
+        }
+
+    def close(self, end_time):
+        if self.closed:
+            raise ValueError('Already closed out. Cannot close twice!')
+        if end_time < self.end_of_veto_window:
+            self.total_vetoed_time += end_time - self.last_event_tracked
+        else:
+            dt_last_event_to_window_end = (self.end_of_veto_window
+                    - self.last_event_tracked)
+            dt_window_end_to_now = end_time - self.end_of_veto_window
+            self.total_vetoed_time += dt_last_event_to_window_end
+            self.total_good_time += dt_window_end_to_now
+        self.closed = True
+        return
+
 
     def log_new_veto(self, timestamp, veto_length):
+        if self.closed:
+            raise ValueError('Cannot log new veto after being closed out.')
         pre_veto = self.pre_veto
         potential_new_end = timestamp + veto_length
         # If already in a veto window
@@ -199,6 +226,36 @@ def log_ADMuon(tracker, timestamp):
 def log_ShowerMuon(tracker, timestamp):
     tracker.log_new_veto(timestamp, muons._NH_SHOWER_MUON_VETO_LAST_NS)
     return
+
+class RawFileAdapter():
+    def __init__(self, calibStats, adSimple, run, fileno):
+        from ROOT import TFile
+        self.calibStats = calibStats
+        self.adSimple = adSimple
+        self.run = run
+        self.fileno = fileno
+        dummy_outfile = TFile('tmp.root', 'RECREATE')
+        _, self.buf = create_data_TTree(dummy_outfile)
+        dummy_outfile.Close()
+        os.remove('tmp.root')
+
+    def GetEntry(self, index):
+        self.calibStats.LoadTree(index)
+        self.calibStats.GetEntry(index)
+        self.adSimple.LoadTree(index)
+        self.adSimple.GetEntry(index)
+        raw_copy(self.buf, self.calibStats, self.adSimple, self.run,
+                self.fileno)
+
+    def GetEntries(self):
+        return self.calibStats.GetEntries()
+
+    def __getattr__(self, name):
+        attr_array = getattr(self.buf, name)
+        return attr_array[0]
+
+    def SetBranchStatus(self, *args):
+        return
 
 def main_loop(indata, outdata, fill_buf, debug, limit):
     indata.GetEntry(0)
@@ -297,6 +354,7 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
         assign_value(fill_buf.multiplicity, multiplicity)
         if not muonVeto:
             outdata.Fill()
+    time_tracker.close(indata.timestamp)
     return time_tracker
 
 
@@ -368,10 +426,16 @@ def prepare_indata_branches(indata):
     indata.SetBranchStatus('tag_flasher', 1)
 
 
-def main(entries, infile, outfilename, debug):
+def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
+    from ROOT import TFile
 
-    infile = TFile(infile, 'READ')
-    indata = infile.Get('computed')
+    run, fileno = runfile
+    if is_partially_processed:
+        infile = TFile(infile, 'READ')
+        indata = infile.Get('computed')
+    else:
+        calibStats, adSimple = raw_initialize([infile])
+        indata = RawFileAdapter(calibStats, adSimple, run, fileno)
     prepare_indata_branches(indata)
     outfile = TFile(outfilename, 'RECREATE')
     ttree_name = 'ad_events'
@@ -384,7 +448,8 @@ def main(entries, infile, outfilename, debug):
     tracker = main_loop(indata, outdata, fill_buf, debug, entries)
     outfile.Write()
     outfile.Close()
-    infile.Close()
+    if is_partially_processed:
+        infile.Close()
     with open(os.path.splitext(outfilename)[0] + '.json', 'w') as f:
         json.dump(tracker.export(), f)
 
@@ -394,7 +459,10 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', help='Output file name')
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--events', type=int, default=-1)
+    parser.add_argument('--new', action='store_true')
+    parser.add_argument('-r', '--runfile', type=int, nargs=2,
+        help='<run> <fileno>')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.input, args.output, args.debug)
+    main(args.events, args.input, args.output, args.runfile, args.new, args.debug)

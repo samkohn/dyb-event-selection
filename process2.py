@@ -126,9 +126,13 @@ def isValidEvent(indata, fill_buf, index, last_WSMuon_timestamp,
     event_fPSD = None
     isFlasher = flashers.isFlasher_nH(event_fID, event_fPSD,
             indata.f2inch_maxQ, indata.detector)
-    if int(isFlasher) != 0:
-        return (False, ['flasher'])
     reasons = []
+    if isFlasher == 1:
+        reasons.append('flasher')
+        reasons.append('8-inch flasher')
+    elif isFlasher == 4:
+        reasons.append('flasher')
+        reasons.append('2-inch flasher')
     if muons.isWSMuon_nH(indata.detector, indata.nHit, indata.triggerType):
         reasons.append('wsmuon')
     if muons.isADMuon_nH(indata.detector, indata.energy):

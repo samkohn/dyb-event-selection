@@ -13,7 +13,7 @@ os.chdir(outdir)
 
 context = zmq.Context()
 worker = context.socket(zmq.REQ)
-worker.setsockopt(zmq.RCVTIMEO, 10000)
+worker.setsockopt(zmq.RCVTIMEO, 25000)
 worker.connect('tcp://0.0.0.0:52837')
 print('connected')
 

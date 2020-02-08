@@ -12,6 +12,7 @@ import math
 import os
 import os.path
 import json
+import random
 
 from common import *
 from flashers import fID, fPSD
@@ -238,10 +239,11 @@ class RawFileAdapter():
         self.adSimple = adSimple
         self.run = run
         self.fileno = fileno
-        dummy_outfile = TFile('tmp.root', 'RECREATE')
+        random_name = 'tmp{}.root'.format(random.randrange(100000))
+        dummy_outfile = TFile(random_name, 'RECREATE')
         _, self.buf = create_data_TTree(dummy_outfile)
         dummy_outfile.Close()
-        os.remove('tmp.root')
+        os.remove(random_name)
 
     def GetEntry(self, index):
         self.calibStats.LoadTree(index)

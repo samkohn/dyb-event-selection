@@ -19,14 +19,14 @@ def is_single(ttree_event):
             and ttree_event.dt_cluster_to_prev_ADevent > 400e3)
 
 def main(infilename, outfile, AD, ttree_name):
-    import process2
+    import process
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     infile2 = ROOT.TFile(infilename, 'READ')
     outfile = ROOT.TFile(outfile, 'RECREATE')
-    acc, acc_buf = process2.create_computed_TTree('accidentals', outfile,
+    acc, acc_buf = process.create_computed_TTree('accidentals', outfile,
             'nh_THU', 'Accidentals sample (git: %s)')
-    all_acc, all_acc_buf = process2.create_computed_TTree('all_pairs',
+    all_acc, all_acc_buf = process.create_computed_TTree('all_pairs',
             outfile, 'nh_THU', 'All paired singles (git: %s)')
     outfile.cd()
     acc_spectrum_hist = ROOT.TH2F('acc_spectrum', 'acc_spectrum',

@@ -16,7 +16,7 @@ def coinc_rate(rs, rmu, tc):
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 
-def main(datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
+def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
     import ROOT
     if acc_rate is None:
         base_rate = coinc_rate(rs, rmu, 0.0004)
@@ -34,7 +34,7 @@ def main(datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
     distance_fails = accfile.Get('distance_cut_fails')
     eps_distance = num_acc_events/(
             distance_fails.GetEntries() + num_acc_events)
-    outfile = ROOT.TFile('acc_spectrum_test22011.root', 'RECREATE')
+    outfile = ROOT.TFile(outfilename, 'RECREATE')
     final_spectrum = ROOT.TH2F('final', 'final', 210, 1.5, 12, 210, 1.5, 12)
     datafile.cd()
     final_spectrum.Add(raw_spectrum, acc_spectrum, 1,
@@ -80,6 +80,7 @@ if __name__ == '__main__':
     parser.add_argument('database')
     parser.add_argument('ad', type=int, choices=[1, 2, 3, 4])
     parser.add_argument('--override-acc-rate', type=float, default=None)
+    parser.add_argument('-o', '--output')
     args = parser.parse_args()
 
     with open(os.path.splitext(args.datafile)[0] + '.json', 'r') as f:
@@ -97,5 +98,5 @@ if __name__ == '__main__':
         #muon_rate, = c.fetchone()
         muon_rate = 214
 
-    main(args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
+    main(args.output, args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
             args.override_acc_rate)

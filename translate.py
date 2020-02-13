@@ -73,7 +73,7 @@ def unsigned_int_value(length=1):
 def float_value(length=1):
     return array('f', [0]*length)
 
-def fetch_value(ttree, branch_name, type_cast=None):
+def fetch_value(ttree, branch_name, type_cast):
     branch_object = ttree.GetBranch(branch_name)
     if 'TBranchElement' in str(type(branch_object)):
         new_value = type_cast(branch_object.GetValue(0, 0))
@@ -116,6 +116,36 @@ def main(filenames, nevents):
 
     outfile.Write()
     outfile.Close()
+
+def initialize_indata_onefile(tfile_object):
+    calibStats = tfile_object.Get('/Event/Data/CalibStats')
+    adSimple = tfile_object.Get('/Event/Rec/AdSimple')
+
+    activeBranches = {
+            calibStats: [
+                'triggerNumber',
+                'context.mTimeStamp.mSec',
+                'context.mTimeStamp.mNanoSec',
+                'context.mDetId',
+                'nHit',
+                'NominalCharge',
+                'Quadrant',
+                'MaxQ',
+                'time_PSD',
+                'time_PSD1',
+                'MaxQ_2inchPMT',
+            ],
+            adSimple: [
+                'triggerType',
+                'energy',
+                'x', 'y', 'z',
+            ]
+    }
+    for ttree, branch_names in activeBranches.items():
+        ttree.SetBranchStatus('*', 0)
+        for branch_name in branch_names:
+            ttree.SetBranchStatus(branch_name, 1)
+    return calibStats, adSimple
 
 def initialize_indata(filenames):
     from ROOT import TChain
@@ -206,7 +236,7 @@ def create_data_TTree(host_file):
 
 
 
-def copy(buf, calibStats, adSimple, run, fileno):
+def copy(buf, calibStats, adSimple, run, fileno, site):
     assign_value(buf.run, run)
     assign_value(buf.fileno, fileno)
     assign_value(buf.triggerNumber, fetch_value(calibStats,
@@ -219,8 +249,7 @@ def copy(buf, calibStats, adSimple, run, fileno):
             buf.timestamp_nanoseconds[0])
     assign_value(buf.detector, fetch_value(calibStats,
         'context.mDetId', int))
-    assign_value(buf.site, fetch_value(adSimple, 'context.mSite',
-        int))
+    assign_value(buf.site, site)
     assign_value(buf.triggerType, fetch_value(adSimple,
         'triggerType', int))
     assign_value(buf.nHit, fetch_value(calibStats, 'nHit', int))

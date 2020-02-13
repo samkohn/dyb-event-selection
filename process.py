@@ -23,7 +23,7 @@ import delayeds
 from adevent import isADEvent_THU
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value, git_describe,
-        create_data_TTree, copy as raw_copy, initialize_indata as
+        create_data_TTree, copy as raw_copy, initialize_indata_onefile as
         raw_initialize)
 
 def create_computed_TTree(name, host_file, selection_name, title=None):
@@ -239,6 +239,14 @@ class RawFileAdapter():
         self.adSimple = adSimple
         self.run = run
         self.fileno = fileno
+        # Hack to extract site number
+        old_status = self.adSimple.GetBranchStatus('context.mSite')
+        if int(old_status) == 0:
+            self.adSimple.SetBranchStatus('context.mSite', 1)
+        self.adSimple.GetEntry(0)
+        self.site = fetch_value(self.adSimple, 'context.mSite', int)
+        self.adSimple.SetBranchStatus('context.mSite', int(old_status))
+        # End hack
         random_name = 'tmp{}.root'.format(random.randrange(100000))
         dummy_outfile = TFile(random_name, 'RECREATE')
         _, self.buf = create_data_TTree(dummy_outfile)
@@ -246,12 +254,10 @@ class RawFileAdapter():
         os.remove(random_name)
 
     def GetEntry(self, index):
-        self.calibStats.LoadTree(index)
         self.calibStats.GetEntry(index)
-        self.adSimple.LoadTree(index)
         self.adSimple.GetEntry(index)
         raw_copy(self.buf, self.calibStats, self.adSimple, self.run,
-                self.fileno)
+                self.fileno, self.site)
 
     def GetEntries(self):
         return self.calibStats.GetEntries()
@@ -440,7 +446,8 @@ def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
         infile = TFile(infile, 'READ')
         indata = infile.Get('computed')
     else:
-        calibStats, adSimple = raw_initialize([infile])
+        infile = TFile(infile, 'READ')
+        calibStats, adSimple = raw_initialize(infile)
         indata = RawFileAdapter(calibStats, adSimple, run, fileno)
     prepare_indata_branches(indata)
     outfile = TFile(outfilename, 'RECREATE')
@@ -455,6 +462,8 @@ def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
     outfile.Write()
     outfile.Close()
     if is_partially_processed:
+        infile.Close()
+    else:
         infile.Close()
     with open(os.path.splitext(outfilename)[0] + '.json', 'w') as f:
         json.dump(tracker.export(), f)

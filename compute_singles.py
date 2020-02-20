@@ -23,6 +23,7 @@ def main(filename, update_db):
     ch.GetEntry(0)
     runNo = ch.run
     site = ch.site
+    start_time = ch.timestamp[0]
     for AD in [ad]:
         upper = ch.Draw('energy', 'detector == {}'.format(AD), 'goff')
         lower = ch.Draw('energy', ('detector == {} && multiplicity =='
@@ -43,6 +44,11 @@ def main(filename, update_db):
         if counts > 0:
             print('Pct:', error/counts)
         if update_db:
+            cursor.execute('SELECT COUNT(*) FROM runs WHERE RunNo = ?',
+                    (runNo,))
+            if cursor.fetchone()[0] == 0:
+                cursor.execute('INSERT INTO runs VALUES (?, ?, ?)',
+                        (runNo, site, start_time))
             cursor.execute('INSERT OR REPLACE INTO singles_rates '
                     'VALUES (?, ?, ?, ?, ?, ?, ?)',
                     (runNo, AD, int(counts), livetime, rate, error,

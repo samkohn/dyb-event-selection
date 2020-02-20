@@ -48,7 +48,7 @@ def main(run, files, site):
     with open('out_%d.json' % run, 'w') as f:
         json.dump(aggregated, f)
 
-def main2(run, files, site):
+def main2(run, files, site, outfile):
     daq_livetime = 0
     usable_livetime = 0
     for filename in files:
@@ -56,7 +56,7 @@ def main2(run, files, site):
             results = json.load(f)
         daq_livetime += results['daq_livetime']
         usable_livetime += results['usable_livetime']
-    with open('out_{}.json'.format(run), 'w') as f:
+    with open(outfile, 'w') as f:
         json.dump({
             'run': run,
             'site': site,
@@ -70,6 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('files', nargs='+')
     parser.add_argument('-r', '--run', type=int)
     parser.add_argument('--site', type=int)
+    parser.add_argument('-o', '--output')
     args = parser.parse_args()
-    main2(args.run, args.files, args.site)
+    main2(args.run, args.files, args.site, args.output)
 

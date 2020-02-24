@@ -13,6 +13,7 @@ import os
 import os.path
 import json
 import random
+from functools import lru_cache
 
 from common import *
 from flashers import fID, fPSD
@@ -233,41 +234,64 @@ def log_ShowerMuon(tracker, timestamp):
     return
 
 class RawFileAdapter():
-    def __init__(self, calibStats, adSimple, run, fileno):
+    ATTR_LOOKUP = {
+            'triggerNumber': ('triggerNumber', int),
+            'timestamp_seconds': ('context.mTimeStamp.mSec', int),
+            'timestamp_nanoseconds': ('context.mTimeStamp.mNanoSec',
+                int),
+            'detector': ('context.mDetId', int),
+            'nHit': ('nHit', int),
+            'charge': ('NominalCharge', float),
+            'fQuad': ('Quadrant', float),
+            'fMax': ('MaxQ', float),
+            'fPSD_t1': ('time_PSD', float),
+            'fPSD_t2': ('time_PSD1', float),
+            'f2inch_maxQ': ('MaxQ_2inchPMT', float),
+            'triggerType': ('triggerType', int),
+            'energy': ('energy', float),
+            'x': ('x', float),
+            'y': ('y', float),
+            'z': ('z', float),
+    }
+    def __init__(self, ttree_w_friend, run, fileno):
         from ROOT import TFile
-        self.calibStats = calibStats
-        self.adSimple = adSimple
+        self.ttree = ttree_w_friend
         self.run = run
         self.fileno = fileno
+        self.ttree.SetBranchStatus('execNumber', 1)
         # Hack to extract site number
-        old_status = self.adSimple.GetBranchStatus('context.mSite')
+        old_status = self.ttree.GetBranchStatus('context.mSite')
         if int(old_status) == 0:
-            self.adSimple.SetBranchStatus('context.mSite', 1)
-        self.adSimple.GetEntry(0)
-        self.site = fetch_value(self.adSimple, 'context.mSite', int)
-        self.adSimple.SetBranchStatus('context.mSite', int(old_status))
+            self.ttree.SetBranchStatus('context.mSite', 1)
+        self.ttree.GetEntry(0)
+        self.site = fetch_value(self.ttree, 'context.mSite', int)
+        self.ttree.SetBranchStatus('context.mSite', int(old_status))
         # End hack
-        random_name = 'tmp{}.root'.format(random.randrange(100000))
-        dummy_outfile = TFile(random_name, 'RECREATE')
-        _, self.buf = create_data_TTree(dummy_outfile)
-        dummy_outfile.Close()
-        os.remove(random_name)
 
     def GetEntry(self, index):
-        self.calibStats.GetEntry(index)
-        self.adSimple.GetEntry(index)
-        raw_copy(self.buf, self.calibStats, self.adSimple, self.run,
-                self.fileno, self.site)
+        self.ttree.GetEntry(index)
+        self.__getattr__.cache_clear()
 
     def GetEntries(self):
-        return self.calibStats.GetEntries()
+        return self.ttree.GetEntries()
 
+    def _timestamp(self):
+        sec = self.timestamp_seconds
+        nano = self.timestamp_nanoseconds
+        return sec*1000000000 + nano
+
+    @lru_cache(maxsize=32)
     def __getattr__(self, name):
-        attr_array = getattr(self.buf, name)
-        return attr_array[0]
+        if name == 'timestamp':
+            result = self._timestamp()
+            return result
+        attr_name = self.ATTR_LOOKUP.get(name, None)
+        if attr_name is None:
+            raise AttributeError('No attribute "{}"'.format(name))
+        return fetch_value(self.ttree, attr_name[0], attr_name[1])
 
     def SetBranchStatus(self, *args):
-        return
+        self.ttree.SetBranchStatus(*args)
 
 def main_loop(indata, outdata, fill_buf, debug, limit):
     indata.GetEntry(0)
@@ -445,11 +469,12 @@ def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
     if is_partially_processed:
         infile = TFile(infile, 'READ')
         indata = infile.Get('computed')
+        prepare_indata_branches(indata)
     else:
         infile = TFile(infile, 'READ')
         calibStats, adSimple = raw_initialize(infile)
-        indata = RawFileAdapter(calibStats, adSimple, run, fileno)
-    prepare_indata_branches(indata)
+        calibStats.AddFriend(adSimple)
+        indata = RawFileAdapter(calibStats, run, fileno)
     outfile = TFile(outfilename, 'RECREATE')
     ttree_name = 'ad_events'
     ttree_description = 'AD events (git: %s)'

@@ -118,12 +118,12 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
 def isValidTriggerType(triggerType):
     return (triggerType & 0x1100) > 0
 
-def isValidEvent(indata, fill_buf, index, last_WSMuon_timestamp,
+def isValidEvent(indata, last_WSMuon_timestamp,
         last_ADMuon_timestamp, last_ShowerMuon_timestamp):
     if not isValidTriggerType(indata.triggerType):
-        return (False, ['trigger: {}'.format(indata.triggerType)])
+        return (False, ['not_adevent', 'trigger: {}'.format(indata.triggerType)])
     if indata.detector not in (1, 5, 6):
-        return (False, ['detector'])
+        return (False, ['not_adevent', 'detector'])
     event_fID = fID(indata.fMax, indata.fQuad)
     event_fPSD = None
     isFlasher = flashers.isFlasher_nH(event_fID, event_fPSD,
@@ -137,15 +137,16 @@ def isValidEvent(indata, fill_buf, index, last_WSMuon_timestamp,
         reasons.append('2-inch flasher')
     if muons.isWSMuon_nH(indata.detector, indata.nHit, indata.triggerType):
         reasons.append('wsmuon')
+        reasons.append('anymuon')
     if muons.isADMuon_nH(indata.detector, indata.energy):
         reasons.append('admuon')
+        reasons.append('anymuon')
     if muons.isShowerMuon_nH(indata.detector, indata.energy):
         reasons.append('showermuon')
-    isAnyMuonVeto = assign_muons(indata, fill_buf, index,
-            last_WSMuon_timestamp, last_ADMuon_timestamp,
-            last_ShowerMuon_timestamp)
-    if isAnyMuonVeto:
-        reasons.append('anymuonveto')
+        reasons.append('anymuon')
+    muon_veto_list = isMuonVeto(indata, last_WSMuon_timestamp,
+            last_ADMuon_timestamp, last_ShowerMuon_timestamp)
+    reasons.extend(muon_veto_list)
     detector = indata.detector
     energy = indata.energy
     if not isADEvent_THU(detector, energy):
@@ -296,30 +297,43 @@ class RawFileAdapter():
     def SetBranchStatus(self, *args):
         self.ttree.SetBranchStatus(*args)
 
+def update_muons(timestamp, reasons, time_tracker, last_WSMuon, last_ADMuon,
+        last_ShowerMuon):
+    if 'wsmuon' in reasons:
+        last_WSMuon = timestamp
+        log_WSMuon(time_tracker, timestamp)
+    if 'admuon' in reasons:
+        last_ADMuon = timestamp
+        log_ADMuon(time_tracker, timestamp)
+    if 'showermuon' in reasons:
+        last_ShowerMuon = timestamp
+        log_ShowerMuon(time_tracker, timestamp)
+    return (last_WSMuon, last_ADMuon, last_ShowerMuon)
+
+
 def main_loop(indata, outdata, fill_buf, debug, limit):
-    indata.GetEntry(0)
-    time_tracker = TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX)
     loopIndex = 0
+    indata.GetEntry(loopIndex)
+    time_tracker = TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX)
+    #time_tracker2 = TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX)
     last_WSMuon_timestamp = 0
     last_ADMuon_timestamp = 0
     last_ShowerMuon_timestamp = 0
     last_ADevent_timestamp = 0
     while loopIndex < limit:
         indata.GetEntry(loopIndex)
-        isValid, reasons = isValidEvent(indata, fill_buf, 0,
+        isValid, reasons = isValidEvent(indata,
                 last_WSMuon_timestamp, last_ADMuon_timestamp,
                 last_ShowerMuon_timestamp)
         if not isValid:
-            if 'wsmuon' in reasons:
-                last_WSMuon_timestamp = indata.timestamp
-                log_WSMuon(time_tracker, indata.timestamp)
-            if 'admuon' in reasons:
-                last_ADMuon_timestamp = indata.timestamp
-                log_ADMuon(time_tracker, indata.timestamp)
-            if 'showermuon' in reasons:
-                last_ShowerMuon_timestamp = indata.timestamp
-                log_ShowerMuon(time_tracker, indata.timestamp)
-            if any('muon' in r for r in reasons) and 'not_adevent' not in reasons:
+            new_timestamps = update_muons(indata.timestamp, reasons,
+                    time_tracker, last_WSMuon_timestamp, last_ADMuon_timestamp,
+                    last_ShowerMuon_timestamp)
+            last_WSMuon_timestamp = new_timestamps[0]
+            last_ADMuon_timestamp = new_timestamps[1]
+            last_ShowerMuon_timestamp = new_timestamps[2]
+            if ((('anymuon' in reasons) or ('anymuonveto' in reasons))
+                    and ('not_adevent' not in reasons)):
                 last_ADevent_timestamp = indata.timestamp
             loopIndex += 1
             continue
@@ -330,6 +344,12 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
         multiplicity = 1
         assign_value(fill_buf.dt_cluster_to_prev_ADevent, indata.timestamp -
                 last_ADevent_timestamp)
+        assign_value(fill_buf.dt_previous_WSMuon, prompt_timestamp -
+                last_WSMuon_timestamp, 0)
+        assign_value(fill_buf.dt_previous_ADMuon, prompt_timestamp -
+                last_ADMuon_timestamp, 0)
+        assign_value(fill_buf.dt_previous_ShowerMuon, prompt_timestamp -
+                last_ShowerMuon_timestamp, 0)
         last_ADevent_timestamp = indata.timestamp
         assign_value(fill_buf.site, indata.site)
         assign_value(fill_buf.run, indata.run)
@@ -341,33 +361,28 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
         loopIndex += 1
         if loopIndex == limit:
             break
-        muonVeto = False
+        muonVeto_post_prompt = False
         indata.GetEntry(loopIndex)
         while indata.timestamp - prompt_timestamp < 400e3:
             if multiplicity == 10:
                 print('multiplicity overflow')
                 multiplicity -= 1
-            isValid, reasons = isValidEvent(indata, fill_buf, multiplicity,
+            isValid, reasons = isValidEvent(indata,
                     last_WSMuon_timestamp, last_ADMuon_timestamp,
                     last_ShowerMuon_timestamp)
             if not isValid:
-                if 'wsmuon' in reasons:
-                    last_WSMuon_timestamp = indata.timestamp
-                    log_WSMuon(time_tracker, indata.timestamp)
-                    muonVeto = True
-                if 'admuon' in reasons:
-                    last_ADMuon_timestamp = indata.timestamp
-                    log_ADMuon(time_tracker, indata.timestamp)
-                    muonVeto = True
-                if 'showermuon' in reasons:
-                    last_ShowerMuon_timestamp = indata.timestamp
-                    log_ShowerMuon(time_tracker, indata.timestamp)
-                    muonVeto = True
-                if (any('muon' in r for r in reasons)
-                        and 'not_adevent' not in reasons):
+                new_timestamps = update_muons(indata.timestamp, reasons,
+                        time_tracker, last_WSMuon_timestamp,
+                        last_ADMuon_timestamp, last_ShowerMuon_timestamp)
+                last_WSMuon_timestamp = new_timestamps[0]
+                last_ADMuon_timestamp = new_timestamps[1]
+                last_ShowerMuon_timestamp = new_timestamps[2]
+                if ((('anymuon' in reasons) or ('anymuonveto' in reasons))
+                        and ('not_adevent' not in reasons)):
                     last_ADevent_timestamp = indata.timestamp
+                muonVeto_post_prompt = 'anymuon' in reasons
                 loopIndex += 1
-                if muonVeto or loopIndex == limit:
+                if muonVeto_post_prompt or loopIndex == limit:
                     break
                 else:
                     indata.GetEntry(loopIndex)
@@ -376,6 +391,12 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
             multiplicity += 1
             last_ADevent_timestamp = indata.timestamp
             assign_event(indata, fill_buf, multiplicity-1)
+            assign_value(fill_buf.dt_previous_WSMuon, indata.timestamp -
+                    last_WSMuon_timestamp, multiplicity-1)
+            assign_value(fill_buf.dt_previous_ADMuon, indata.timestamp -
+                    last_ADMuon_timestamp, multiplicity-1)
+            assign_value(fill_buf.dt_previous_ShowerMuon, indata.timestamp -
+                    last_ShowerMuon_timestamp, multiplicity-1)
             assign_value(fill_buf.dt_to_prompt,
                     indata.timestamp - prompt_timestamp,
                     multiplicity-1)
@@ -391,11 +412,10 @@ def main_loop(indata, outdata, fill_buf, debug, limit):
                 break
             indata.GetEntry(loopIndex)
         assign_value(fill_buf.multiplicity, multiplicity)
-        if not muonVeto:
+        if not muonVeto_post_prompt:
             outdata.Fill()
     time_tracker.close(indata.timestamp)
     return time_tracker
-
 
 
 def copy_to_buffer(ttree, buf, index, name):
@@ -421,22 +441,28 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'y')
     copy_to_buffer(source, buf, index, 'z')
 
-def assign_muons(source, buf, index, time_last_WSMuon, time_last_ADMuon,
+def isMuonVeto(source, time_last_WSMuon, time_last_ADMuon,
         time_last_ShowerMuon):
+    reasons = []
     dt_previous_WSMuon = source.timestamp - time_last_WSMuon
-    assign_value(buf.dt_previous_WSMuon, dt_previous_WSMuon, index)
     isWSMuonVeto = muons.isVetoedByWSMuon_nH(source.timestamp -
             time_last_WSMuon)
+    if isWSMuonVeto:
+        reasons.append('wsmuonveto')
     dt_previous_ADMuon = source.timestamp - time_last_ADMuon
-    assign_value(buf.dt_previous_ADMuon, dt_previous_ADMuon, index)
     isADMuonVeto = muons.isVetoedByADMuon_nH(source.timestamp -
             time_last_ADMuon)
+    if isADMuonVeto:
+        reasons.append('admuonveto')
     dt_previous_ShowerMuon = source.timestamp - time_last_ShowerMuon
-    assign_value(buf.dt_previous_ShowerMuon, dt_previous_ShowerMuon, index)
     isShowerMuonVeto = muons.isVetoedByShowerMuon_nH(source.timestamp -
             time_last_ShowerMuon)
+    if isShowerMuonVeto:
+        reasons.append('showermuonveto')
     isAnyMuonVeto = isWSMuonVeto or isADMuonVeto or isShowerMuonVeto
-    return isAnyMuonVeto
+    if len(reasons) > 0:
+        reasons.append('anymuonveto')
+    return reasons
 
 def prepare_indata_branches(indata):
     indata.SetBranchStatus('*', 0)
@@ -478,6 +504,8 @@ def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
         calibStats, adSimple = raw_initialize(infile)
         calibStats.AddFriend(adSimple)
         indata = RawFileAdapter(calibStats, run, fileno)
+    outfilesplit = os.path.splitext(outfilename)
+    outfilename = outfilesplit[0] + '_ad1' + outfilesplit[1]
     outfile = TFile(outfilename, 'RECREATE')
     ttree_name = 'ad_events'
     ttree_description = 'AD events (git: %s)'

@@ -118,9 +118,9 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
 def isValidTriggerType(triggerType):
     return (triggerType & 0x1100) > 0
 
-def isValidEvent(indata, last_WSMuon_timestamp,
-        last_ADMuon_timestamp, last_ShowerMuon_timestamp,
-        last_ADMuon_timestamp2, last_ShowerMuon_timestamp2):
+def isValidEvent(indata, last_WSMuon_timestamp, helpers):
+        #last_ADMuon_timestamp, last_ShowerMuon_timestamp,
+        #last_ADMuon_timestamp2, last_ShowerMuon_timestamp2):
     if not isValidTriggerType(indata.triggerType):
         return (False, ['not_adevent', 'trigger: {}'.format(indata.triggerType)])
     if indata.detector not in (1, 2, 5, 6):
@@ -146,12 +146,14 @@ def isValidEvent(indata, last_WSMuon_timestamp,
         reasons.append('showermuon')
         reasons.append('anymuon')
     if indata.detector == 1:
+        h = helpers[0]
         muon_veto_list = isMuonVeto(indata, last_WSMuon_timestamp,
-                last_ADMuon_timestamp, last_ShowerMuon_timestamp)
+                h.last_ADMuon_timestamp, h.last_ShowerMuon_timestamp)
         reasons.extend(muon_veto_list)
     elif indata.detector == 2:
+        h = helpers[1]
         muon_veto_list = isMuonVeto(indata, last_WSMuon_timestamp,
-                last_ADMuon_timestamp2, last_ShowerMuon_timestamp2)
+                h.last_ADMuon_timestamp, h.last_ShowerMuon_timestamp)
         reasons.extend(muon_veto_list)
     detector = indata.detector
     energy = indata.energy
@@ -316,180 +318,134 @@ def update_muons(timestamp, reasons, time_tracker, last_WSMuon, last_ADMuon,
         log_ShowerMuon(time_tracker, timestamp)
     return (last_WSMuon, last_ADMuon, last_ShowerMuon)
 
+class CoincidenceHelper:
+    def __init__(self):
+        self.last_ADMuon_timestamp = 0
+        self.last_ShowerMuon_timestamp = 0
+        self.last_ADevent_timestamp = 0
+        self.in_coincidence_window = False
+        self.prompt_timestamp = 0
+        self.prompt_x = 0
+        self.prompt_y = 0
+        self.prompt_z = 0
+        self.multiplicity = 0
 
-def main_loop(indata, outdata, fill_buf, outdata2, fill_buf2, debug, limit):
+def main_loop(indata, outdatas, fill_bufs, debug, limit):
     loopIndex = 0
     indata.GetEntry(loopIndex)
-    time_tracker = TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX)
-    time_tracker2 = TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX)
+    trackers = [TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX) for _ in
+            range(2)]
     last_WSMuon_timestamp = 0
-    last_ADMuon_timestamp = 0
-    last_ShowerMuon_timestamp = 0
-    last_ADevent_timestamp = 0
-    in_coincidence_window = False
-    prompt_timestamp = 0
-    prompt_x = 0
-    prompt_y = 0
-    prompt_z = 0
-    multiplicity = 0
-    last_ADMuon_timestamp2 = 0
-    last_ShowerMuon_timestamp2 = 0
-    last_ADevent_timestamp2 = 0
-    in_coincidence_window2 = False
-    prompt_timestamp2 = 0
-    prompt_x2 = 0
-    prompt_y2 = 0
-    prompt_z2 = 0
-    multiplicity2 = 0
+    helpers = [CoincidenceHelper() for _ in range(2)]
     while loopIndex < limit:
         indata.GetEntry(loopIndex)
-        isValid, reasons = isValidEvent(indata,
-                last_WSMuon_timestamp, last_ADMuon_timestamp,
-                last_ShowerMuon_timestamp, last_ADMuon_timestamp2,
-                last_ShowerMuon_timestamp2)
+        isValid, reasons = isValidEvent(indata, last_WSMuon_timestamp, helpers)
         if not isValid:
-            #print('{}: det {} | in window1 {} | in window2 {} | {}'.format(
+            #print('{}: det {} | in window {} | in window {} | {}'.format(
                 #loopIndex, indata.detector, in_coincidence_window,
                 #in_coincidence_window2, reasons))
             #input('  window1_dt {} | window2_dt {}'.format((indata.timestamp -
                 #prompt_timestamp)/1e3, (indata.timestamp -
                     #prompt_timestamp2)/1e3))
-            causeMuonVeto = 'anymuon' in reasons
-            if in_coincidence_window and causeMuonVeto and (indata.timestamp -
-                    prompt_timestamp < 400e3) and indata.detector in (1, 5, 6):
-                #input('  leaving window 1 because of muon veto')
-                in_coincidence_window = False
-                multiplicity = 0
-            elif in_coincidence_window and (indata.timestamp - prompt_timestamp
-                    >= 400e3) and indata.detector == 1:
-                #input('  leaving window 1 because of coincidence time')
-                assign_value(fill_buf.multiplicity, multiplicity)
-                outdata.Fill()
-                in_coincidence_window = False
-                multiplicity = 0
-            if in_coincidence_window2 and causeMuonVeto and (indata.timestamp -
-                    prompt_timestamp2 < 400e3) and indata.detector in (2, 5, 6):
-                #input('  leaving window 2 because of muon veto')
-                in_coincidence_window2 = False
-                multiplicity2 = 0
-            elif in_coincidence_window2 and (indata.timestamp -
-                    prompt_timestamp2 >= 400e3) and indata.detector == 2:
-                #input('  leaving window 2 because of coincidence time')
-                assign_value(fill_buf2.multiplicity, multiplicity2)
-                outdata2.Fill()
-                in_coincidence_window2 = False
-                multiplicity2 = 0
-            if indata.detector in (1, 5, 6):
-                new_timestamps = update_muons(indata.timestamp, reasons,
-                        time_tracker, last_WSMuon_timestamp, last_ADMuon_timestamp,
-                        last_ShowerMuon_timestamp)
-                last_WSMuon_timestamp = new_timestamps[0]
-                last_ADMuon_timestamp = new_timestamps[1]
-                last_ShowerMuon_timestamp = new_timestamps[2]
-            elif indata.detector in (2, 5, 6):
-                new_timestamps = update_muons(indata.timestamp, reasons,
-                        time_tracker2, last_WSMuon_timestamp,
-                        last_ADMuon_timestamp2, last_ShowerMuon_timestamp2)
-                last_WSMuon_timestamp = new_timestamps[0]
-                last_ADMuon_timestamp2 = new_timestamps[1]
-                last_ShowerMuon_timestamp2 = new_timestamps[2]
-            if ((('anymuon' in reasons) or ('anymuonveto' in reasons))
-                    and ('not_adevent' not in reasons)):
-                if indata.detector == 1:
-                    last_ADevent_timestamp = indata.timestamp
-                elif indata.detector == 2:
-                    last_ADevent_timestamp2 = indata.timestamp
+            isMuon = 'anymuon' in reasons
+            det = indata.detector
+            if det in (1, 2):
+                index = det - 1
+                h = helpers[index]
+                outdata = outdatas[index]
+                fill_buf = fill_bufs[index]
+                tracker = trackers[index]
+                if h.in_coincidence_window and isMuon and (
+                        indata.timestamp - h.prompt_timestamp < 400e3):
+                    #input(('  leaving window {} because of muon veto').format(
+                        #det))
+                    h.in_coincidence_window = False
+                    h.multiplicity = False
+                elif h.in_coincidence_window and (indata.timestamp -
+                        h.prompt_timestamp >= 400e3):
+                    #input(('  leaving window {} because of coinc time'.format(
+                        #det))
+                    assign_value(fill_buf.multiplicity, h.multiplicity)
+                    outdata.Fill()
+                    h.in_coincidence_window = False
+                    h.multiplicity = 0
+                if isMuon:
+                    new_timestamps = update_muons(indata.timestamp, reasons,
+                            tracker, last_WSMuon_timestamp,
+                            h.last_ADMuon_timestamp,
+                            h.last_ShowerMuon_timestamp)
+                    h.last_ADMuon_timestamp = new_timestamps[1]
+                    h.last_ShowerMuon_timestamp = new_timestamps[2]
+                if ((isMuon or ('anymuonveto' in reasons))
+                        and ('not_adevent' not in reasons)):
+                    h.last_ADevent_timestamp = indata.timestamp
+            elif det in (5, 6) and isMuon:
+                for h, outdata, fill_buf in zip(helpers, outdatas, fill_bufs):
+                    if h.in_coincidence_window and (indata.timestamp
+                            - h.prompt_timestamp < 400e3):
+                        #input(('  leaving window {} because of WSmuon veto').format(
+                            #det))
+                        h.in_coincidence_window = False
+                        h.multiplicity = False
+                    new_timestamps = update_muons(indata.timestamp, reasons,
+                            tracker, last_WSMuon_timestamp,
+                            h.last_ADMuon_timestamp,
+                            h.last_ShowerMuon_timestamp)
+                    last_WSMuon_timestamp = new_timestamps[0]
             loopIndex += 1
             continue
-        if indata.detector == 1 and not in_coincidence_window:
-            #input('{}: entering window1'.format(loopIndex))
-            in_coincidence_window = True
-            prompt_timestamp = indata.timestamp
-            prompt_x = indata.x
-            prompt_y = indata.y
-            prompt_z = indata.z
+        det = indata.detector
+        index = det - 1
+        h = helpers[index]
+        outdata = outdatas[index]
+        fill_buf = fill_bufs[index]
+        tracker = trackers[index]
+        if not h.in_coincidence_window:
+            #input('{}: entering window {}'.format(loopIndex, det))
+            h.in_coincidence_window = True
+            h.prompt_timestamp = indata.timestamp
+            h.prompt_x = indata.x
+            h.prompt_y = indata.y
+            h.prompt_z = indata.z
             assign_value(fill_buf.dt_cluster_to_prev_ADevent, indata.timestamp -
-                    last_ADevent_timestamp)
+                    h.last_ADevent_timestamp)
             assign_value(fill_buf.site, indata.site)
             assign_value(fill_buf.run, indata.run)
             assign_value(fill_buf.fileno, indata.fileno)
-        elif indata.detector == 2 and not in_coincidence_window2:
-            #input('{}: entering window2'.format(loopIndex))
-            in_coincidence_window2 = True
-            prompt_timestamp2 = indata.timestamp
-            prompt_x2 = indata.x
-            prompt_y2 = indata.y
-            prompt_z2 = indata.z
-            assign_value(fill_buf2.dt_cluster_to_prev_ADevent, indata.timestamp -
-                    last_ADevent_timestamp2)
-            assign_value(fill_buf2.site, indata.site)
-            assign_value(fill_buf2.run, indata.run)
-            assign_value(fill_buf2.fileno, indata.fileno)
-        if indata.detector == 1 and indata.timestamp - prompt_timestamp < 400e3:
-            multiplicity += 1
-            if multiplicity == 11:
+        if indata.timestamp - h.prompt_timestamp < 400e3:
+            h.multiplicity += 1
+            if h.multiplicity == 11:
                 raise RuntimeError('multiplicity overflow')
-            #input('{}: in window1 | multiplicity {}'.format(loopIndex,
+            #input('{}: in window {} | multiplicity {}'.format(loopIndex, det,
                 #multiplicity))
-            assign_event(indata, fill_buf, multiplicity - 1)
+            assign_event(indata, fill_buf, h.multiplicity - 1)
             assign_value(fill_buf.dt_previous_WSMuon, indata.timestamp -
-                    last_WSMuon_timestamp, multiplicity - 1)
+                    last_WSMuon_timestamp, h.multiplicity - 1)
             assign_value(fill_buf.dt_previous_ADMuon, indata.timestamp -
-                    last_ADMuon_timestamp, multiplicity - 1)
+                    h.last_ADMuon_timestamp, h.multiplicity - 1)
             assign_value(fill_buf.dt_previous_ShowerMuon, indata.timestamp -
-                    last_ShowerMuon_timestamp, multiplicity - 1)
+                    h.last_ShowerMuon_timestamp, h.multiplicity - 1)
             assign_value(fill_buf.dt_to_prompt,
-                    indata.timestamp - prompt_timestamp,
-                    multiplicity-1)
+                    indata.timestamp - h.prompt_timestamp,
+                    h.multiplicity-1)
             assign_value(fill_buf.dr_to_prompt, math.sqrt(
-                    (indata.x-prompt_x)**2 +
-                    (indata.y-prompt_y)**2 +
-                    (indata.z-prompt_z)**2),
-                    multiplicity-1)
-            assign_value(fill_buf.loopIndex, loopIndex, multiplicity - 1)
-            last_ADevent_timestamp = indata.timestamp
+                    (indata.x-h.prompt_x)**2 +
+                    (indata.y-h.prompt_y)**2 +
+                    (indata.z-h.prompt_z)**2),
+                    h.multiplicity-1)
+            assign_value(fill_buf.loopIndex, loopIndex, h.multiplicity - 1)
+            h.last_ADevent_timestamp = indata.timestamp
             loopIndex += 1
-        elif indata.detector == 1:
-            #input('{}: leaving window1 because of coincidence time'.format(
-                #loopIndex))
-            assign_value(fill_buf.multiplicity, multiplicity)
+        else:
+            #input('{}: leaving window {} because of coincidence time'.format(
+                #loopIndex, det))
+            assign_value(fill_buf.multiplicity, h.multiplicity)
             outdata.Fill()
-            in_coincidence_window = False
-            multiplicity = 0
-        if indata.detector == 2 and indata.timestamp - prompt_timestamp2 < 400e3:
-            multiplicity2 += 1
-            if multiplicity2 == 11:
-                raise RuntimeError('multiplicity overflow')
-            #input('{}: in window2 | multiplicity2 {}'.format(loopIndex,
-                #multiplicity2))
-            assign_event(indata, fill_buf2, multiplicity2 - 1)
-            assign_value(fill_buf2.dt_previous_WSMuon, indata.timestamp -
-                    last_WSMuon_timestamp, multiplicity2 - 1)
-            assign_value(fill_buf2.dt_previous_ADMuon, indata.timestamp -
-                    last_ADMuon_timestamp2, multiplicity2 - 1)
-            assign_value(fill_buf2.dt_previous_ShowerMuon, indata.timestamp -
-                    last_ShowerMuon_timestamp2, multiplicity2 - 1)
-            assign_value(fill_buf2.dt_to_prompt,
-                    indata.timestamp - prompt_timestamp2,
-                    multiplicity2-1)
-            assign_value(fill_buf2.dr_to_prompt, math.sqrt(
-                    (indata.x-prompt_x2)**2 +
-                    (indata.y-prompt_y2)**2 +
-                    (indata.z-prompt_z2)**2),
-                    multiplicity2-1)
-            assign_value(fill_buf2.loopIndex, loopIndex, multiplicity2 - 1)
-            last_ADevent_timestamp2 = indata.timestamp
-            loopIndex += 1
-        elif indata.detector == 2:
-            #input('{}: leaving window2 because of coincidence time'.format(
-                #loopIndex))
-            assign_value(fill_buf2.multiplicity, multiplicity2)
-            outdata2.Fill()
-            in_coincidence_window2 = False
-            multiplicity2 = 0
-    time_tracker.close(indata.timestamp)
-    time_tracker2.close(indata.timestamp)
-    return time_tracker, time_tracker2
+            h.in_coincidence_window = False
+            h.multiplicity = 0
+    for tracker in trackers:
+        tracker.close(indata.timestamp)
+    return trackers
 
 
 def copy_to_buffer(ttree, buf, index, name):
@@ -564,11 +520,14 @@ def prepare_indata_branches(indata):
     indata.SetBranchStatus('fPSD', 1)
     indata.SetBranchStatus('tag_flasher', 1)
 
+def get_ads(run):
+    return [1, 2]
 
 def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
     from ROOT import TFile
 
     run, fileno = runfile
+    ads = get_ads(run)
     if is_partially_processed:
         infile = TFile(infile, 'READ')
         indata = infile.Get('computed')
@@ -579,32 +538,29 @@ def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
         calibStats.AddFriend(adSimple)
         indata = RawFileAdapter(calibStats, run, fileno)
     outfilesplit = os.path.splitext(outfilename)
-    outfilename = outfilesplit[0] + '_ad1' + outfilesplit[1]
-    outfilename2 = outfilesplit[0] + '_ad2' + outfilesplit[1]
-    outfile = TFile(outfilename, 'RECREATE')
-    outfile2 = TFile(outfilename2, 'RECREATE')
+    outfilenames = [outfilesplit[0] + '_ad' + str(ad) + outfilesplit[1]
+            for ad in ads]
+    outfiles = [TFile(outfilename, 'RECREATE') for outfilename in outfilenames]
     ttree_name = 'ad_events'
     ttree_description = 'AD events (git: %s)'
-    outdata, fill_buf = create_computed_TTree(ttree_name, outfile,
-            ttree_description)
-    outdata2, fill_buf2 = create_computed_TTree(ttree_name, outfile2,
-            ttree_description)
+    # Trick to transpose from [[out1, buf1], [out2, buf2], ...] to
+    #[[out1, out2, ...], [buf1, buf2, ...]]
+    outdatas, fill_bufs = zip(*(create_computed_TTree(ttree_name, outfile,
+        ttree_description) for outfile in outfiles))
 
     if entries == -1:
         entries = indata.GetEntries()
-    tracker, tracker2 = main_loop(indata, outdata, fill_buf, outdata2, fill_buf2, debug, entries)
-    outfile.Write()
-    outfile.Close()
-    outfile2.Write()
-    outfile2.Close()
+    trackers = main_loop(indata, outdatas, fill_bufs, debug, entries)
+    for outfile in outfiles:
+        outfile.Write()
+        outfile.Close()
     if is_partially_processed:
         infile.Close()
     else:
         infile.Close()
-    with open(os.path.splitext(outfilename)[0] + '.json', 'w') as f:
-        json.dump(tracker.export(), f)
-    with open(os.path.splitext(outfilename2)[0] + '.json', 'w') as f:
-        json.dump(tracker2.export(), f)
+    for outfilename, tracker in zip(outfilenames, trackers):
+        with open(os.path.splitext(outfilename)[0] + '.json', 'w') as f:
+            json.dump(tracker.export(), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

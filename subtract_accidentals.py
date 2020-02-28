@@ -19,7 +19,7 @@ def coinc_rate(rs, rmu, tc):
 def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
     import ROOT
     if acc_rate is None:
-        base_rate = coinc_rate(rs, rmu, 0.0004)
+        base_rate = coinc_rate(rs, rmu, 0.000399)
     else:
         base_rate = acc_rate
     hist_parameters = (2100, 1.5, 12, 2100, 1.5, 12)
@@ -61,7 +61,8 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
             1.5, 12)
     ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', 100, 0, 5000, 210,
             1.5, 12)
-    ad_events.Draw('dr_to_prompt[1] >> dr_data', 'dr_to_prompt[1] < 5000')
+    ad_events.Draw('dr_to_prompt[1] >> dr_data', 'multiplicity == 2 && '
+            'dr_to_prompt[1] < 5000')
     scale_factor = base_rate * eps_distance * livetime / num_acc_events
     bg_pairs = accfile.Get('all_pairs')
     bg_pairs.Draw('dr_to_prompt[1] >> dr_bg', (str(scale_factor) +
@@ -69,11 +70,11 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
             'dr_to_prompt[1] >= 0)'), 'same')
     ROOT.gPad.Print('test.pdf')
     ad_events.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_data',
-            'dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0')
+            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0')
     ad_events.Draw('energy[0]:dr_to_prompt[1] >> ep_dr_data',
-            'dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0')
+            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0')
     bg_pairs.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_bg', (str(scale_factor) +
-            ' * 2 * (dr_to_prompt[1] < 5000)'))
+            ' * 2 * (dr_to_prompt[1] < 5000) && multiplicity == 2'))
     outfile.Write()
     datafile.Close()
 

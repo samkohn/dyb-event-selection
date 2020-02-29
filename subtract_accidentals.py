@@ -94,6 +94,7 @@ if __name__ == '__main__':
         stats = json.load(f)
         livetime = stats['usable_livetime']/1e9
         run_number = stats['run']
+        site = stats['site']
 
     with sqlite3.Connection(args.database) as conn:
         c = conn.cursor()
@@ -103,7 +104,12 @@ if __name__ == '__main__':
         #c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
                 #'RunNo = ? AND DetNo = ?', (run_number, args.ad))
         #muon_rate, = c.fetchone()
-        muon_rate = 214
+        if site == 1:
+            muon_rate = 200
+        elif site == 2:
+            muon_rate = 150
+        elif site == 3:
+            muon_rate = 15.7
 
     main(args.output, args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
             args.override_acc_rate)

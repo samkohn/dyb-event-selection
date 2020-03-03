@@ -12,7 +12,7 @@ def coinc_rate(rs, rmu, tc):
     mu_exp = math.exp(-rmu*tc)
     term1 = rmu/rsum * (1 - sum_exp) + sum_exp
     term2 = rs/rsum * mu_exp * (1 - sum_exp)
-    term3 = rs/(2*rs + rmu) * mu_exp * (1 - math.exp(-(2*rs+rmu)*tc))
+    term3 = -rs/(2*rs + rmu) * mu_exp * (1 - math.exp(-(2*rs+rmu)*tc))
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 

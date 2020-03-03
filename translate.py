@@ -119,7 +119,7 @@ def main(filenames, nevents):
 
 def initialize_indata_onefile(tfile_object):
     calibStats = tfile_object.Get('/Event/Data/CalibStats')
-    adSimple = tfile_object.Get('/Event/Rec/AdSimple')
+    adSimple = tfile_object.Get('/Event/Rec/AdSimpleNL')
 
     activeBranches = {
             calibStats: [

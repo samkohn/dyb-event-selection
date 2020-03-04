@@ -98,9 +98,12 @@ if __name__ == '__main__':
 
     with sqlite3.Connection(args.database) as conn:
         c = conn.cursor()
-        c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
-                'RunNo = ? AND DetNo = ?', (run_number, args.ad))
-        singles_rate, = c.fetchone()
+        if args.override_acc_rate:
+            singles_rate = None
+        else:
+            c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
+                    'RunNo = ? AND DetNo = ?', (run_number, args.ad))
+            singles_rate, = c.fetchone()
         #c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
                 #'RunNo = ? AND DetNo = ?', (run_number, args.ad))
         #muon_rate, = c.fetchone()

@@ -161,6 +161,7 @@ class TimeTracker:
         self.pre_veto = pre_veto
         self.start_time = start_time
         self.closed = False
+        self.num_windows = 0
 
     def __repr__(self):
         total_time = self.last_event_tracked - self.start_time
@@ -177,6 +178,7 @@ class TimeTracker:
                 'vetoed_livetime': self.total_vetoed_time,
                 'daq_livetime': total_time,
                 'good_fraction': self.total_good_time/total_time,
+                'num_veto_windows': self.num_windows,
         }
 
     def close(self, end_time):
@@ -217,6 +219,7 @@ class TimeTracker:
             self.total_vetoed_time += dt_pre_veto_to_now
             self.total_good_time += dt_window_end_to_pre_veto
             self.end_of_veto_window = potential_new_end
+            self.num_windows += 1
         self.last_event_tracked = timestamp
         return
 

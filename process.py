@@ -118,7 +118,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
 def isValidTriggerType(triggerType):
     return (triggerType & 0x1100) > 0
 
-def isValidEvent(indata, last_WSMuon_timestamp, helpers):
+def isValidEvent(indata, helpers):
         #last_ADMuon_timestamp, last_ShowerMuon_timestamp,
         #last_ADMuon_timestamp2, last_ShowerMuon_timestamp2):
     if not isValidTriggerType(indata.triggerType):
@@ -147,12 +147,12 @@ def isValidEvent(indata, last_WSMuon_timestamp, helpers):
         reasons.append('anymuon')
     if indata.detector == 1:
         h = helpers[0]
-        muon_veto_list = isMuonVeto(indata, last_WSMuon_timestamp,
+        muon_veto_list = isMuonVeto(indata, h.shared_last_WSMuon_timestamp,
                 h.last_ADMuon_timestamp, h.last_ShowerMuon_timestamp)
         reasons.extend(muon_veto_list)
     elif indata.detector == 2:
         h = helpers[1]
-        muon_veto_list = isMuonVeto(indata, last_WSMuon_timestamp,
+        muon_veto_list = isMuonVeto(indata, h.shared_last_WSMuon_timestamp,
                 h.last_ADMuon_timestamp, h.last_ShowerMuon_timestamp)
         reasons.extend(muon_veto_list)
     detector = indata.detector
@@ -319,6 +319,7 @@ def update_muons(timestamp, reasons, time_tracker, last_WSMuon, last_ADMuon,
     return (last_WSMuon, last_ADMuon, last_ShowerMuon)
 
 class CoincidenceHelper:
+    shared_last_WSMuon_timestamp = 0
     def __init__(self):
         self.last_ADMuon_timestamp = 0
         self.last_ShowerMuon_timestamp = 0
@@ -335,11 +336,10 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
     indata.GetEntry(loopIndex)
     trackers = [TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX) for _ in
             range(2)]
-    last_WSMuon_timestamp = 0
     helpers = [CoincidenceHelper() for _ in range(2)]
     while loopIndex < limit:
         indata.GetEntry(loopIndex)
-        isValid, reasons = isValidEvent(indata, last_WSMuon_timestamp, helpers)
+        isValid, reasons = isValidEvent(indata, helpers)
         if not isValid:
             #print('{}: det {} | in window {} | in window {} | {}'.format(
                 #loopIndex, indata.detector, in_coincidence_window,
@@ -371,7 +371,7 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
                     h.multiplicity = 0
                 if isMuon:
                     new_timestamps = update_muons(indata.timestamp, reasons,
-                            tracker, last_WSMuon_timestamp,
+                            tracker, h.shared_last_WSMuon_timestamp,
                             h.last_ADMuon_timestamp,
                             h.last_ShowerMuon_timestamp)
                     h.last_ADMuon_timestamp = new_timestamps[1]
@@ -388,10 +388,10 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
                         h.in_coincidence_window = False
                         h.multiplicity = False
                     new_timestamps = update_muons(indata.timestamp, reasons,
-                            tracker, last_WSMuon_timestamp,
+                            tracker, h.shared_last_WSMuon_timestamp,
                             h.last_ADMuon_timestamp,
                             h.last_ShowerMuon_timestamp)
-                    last_WSMuon_timestamp = new_timestamps[0]
+                    h.shared_last_WSMuon_timestamp = new_timestamps[0]
             loopIndex += 1
             continue
         det = indata.detector
@@ -420,7 +420,7 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
                 #multiplicity))
             assign_event(indata, fill_buf, h.multiplicity - 1)
             assign_value(fill_buf.dt_previous_WSMuon, indata.timestamp -
-                    last_WSMuon_timestamp, h.multiplicity - 1)
+                    h.shared_last_WSMuon_timestamp, h.multiplicity - 1)
             assign_value(fill_buf.dt_previous_ADMuon, indata.timestamp -
                     h.last_ADMuon_timestamp, h.multiplicity - 1)
             assign_value(fill_buf.dt_previous_ShowerMuon, indata.timestamp -

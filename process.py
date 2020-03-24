@@ -27,7 +27,8 @@ from translate import (TreeBuffer, float_value, assign_value,
         create_data_TTree, copy as raw_copy, initialize_indata_onefile as
         raw_initialize)
 
-def create_computed_TTree(name, host_file, selection_name, title=None):
+def create_computed_TTree(name, host_file, selection_name, title=None,
+        flat=False):
     from ROOT import TTree
     git_description = git_describe()
     if title is None:
@@ -82,6 +83,9 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
         outdata.Branch(name, getattr(fill_buf, name), '{}/{}'.format(name,
             typecode))
         return
+
+    if flat:
+        branch_multiple = branch
 
     # Initialize the new TTree so that each TBranch reads from the
     # appropriate TreeBuffer attribute
@@ -287,6 +291,9 @@ class RawFileAdapter():
     def GetEntries(self):
         return self.ttree.GetEntries()
 
+    def GetListOfBranches(self):
+        return self.ttree.GetListOfBranches()
+
     def _timestamp(self):
         sec = self.timestamp_seconds
         nano = self.timestamp_nanoseconds
@@ -331,7 +338,82 @@ class CoincidenceHelper:
         self.prompt_z = 0
         self.multiplicity = 0
 
-def main_loop(indata, outdatas, fill_bufs, debug, limit):
+def fill_muon(ttree, in_ttree, fill_buf, helper):
+    assign_value(fill_buf.multiplicity, 1)
+    assign_value(fill_buf.timestamp, in_ttree.timestamp)
+    assign_value(fill_buf.timestamp_seconds, in_ttree.timestamp_seconds)
+    assign_value(fill_buf.timestamp_nanoseconds,
+            in_ttree.timestamp_nanoseconds)
+    assign_value(fill_buf.detector, in_ttree.detector)
+    assign_value(fill_buf.dt_to_prompt, 0)
+    assign_value(fill_buf.dr_to_prompt, 0)
+    assign_value(fill_buf.dt_cluster_to_prev_ADevent, 0)
+    assign_value(fill_buf.triggerNumber, in_ttree.triggerNumber)
+    assign_value(fill_buf.triggerType, in_ttree.triggerType)
+    assign_value(fill_buf.nHit, in_ttree.nHit)
+    assign_value(fill_buf.fQuad, in_ttree.fQuad)
+    assign_value(fill_buf.fMax, in_ttree.fMax)
+    assign_value(fill_buf.fPSD_t1, in_ttree.fPSD_t1)
+    assign_value(fill_buf.fPSD_t2, in_ttree.fPSD_t2)
+    assign_value(fill_buf.f2inch_maxQ, in_ttree.f2inch_maxQ)
+    assign_value(fill_buf.energy, in_ttree.energy)
+    assign_value(fill_buf.x, in_ttree.x)
+    assign_value(fill_buf.y, in_ttree.y)
+    assign_value(fill_buf.z, in_ttree.z)
+    assign_value(fill_buf.dt_previous_WSMuon, in_ttree.timestamp -
+            helper.shared_last_WSMuon_timestamp)
+    assign_value(fill_buf.dt_previous_ADMuon, in_ttree.timestamp -
+            helper.last_ADMuon_timestamp)
+    assign_value(fill_buf.dt_previous_ShowerMuon, in_ttree.timestamp -
+            helper.last_ShowerMuon_timestamp)
+    ttree.Fill()
+
+
+def fill_flat(ttree, fill_buf):
+    multiplicity = fill_buf.multiplicity[0]
+    buf_clone = fill_buf.clone()
+    assign_value(fill_buf.multiplicity, 1)
+    for i in range(multiplicity):
+        assign_value(fill_buf.loopIndex, buf_clone.loopIndex[i])
+        assign_value(fill_buf.timestamp, buf_clone.timestamp[i])
+        assign_value(fill_buf.timestamp_seconds, buf_clone.timestamp_seconds[i])
+        assign_value(fill_buf.timestamp_nanoseconds, buf_clone.timestamp_nanoseconds[i])
+        assign_value(fill_buf.detector, buf_clone.detector[i])
+        assign_value(fill_buf.dt_to_prompt, 0)
+        assign_value(fill_buf.dr_to_prompt, 0)
+        assign_value(fill_buf.dt_cluster_to_prev_ADevent, 0)
+        assign_value(fill_buf.triggerNumber, buf_clone.triggerNumber[i])
+        assign_value(fill_buf.triggerType, buf_clone.triggerType[i])
+        assign_value(fill_buf.nHit, buf_clone.nHit[i])
+        assign_value(fill_buf.fQuad, buf_clone.fQuad[i])
+        assign_value(fill_buf.fMax, buf_clone.fMax[i])
+        assign_value(fill_buf.fPSD_t1, buf_clone.fPSD_t1[i])
+        assign_value(fill_buf.fPSD_t2, buf_clone.fPSD_t2[i])
+        assign_value(fill_buf.f2inch_maxQ, buf_clone.f2inch_maxQ[i])
+        assign_value(fill_buf.energy, buf_clone.energy[i])
+        assign_value(fill_buf.x, buf_clone.x[i])
+        assign_value(fill_buf.y, buf_clone.y[i])
+        assign_value(fill_buf.z, buf_clone.z[i])
+        assign_value(fill_buf.dt_previous_WSMuon, buf_clone.dt_previous_WSMuon[i])
+        assign_value(fill_buf.dt_previous_ADMuon, buf_clone.dt_previous_ADMuon[i])
+        assign_value(fill_buf.dt_previous_ShowerMuon,
+                buf_clone.dt_previous_ShowerMuon[i])
+        ttree.Fill()
+
+def fill_AD_muon(ttree, indata, fill_buf, helper):
+    '''Fill the current muon event assuming it's in an AD (i.e. AD or Shower
+       muon)
+    '''
+    fill_muon(ttree, indata, fill_buf, helper)
+
+def fill_WS_muon(ttrees, indata, fill_bufs, helpers):
+    '''Fill the current WS muon event into all output TTrees.
+    '''
+    for ttree, fill_buf, helper in zip(ttrees, fill_bufs, helpers):
+        fill_muon(ttree, indata, fill_buf, helper)
+
+def main_loop(indata, outdatas, fill_bufs, debug, limit, flatten):
+    useStoredLoopIndex = 'loopIndex' in indata.GetListOfBranches()
     loopIndex = 0
     indata.GetEntry(loopIndex)
     trackers = [TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX) for _ in
@@ -360,16 +442,22 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
                     #input(('  leaving window {} because of muon veto').format(
                         #det))
                     h.in_coincidence_window = False
-                    h.multiplicity = False
+                    h.multiplicity = 0
                 elif h.in_coincidence_window and (indata.timestamp -
                         h.prompt_timestamp >= 400e3):
                     #input(('  leaving window {} because of coinc time'.format(
                         #det))
                     assign_value(fill_buf.multiplicity, h.multiplicity)
-                    outdata.Fill()
+                    if flatten:
+                        fill_flat(outdata, fill_buf)
+                    else:
+                        outdata.Fill()
                     h.in_coincidence_window = False
                     h.multiplicity = 0
                 if isMuon:
+                    if flatten:
+                        assign_value(fill_buf.loopIndex, loopIndex)
+                        fill_muon(outdata, indata, fill_buf, h)
                     new_timestamps = update_muons(indata.timestamp, reasons,
                             tracker, h.shared_last_WSMuon_timestamp,
                             h.last_ADMuon_timestamp,
@@ -380,13 +468,17 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
                         and ('not_adevent' not in reasons)):
                     h.last_ADevent_timestamp = indata.timestamp
             elif det in (5, 6) and isMuon:
-                for h, outdata, fill_buf in zip(helpers, outdatas, fill_bufs):
+                for h, outdata, fill_buf, tracker in zip(helpers, outdatas,
+                        fill_bufs, trackers):
+                    if flatten:
+                        assign_value(fill_buf.loopIndex, loopIndex)
+                        fill_muon(outdata, indata, fill_buf, h)
                     if h.in_coincidence_window and (indata.timestamp
                             - h.prompt_timestamp < 400e3):
                         #input(('  leaving window {} because of WSmuon veto').format(
                             #det))
                         h.in_coincidence_window = False
-                        h.multiplicity = False
+                        h.multiplicity = 0
                     new_timestamps = update_muons(indata.timestamp, reasons,
                             tracker, h.shared_last_WSMuon_timestamp,
                             h.last_ADMuon_timestamp,
@@ -433,14 +525,21 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
                     (indata.y-h.prompt_y)**2 +
                     (indata.z-h.prompt_z)**2),
                     h.multiplicity-1)
-            assign_value(fill_buf.loopIndex, loopIndex, h.multiplicity - 1)
+            if useStoredLoopIndex:
+                index = indata.loopIndex
+            else:
+                index = loopIndex
+            assign_value(fill_buf.loopIndex, index, h.multiplicity - 1)
             h.last_ADevent_timestamp = indata.timestamp
             loopIndex += 1
         else:
             #input('{}: leaving window {} because of coincidence time'.format(
                 #loopIndex, det))
             assign_value(fill_buf.multiplicity, h.multiplicity)
-            outdata.Fill()
+            if flatten:
+                fill_flat(outdata, fill_buf)
+            else:
+                outdata.Fill()
             h.in_coincidence_window = False
             h.multiplicity = 0
     for tracker in trackers:
@@ -516,21 +615,22 @@ def prepare_indata_branches(indata):
     indata.SetBranchStatus('x', 1)
     indata.SetBranchStatus('y', 1)
     indata.SetBranchStatus('z', 1)
-    indata.SetBranchStatus('fID', 1)
-    indata.SetBranchStatus('fPSD', 1)
-    indata.SetBranchStatus('tag_flasher', 1)
+    #indata.SetBranchStatus('fID', 1)
+    #indata.SetBranchStatus('fPSD', 1)
+    #indata.SetBranchStatus('tag_flasher', 1)
 
 def get_ads(run):
     return [1, 2]
 
-def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
+def main(entries, infile, outfilename, runfile, is_partially_processed, debug,
+        flatten):
     from ROOT import TFile
 
     run, fileno = runfile
     ads = get_ads(run)
     if is_partially_processed:
         infile = TFile(infile, 'READ')
-        indata = infile.Get('computed')
+        indata = infile.Get('ad_events')
         prepare_indata_branches(indata)
     else:
         infile = TFile(infile, 'READ')
@@ -546,11 +646,11 @@ def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
     # Trick to transpose from [[out1, buf1], [out2, buf2], ...] to
     #[[out1, out2, ...], [buf1, buf2, ...]]
     outdatas, fill_bufs = zip(*(create_computed_TTree(ttree_name, outfile,
-        ttree_description) for outfile in outfiles))
+        ttree_description, flat=flatten) for outfile in outfiles))
 
     if entries == -1:
         entries = indata.GetEntries()
-    trackers = main_loop(indata, outdatas, fill_bufs, debug, entries)
+    trackers = main_loop(indata, outdatas, fill_bufs, debug, entries, flatten)
     for outfile in outfiles:
         outfile.Write()
         outfile.Close()
@@ -571,7 +671,11 @@ if __name__ == '__main__':
     parser.add_argument('--new', action='store_true')
     parser.add_argument('-r', '--runfile', type=int, nargs=2,
         help='<run> <fileno>')
+    parser.add_argument('--flat', action='store_true',
+            help='create a flat TTree with one trigger per entry '
+            '(rather than pairing up coincident events within one entry)')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.input, args.output, args.runfile, args.new, args.debug)
+    main(args.events, args.input, args.output, args.runfile, args.new,
+            args.debug, args.flat)

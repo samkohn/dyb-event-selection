@@ -438,13 +438,14 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit, flatten):
                 fill_buf = fill_bufs[index]
                 tracker = trackers[index]
                 if h.in_coincidence_window and isMuon and (
-                        indata.timestamp - h.prompt_timestamp < 400e3):
+                        indata.timestamp - h.prompt_timestamp <
+                        delayeds._NH_THU_DT_MAX):
                     #input(('  leaving window {} because of muon veto').format(
                         #det))
                     h.in_coincidence_window = False
                     h.multiplicity = 0
                 elif h.in_coincidence_window and (indata.timestamp -
-                        h.prompt_timestamp >= 400e3):
+                        h.prompt_timestamp >= delayeds._NH_THU_DT_MAX):
                     #input(('  leaving window {} because of coinc time'.format(
                         #det))
                     assign_value(fill_buf.multiplicity, h.multiplicity)
@@ -504,7 +505,7 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit, flatten):
             assign_value(fill_buf.site, indata.site)
             assign_value(fill_buf.run, indata.run)
             assign_value(fill_buf.fileno, indata.fileno)
-        if indata.timestamp - h.prompt_timestamp < 400e3:
+        if indata.timestamp - h.prompt_timestamp < delayeds._NH_THU_DT_MAX:
             h.multiplicity += 1
             if h.multiplicity == 11:
                 raise RuntimeError('multiplicity overflow')

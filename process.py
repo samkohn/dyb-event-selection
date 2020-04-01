@@ -21,6 +21,7 @@ import flashers
 import muons
 import prompts
 import delayeds
+import adevent
 from adevent import isADEvent_THU
 from translate import (TreeBuffer, float_value, assign_value,
         fetch_value, int_value, unsigned_int_value, long_value, git_describe,
@@ -123,6 +124,15 @@ def isValidEvent(indata, helpers):
         #last_ADMuon_timestamp2, last_ShowerMuon_timestamp2):
     if not isValidTriggerType(indata.triggerType):
         return (False, ['not_adevent', 'trigger: {}'.format(indata.triggerType)])
+    reasons = []
+    detector = indata.detector
+    energy = indata.energy
+    if not isADEvent_THU(detector, energy):
+        reasons.append('not_adevent')
+    return (len(reasons) == 0, reasons)
+"""
+    if not isValidTriggerType(indata.triggerType):
+        return (False, ['not_adevent', 'trigger: {}'.format(indata.triggerType)])
     if indata.detector not in (1, 2, 5, 6):
         return (False, ['not_adevent', 'detector'])
     event_fID = fID(indata.fMax, indata.fQuad)
@@ -160,6 +170,7 @@ def isValidEvent(indata, helpers):
     if not isADEvent_THU(detector, energy):
         reasons.append('not_adevent')
     return (len(reasons) == 0, reasons)
+"""
 
 class TimeTracker:
     def __init__(self, start_time, pre_veto):
@@ -331,15 +342,202 @@ class CoincidenceHelper:
         self.prompt_z = 0
         self.multiplicity = 0
 
-def main_loop(indata, outdatas, fill_bufs, debug, limit):
-    loopIndex = 0
-    indata.GetEntry(loopIndex)
-    trackers = [TimeTracker(indata.timestamp, delayeds._NH_THU_DT_MAX) for _ in
-            range(2)]
-    helpers = [CoincidenceHelper() for _ in range(2)]
-    while loopIndex < limit:
-        indata.GetEntry(loopIndex)
-        isValid, reasons = isValidEvent(indata, helpers)
+class MuonHelper:
+    def __init__(self, muon_ttree, time_tracker, ad_num):
+        self.ttree = muon_ttree
+        self.ad = ad_num
+        self.time_previous_WSMuon = 0
+        self.time_previous_ADMuon = 0
+        self.time_previous_ShowerMuon = 0
+        self.time_next_muon = None
+        self._event_timestamp = None
+        self._muon_entry = 0
+        self.ttree.GetEntry(self._muon_entry)
+        self.time_tracker = time_tracker
+        return
+
+    def dt_previous_WSMuon(self):
+        return self._event_timestamp - self.time_previous_WSMuon
+
+    def dt_previous_ADMuon(self):
+        return self._event_timestamp - self.time_previous_ADMuon
+
+    def dt_previous_ShowerMuon(self):
+        return self._event_timestamp - self.time_previous_ShowerMuon
+
+    def dt_next_muon(self):
+        return self.time_next_muon - self._event_timestamp
+
+    def isVetoed_strict(self):
+        return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
+                or self.dt_previous_ADMuon() < muons._NH_ADMUON_VETO_LAST_NS
+                or self.dt_previous_ShowerMuon() <
+                    muons._NH_SHOWER_MUON_VETO_LAST_NS
+                or self.dt_next_muon() < delayeds._NH_THU_DT_MAX)
+
+    def isVetoed(self):
+        return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
+                or self.dt_previous_ADMuon() < muons._NH_ADMUON_VETO_LAST_NS
+                or self.dt_previous_ShowerMuon() <
+                    muons._NH_SHOWER_MUON_VETO_LAST_NS)
+
+    def close(self, last_entry=-1):
+        if last_entry == -1:
+            total_entries = self.ttree.GetEntries()
+        else:
+            total_entries = min(last_entry, self.ttree.GetEntries())
+        mu_data = self.ttree
+        while self._muon_entry < total_entries:
+            mu_data.GetEntry(self._muon_entry)
+            is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
+                    mu_data.triggerType)
+            is_AD = (mu_data.detector == self.ad
+                    and muons.isADMuon_nH(mu_data.detector, mu_data.energy))
+            is_shower = (mu_data.detector == self.ad
+                    and muons.isShowerMuon_nH(mu_data.detector,
+                        mu_data.energy))
+            if is_WS:
+                log_WSMuon(self.time_tracker, mu_data.timestamp)
+            elif is_AD:
+                log_ADMuon(self.time_tracker, mu_data.timestamp)
+            elif is_shower:
+                log_ShowerMuon(self.time_tracker, mu_data.timestamp)
+            self._muon_entry += 1
+
+    def load(self, timestamp):
+        self._event_timestamp = timestamp
+        mu_data = self.ttree
+        if timestamp < mu_data.timestamp:
+            raise RuntimeError('cluster events are out of order')
+        mu_data.GetEntry(self._muon_entry)
+        # Find the dts to previous muons
+        while timestamp > mu_data.timestamp:
+            is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
+                    mu_data.triggerType)
+            is_AD = (mu_data.detector == self.ad
+                    and muons.isADMuon_nH(mu_data.detector, mu_data.energy))
+            is_shower = (mu_data.detector == self.ad
+                    and muons.isShowerMuon_nH(mu_data.detector,
+                        mu_data.energy))
+            if is_WS:
+                self.time_previous_WSMuon = mu_data.timestamp
+                log_WSMuon(self.time_tracker, mu_data.timestamp)
+            elif is_AD:
+                self.time_previous_ADMuon = mu_data.timestamp
+                log_ADMuon(self.time_tracker, mu_data.timestamp)
+            elif is_shower:
+                self.time_previous_ShowerMuon = mu_data.timestamp
+                log_ShowerMuon(self.time_tracker, mu_data.timestamp)
+            self._muon_entry += 1
+            mu_data.GetEntry(self._muon_entry)
+        # Save the muon entry number to revert back to after the search forward
+        saved_entry = self._muon_entry - 1
+        # Now find the dt to the next muon
+        not_found = True
+        while not_found:
+            mu_data.GetEntry(self._muon_entry)
+            is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
+                    mu_data.triggerType)
+            is_AD = muons.isADMuon_nH(mu_data.detector, mu_data.energy)
+            is_shower = muons.isShowerMuon_nH(mu_data.detector, mu_data.energy)
+            if is_WS or is_AD or is_shower:
+                self.time_next_muon = mu_data.timestamp
+                not_found = False
+            self._muon_entry += 1
+        self._muon_entry = saved_entry
+        mu_data.GetEntry(self._muon_entry)
+
+
+def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
+    clusters.GetEntry(0)
+    muons.GetEntry(0)
+    t0 = min(clusters.timestamp, muons.timestamp)
+    tracker = TimeTracker(t0, delayeds._NH_THU_DT_MAX)
+    helper = CoincidenceHelper()
+    muon_helper = MuonHelper(muons, tracker, clusters.detector)
+    clusters_index = 0
+    while clusters_index < limit:
+        logging.debug(clusters_index)
+        clusters.GetEntry(clusters_index)
+        logging.debug(clusters.loopIndex)
+        isValid, reasons = isValidEvent(clusters, helper)
+        timestamp = clusters.timestamp
+        if isValid:
+            muon_helper.load(timestamp)
+            if not helper.in_coincidence_window:
+                isVetoed = muon_helper.isVetoed_strict()
+                if isVetoed:
+                    logging.debug('  -- is vetoed')
+                    logging.debug('  WS: %d', muon_helper.dt_previous_WSMuon())
+                    logging.debug('  AD: %d', muon_helper.dt_previous_ADMuon())
+                    logging.debug('  Sh: %d', muon_helper.dt_previous_ShowerMuon())
+                    logging.debug('  Ne: %d', muon_helper.dt_next_muon())
+                    clusters_index += 1
+                    continue
+                logging.debug('survives muon veto')
+                helper.in_coincidence_window = True
+                helper.prompt_timestamp = timestamp
+                helper.prompt_x = clusters.x
+                helper.prompt_y = clusters.y
+                helper.prompt_z = clusters.z
+                assign_value(fill_buf.site, clusters.site)
+                assign_value(fill_buf.run, clusters.run)
+                assign_value(fill_buf.fileno, clusters.fileno)
+            else:
+                isVetoed = muon_helper.isVetoed()
+                if isVetoed:
+                    logging.debug('  -- is vetoed')
+                    logging.debug('  WS: %d', muon_helper.dt_previous_WSMuon())
+                    logging.debug('  AD: %d', muon_helper.dt_previous_ADMuon())
+                    logging.debug('  Sh: %d', muon_helper.dt_previous_ShowerMuon())
+                    logging.debug('  Ne: %d', muon_helper.dt_next_muon())
+                    clusters_index += 1
+                    continue
+                logging.debug('survives muon veto')
+            if timestamp - helper.prompt_timestamp < delayeds._NH_THU_DT_MAX:
+                helper.multiplicity += 1
+                logging.debug('  multiplicity = %d', helper.multiplicity)
+                if helper.multiplicity == 11:
+                    raise RuntimeError('multiplicity overflow')
+                assign_event(clusters, fill_buf, helper.multiplicity - 1)
+                assign_value(fill_buf.dt_previous_WSMuon,
+                        muon_helper.dt_previous_WSMuon(), helper.multiplicity - 1)
+                assign_value(fill_buf.dt_previous_ADMuon,
+                        muon_helper.dt_previous_ADMuon(), helper.multiplicity - 1)
+                assign_value(fill_buf.dt_previous_ShowerMuon,
+                        muon_helper.dt_previous_ShowerMuon(), helper.multiplicity - 1)
+                assign_value(fill_buf.dt_to_prompt,
+                        timestamp - helper.prompt_timestamp,
+                        helper.multiplicity-1)
+                assign_value(fill_buf.dr_to_prompt, math.sqrt(
+                        (clusters.x-helper.prompt_x)**2 +
+                        (clusters.y-helper.prompt_y)**2 +
+                        (clusters.z-helper.prompt_z)**2),
+                        helper.multiplicity-1)
+                assign_value(fill_buf.loopIndex, clusters.loopIndex,
+                        helper.multiplicity - 1)
+                clusters_index += 1
+            else:
+                if helper.multiplicity == 2:
+                    assign_value(fill_buf.multiplicity, helper.multiplicity)
+                    outdata.Fill()
+                helper.in_coincidence_window = False
+                helper.multiplicity = 0
+        else:  # i.e. if not isValid
+            if helper.in_coincidence_window:
+                if timestamp - helper.prompt_timestamp >= delayeds._NH_THU_DT_MAX:
+                    # We've left the window
+                    if helper.multiplicity == 2:
+                        assign_value(fill_buf.multiplicity,
+                                helper.multiplicity)
+                        outdata.Fill()
+                    helper.in_coincidence_window = False
+                    helper.multiplicity = 0
+            clusters_index += 1
+    logging.debug(clusters_index)
+    muon_helper.close(limit * 100)
+    return tracker
+"""
         if not isValid:
             #print('{}: det {} | in window {} | in window {} | {}'.format(
                 #loopIndex, indata.detector, in_coincidence_window,
@@ -447,6 +645,7 @@ def main_loop(indata, outdatas, fill_bufs, debug, limit):
     for tracker in trackers:
         tracker.close(indata.timestamp)
     return trackers
+"""
 
 
 def copy_to_buffer(ttree, buf, index, name):
@@ -524,55 +723,43 @@ def prepare_indata_branches(indata):
 def get_ads(run):
     return [1, 2]
 
-def main(entries, infile, outfilename, runfile, is_partially_processed, debug):
+def main(entries, cluster_filename, muon_filename, out_filename, runfile,
+        detector, debug):
     from ROOT import TFile
 
     run, fileno = runfile
-    ads = get_ads(run)
-    if is_partially_processed:
-        infile = TFile(infile, 'READ')
-        indata = infile.Get('computed')
-        prepare_indata_branches(indata)
-    else:
-        infile = TFile(infile, 'READ')
-        calibStats, adSimple = raw_initialize(infile)
-        calibStats.AddFriend(adSimple)
-        indata = RawFileAdapter(calibStats, run, fileno)
-    outfilesplit = os.path.splitext(outfilename)
-    outfilenames = [outfilesplit[0] + '_ad' + str(ad) + outfilesplit[1]
-            for ad in ads]
-    outfiles = [TFile(outfilename, 'RECREATE') for outfilename in outfilenames]
-    ttree_name = 'ad_events'
-    ttree_description = 'AD events (git: %s)'
-    # Trick to transpose from [[out1, buf1], [out2, buf2], ...] to
-    #[[out1, out2, ...], [buf1, buf2, ...]]
-    outdatas, fill_bufs = zip(*(create_computed_TTree(ttree_name, outfile,
-        ttree_description) for outfile in outfiles))
+    cluster_file = TFile(cluster_filename, 'READ')
+    muon_file = TFile(muon_filename, 'READ')
+    clusters = cluster_file.Get('coincs')
+    muons = muon_file.Get('muons')
+    outfile = TFile(out_filename, 'RECREATE')
+    ttree_name = 'pairs'
+    ttree_description = 'Double-coincidence events (git: %s)'
+    outdata, fill_buf = create_computed_TTree(ttree_name, outfile,
+        ttree_description)
 
     if entries == -1:
-        entries = indata.GetEntries()
-    trackers = main_loop(indata, outdatas, fill_bufs, debug, entries)
-    for outfile in outfiles:
-        outfile.Write()
-        outfile.Close()
-    if is_partially_processed:
-        infile.Close()
-    else:
-        infile.Close()
-    for outfilename, tracker in zip(outfilenames, trackers):
-        with open(os.path.splitext(outfilename)[0] + '.json', 'w') as f:
-            json.dump(tracker.export(), f)
+        entries = clusters.GetEntries()
+    tracker = main_loop(clusters, muons, outdata, fill_buf, debug, entries)
+    outfile.Write()
+    outfile.Close()
+    cluster_file.Close()
+    muon_file.Close()
+    with open(os.path.splitext(out_filename)[0] + '.json', 'w') as f:
+        json.dump(tracker.export(), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', help='Input file name')
+    parser.add_argument('--clusters', help='Input clusters file name')
+    parser.add_argument('--muons', help='Input muons file name')
     parser.add_argument('-o', '--output', help='Output file name')
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--events', type=int, default=-1)
-    parser.add_argument('--new', action='store_true')
     parser.add_argument('-r', '--runfile', type=int, nargs=2,
         help='<run> <fileno>')
+    parser.add_argument('--det', type=int, help='AD number (1-4)')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.input, args.output, args.runfile, args.new, args.debug)
+    main(args.events, args.clusters, args.muons, args.output, args.runfile,
+            args.det, args.debug)

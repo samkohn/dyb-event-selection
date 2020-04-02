@@ -1,6 +1,7 @@
 import argparse
 import logging
 from collections import deque
+import os
 
 from common import *
 import process
@@ -332,10 +333,13 @@ def create_coinc_TTree(host_file):
 
 def create_outfiles(out_location, run, fileno, ads):
     from ROOT import TFile
-    muonFile = TFile('muons_{}_{:>04}.root'.format(run, fileno), 'RECREATE')
-    singlesFiles = [TFile('singles_ad{}_{}_{:>04}.root'.format(ad, run,
-        fileno), 'RECREATE') for ad in ads]
-    coincFiles = [TFile('coinc_ad{}_{}_{:>04}.root'.format(ad, run, fileno),
+    muon_name = 'muons_{}_{:>04}.root'.format(run, fileno)
+    singles_name = 'singles_ad{}_{}_{:>04}.root'.format('{}', run, fileno)
+    coinc_name = 'coinc_ad{}_{}_{:>04}.root'.format('{}', run, fileno)
+    muonFile = TFile(os.path.join(out_location, muon_name), 'RECREATE')
+    singlesFiles = [TFile(os.path.join(out_location, singles_name.format(ad)),
+        'RECREATE') for ad in ads]
+    coincFiles = [TFile(os.path.join(out_location, coinc_name.format(ad)),
         'RECREATE') for ad in ads]
     return {'muon': muonFile, 'singles': singlesFiles, 'coincs': coincFiles}
 

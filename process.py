@@ -408,10 +408,16 @@ class MuonHelper:
         self._event_timestamp = timestamp
         mu_data = self.ttree
         if timestamp < mu_data.timestamp:
-            raise RuntimeError('cluster events are out of order')
+            if self.time_previous_WSMuon == 0:
+                # This is during the first few events, when there may be an AD
+                # event before the first muon event.
+                pass
+            else:
+                raise RuntimeError('cluster events are out of order')
         mu_data.GetEntry(self._muon_entry)
+        total_entries = mu_data.GetEntries()
         # Find the dts to previous muons
-        while timestamp > mu_data.timestamp:
+        while timestamp > mu_data.timestamp and self._muon_entry < total_entries:
             is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
                     mu_data.triggerType)
             is_AD = (mu_data.detector == self.ad
@@ -430,8 +436,14 @@ class MuonHelper:
                 log_ShowerMuon(self.time_tracker, mu_data.timestamp)
             self._muon_entry += 1
             mu_data.GetEntry(self._muon_entry)
+        # Test to see if we have simply run out of muons, in which
+        # case we do not need to search for a "next" muon. Note that
+        # the "next muon" timestamp will be earlier than the event
+        # timestamp, resulting in all future events being vetoed.
+        if timestamp > mu_data.timestamp:  # i.e. *still* greater than
+            return
         # Save the muon entry number to revert back to after the search forward
-        saved_entry = self._muon_entry - 1
+        saved_entry = max(self._muon_entry - 1, 0)
         # Now find the dt to the next muon
         not_found = True
         while not_found:

@@ -2,31 +2,18 @@
 Process the basic data by computing various cuts, quantities and tags.
 
 '''
-from __future__ import print_function
-
-from collections import deque
-import time
 import argparse
 import logging
 import math
 import os
-import os.path
 import json
-import random
-from functools import lru_cache
 
 from common import *
-from flashers import fID, fPSD
-import flashers
 import muons
-import prompts
 import delayeds
-import adevent
 from adevent import isADEvent_THU
 from translate import (TreeBuffer, float_value, assign_value,
-        fetch_value, int_value, unsigned_int_value, long_value, git_describe,
-        create_data_TTree, copy as raw_copy, initialize_indata_onefile as
-        raw_initialize)
+        int_value, unsigned_int_value, long_value, git_describe)
 
 def create_computed_TTree(name, host_file, selection_name, title=None):
     from ROOT import TTree
@@ -130,47 +117,6 @@ def isValidEvent(indata, helpers):
     if not isADEvent_THU(detector, energy):
         reasons.append('not_adevent')
     return (len(reasons) == 0, reasons)
-"""
-    if not isValidTriggerType(indata.triggerType):
-        return (False, ['not_adevent', 'trigger: {}'.format(indata.triggerType)])
-    if indata.detector not in (1, 2, 5, 6):
-        return (False, ['not_adevent', 'detector'])
-    event_fID = fID(indata.fMax, indata.fQuad)
-    event_fPSD = None
-    isFlasher = flashers.isFlasher_nH(event_fID, event_fPSD,
-            indata.f2inch_maxQ, indata.detector)
-    reasons = []
-    if isFlasher == 1:
-        reasons.append('flasher')
-        reasons.append('8-inch flasher')
-    elif isFlasher == 4:
-        reasons.append('flasher')
-        reasons.append('2-inch flasher')
-    if muons.isWSMuon_nH(indata.detector, indata.nHit, indata.triggerType):
-        reasons.append('wsmuon')
-        reasons.append('anymuon')
-    if muons.isADMuon_nH(indata.detector, indata.energy):
-        reasons.append('admuon')
-        reasons.append('anymuon')
-    if muons.isShowerMuon_nH(indata.detector, indata.energy):
-        reasons.append('showermuon')
-        reasons.append('anymuon')
-    if indata.detector == 1:
-        h = helpers[0]
-        muon_veto_list = isMuonVeto(indata, h.shared_last_WSMuon_timestamp,
-                h.last_ADMuon_timestamp, h.last_ShowerMuon_timestamp)
-        reasons.extend(muon_veto_list)
-    elif indata.detector == 2:
-        h = helpers[1]
-        muon_veto_list = isMuonVeto(indata, h.shared_last_WSMuon_timestamp,
-                h.last_ADMuon_timestamp, h.last_ShowerMuon_timestamp)
-        reasons.extend(muon_veto_list)
-    detector = indata.detector
-    energy = indata.energy
-    if not isADEvent_THU(detector, energy):
-        reasons.append('not_adevent')
-    return (len(reasons) == 0, reasons)
-"""
 
 class TimeTracker:
     def __init__(self, start_time, pre_veto):
@@ -255,66 +201,6 @@ def log_ADMuon(tracker, timestamp):
 def log_ShowerMuon(tracker, timestamp):
     tracker.log_new_veto(timestamp, muons._NH_SHOWER_MUON_VETO_LAST_NS)
     return
-
-class RawFileAdapter():
-    ATTR_LOOKUP = {
-            'triggerNumber': ('triggerNumber', int),
-            'timestamp_seconds': ('context.mTimeStamp.mSec', int),
-            'timestamp_nanoseconds': ('context.mTimeStamp.mNanoSec',
-                int),
-            'detector': ('context.mDetId', int),
-            'nHit': ('nHit', int),
-            'charge': ('NominalCharge', float),
-            'fQuad': ('Quadrant', float),
-            'fMax': ('MaxQ', float),
-            'fPSD_t1': ('time_PSD', float),
-            'fPSD_t2': ('time_PSD1', float),
-            'f2inch_maxQ': ('MaxQ_2inchPMT', float),
-            'triggerType': ('triggerType', int),
-            'energy': ('energy', float),
-            'x': ('x', float),
-            'y': ('y', float),
-            'z': ('z', float),
-    }
-    def __init__(self, ttree_w_friend, run, fileno):
-        from ROOT import TFile
-        self.ttree = ttree_w_friend
-        self.run = run
-        self.fileno = fileno
-        self.ttree.SetBranchStatus('execNumber', 1)
-        # Hack to extract site number
-        old_status = self.ttree.GetBranchStatus('context.mSite')
-        if int(old_status) == 0:
-            self.ttree.SetBranchStatus('context.mSite', 1)
-        self.ttree.GetEntry(0)
-        self.site = fetch_value(self.ttree, 'context.mSite', int)
-        self.ttree.SetBranchStatus('context.mSite', int(old_status))
-        # End hack
-
-    def GetEntry(self, index):
-        self.ttree.GetEntry(index)
-        self.__getattr__.cache_clear()
-
-    def GetEntries(self):
-        return self.ttree.GetEntries()
-
-    def _timestamp(self):
-        sec = self.timestamp_seconds
-        nano = self.timestamp_nanoseconds
-        return sec*1000000000 + nano
-
-    @lru_cache(maxsize=32)
-    def __getattr__(self, name):
-        if name == 'timestamp':
-            result = self._timestamp()
-            return result
-        attr_name = self.ATTR_LOOKUP.get(name, None)
-        if attr_name is None:
-            raise AttributeError('No attribute "{}"'.format(name))
-        return fetch_value(self.ttree, attr_name[0], attr_name[1])
-
-    def SetBranchStatus(self, *args):
-        self.ttree.SetBranchStatus(*args)
 
 def update_muons(timestamp, reasons, time_tracker, last_WSMuon, last_ADMuon,
         last_ShowerMuon):
@@ -547,116 +433,6 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
     logging.debug(clusters_index)
     muon_helper.close(limit * 100)
     return tracker
-"""
-        if not isValid:
-            #print('{}: det {} | in window {} | in window {} | {}'.format(
-                #loopIndex, indata.detector, in_coincidence_window,
-                #in_coincidence_window2, reasons))
-            #input('  window1_dt {} | window2_dt {}'.format((indata.timestamp -
-                #prompt_timestamp)/1e3, (indata.timestamp -
-                    #prompt_timestamp2)/1e3))
-            isMuon = 'anymuon' in reasons
-            det = indata.detector
-            if det in (1, 2):
-                index = det - 1
-                h = helpers[index]
-                outdata = outdatas[index]
-                fill_buf = fill_bufs[index]
-                tracker = trackers[index]
-                if h.in_coincidence_window and isMuon and (
-                        indata.timestamp - h.prompt_timestamp <
-                        delayeds._NH_THU_DT_MAX):
-                    #input(('  leaving window {} because of muon veto').format(
-                        #det))
-                    h.in_coincidence_window = False
-                    h.multiplicity = False
-                elif h.in_coincidence_window and (indata.timestamp -
-                        h.prompt_timestamp >= delayeds._NH_THU_DT_MAX):
-                    #input(('  leaving window {} because of coinc time'.format(
-                        #det))
-                    assign_value(fill_buf.multiplicity, h.multiplicity)
-                    outdata.Fill()
-                    h.in_coincidence_window = False
-                    h.multiplicity = 0
-                if isMuon:
-                    new_timestamps = update_muons(indata.timestamp, reasons,
-                            tracker, h.shared_last_WSMuon_timestamp,
-                            h.last_ADMuon_timestamp,
-                            h.last_ShowerMuon_timestamp)
-                    h.last_ADMuon_timestamp = new_timestamps[1]
-                    h.last_ShowerMuon_timestamp = new_timestamps[2]
-                if ((isMuon or ('anymuonveto' in reasons))
-                        and ('not_adevent' not in reasons)):
-                    h.last_ADevent_timestamp = indata.timestamp
-            elif det in (5, 6) and isMuon:
-                for h, outdata, fill_buf in zip(helpers, outdatas, fill_bufs):
-                    if h.in_coincidence_window and (indata.timestamp
-                            - h.prompt_timestamp < 400e3):
-                        #input(('  leaving window {} because of WSmuon veto').format(
-                            #det))
-                        h.in_coincidence_window = False
-                        h.multiplicity = False
-                    new_timestamps = update_muons(indata.timestamp, reasons,
-                            tracker, h.shared_last_WSMuon_timestamp,
-                            h.last_ADMuon_timestamp,
-                            h.last_ShowerMuon_timestamp)
-                    h.shared_last_WSMuon_timestamp = new_timestamps[0]
-            loopIndex += 1
-            continue
-        det = indata.detector
-        index = det - 1
-        h = helpers[index]
-        outdata = outdatas[index]
-        fill_buf = fill_bufs[index]
-        tracker = trackers[index]
-        if not h.in_coincidence_window:
-            #input('{}: entering window {}'.format(loopIndex, det))
-            h.in_coincidence_window = True
-            h.prompt_timestamp = indata.timestamp
-            h.prompt_x = indata.x
-            h.prompt_y = indata.y
-            h.prompt_z = indata.z
-            assign_value(fill_buf.dt_cluster_to_prev_ADevent, indata.timestamp -
-                    h.last_ADevent_timestamp)
-            assign_value(fill_buf.site, indata.site)
-            assign_value(fill_buf.run, indata.run)
-            assign_value(fill_buf.fileno, indata.fileno)
-        if indata.timestamp - h.prompt_timestamp < delayeds._NH_THU_DT_MAX:
-            h.multiplicity += 1
-            if h.multiplicity == 11:
-                raise RuntimeError('multiplicity overflow')
-            #input('{}: in window {} | multiplicity {}'.format(loopIndex, det,
-                #multiplicity))
-            assign_event(indata, fill_buf, h.multiplicity - 1)
-            assign_value(fill_buf.dt_previous_WSMuon, indata.timestamp -
-                    h.shared_last_WSMuon_timestamp, h.multiplicity - 1)
-            assign_value(fill_buf.dt_previous_ADMuon, indata.timestamp -
-                    h.last_ADMuon_timestamp, h.multiplicity - 1)
-            assign_value(fill_buf.dt_previous_ShowerMuon, indata.timestamp -
-                    h.last_ShowerMuon_timestamp, h.multiplicity - 1)
-            assign_value(fill_buf.dt_to_prompt,
-                    indata.timestamp - h.prompt_timestamp,
-                    h.multiplicity-1)
-            assign_value(fill_buf.dr_to_prompt, math.sqrt(
-                    (indata.x-h.prompt_x)**2 +
-                    (indata.y-h.prompt_y)**2 +
-                    (indata.z-h.prompt_z)**2),
-                    h.multiplicity-1)
-            assign_value(fill_buf.loopIndex, loopIndex, h.multiplicity - 1)
-            h.last_ADevent_timestamp = indata.timestamp
-            loopIndex += 1
-        else:
-            #input('{}: leaving window {} because of coincidence time'.format(
-                #loopIndex, det))
-            assign_value(fill_buf.multiplicity, h.multiplicity)
-            outdata.Fill()
-            h.in_coincidence_window = False
-            h.multiplicity = 0
-    for tracker in trackers:
-        tracker.close(indata.timestamp)
-    return trackers
-"""
-
 
 def copy_to_buffer(ttree, buf, index, name):
     assign_value(getattr(buf, name), getattr(ttree, name), index)
@@ -680,58 +456,6 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'x')
     copy_to_buffer(source, buf, index, 'y')
     copy_to_buffer(source, buf, index, 'z')
-
-def isMuonVeto(source, time_last_WSMuon, time_last_ADMuon,
-        time_last_ShowerMuon):
-    reasons = []
-    dt_previous_WSMuon = source.timestamp - time_last_WSMuon
-    isWSMuonVeto = muons.isVetoedByWSMuon_nH(source.timestamp -
-            time_last_WSMuon)
-    if isWSMuonVeto:
-        reasons.append('wsmuonveto')
-    dt_previous_ADMuon = source.timestamp - time_last_ADMuon
-    isADMuonVeto = muons.isVetoedByADMuon_nH(source.timestamp -
-            time_last_ADMuon)
-    if isADMuonVeto:
-        reasons.append('admuonveto')
-    dt_previous_ShowerMuon = source.timestamp - time_last_ShowerMuon
-    isShowerMuonVeto = muons.isVetoedByShowerMuon_nH(source.timestamp -
-            time_last_ShowerMuon)
-    if isShowerMuonVeto:
-        reasons.append('showermuonveto')
-    isAnyMuonVeto = isWSMuonVeto or isADMuonVeto or isShowerMuonVeto
-    if len(reasons) > 0:
-        reasons.append('anymuonveto')
-    return reasons
-
-def prepare_indata_branches(indata):
-    indata.SetBranchStatus('*', 0)
-    indata.SetBranchStatus('timestamp', 1)
-    indata.SetBranchStatus('timestamp_seconds', 1)
-    indata.SetBranchStatus('timestamp_nanoseconds', 1)
-    indata.SetBranchStatus('detector', 1)
-    indata.SetBranchStatus('site', 1)
-    indata.SetBranchStatus('run', 1)
-    indata.SetBranchStatus('fileno', 1)
-    indata.SetBranchStatus('triggerNumber', 1)
-    indata.SetBranchStatus('triggerType', 1)
-    indata.SetBranchStatus('nHit', 1)
-    indata.SetBranchStatus('charge', 1)
-    indata.SetBranchStatus('fQuad', 1)
-    indata.SetBranchStatus('fMax', 1)
-    indata.SetBranchStatus('fPSD_t1', 1)
-    indata.SetBranchStatus('fPSD_t2', 1)
-    indata.SetBranchStatus('f2inch_maxQ', 1)
-    indata.SetBranchStatus('energy', 1)
-    indata.SetBranchStatus('x', 1)
-    indata.SetBranchStatus('y', 1)
-    indata.SetBranchStatus('z', 1)
-    indata.SetBranchStatus('fID', 1)
-    indata.SetBranchStatus('fPSD', 1)
-    indata.SetBranchStatus('tag_flasher', 1)
-
-def get_ads(run):
-    return [1, 2]
 
 def main(entries, events_filename, muon_filename, out_filename, runfile,
         detector, debug):

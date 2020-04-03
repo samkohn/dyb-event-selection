@@ -2,20 +2,79 @@ import argparse
 import logging
 from collections import deque
 import os
+from functools import lru_cache
 
 from common import *
 import process
 import translate
 import flashers
 from translate import (initialize_indata_onefile as initialize, TreeBuffer,
-        float_value, int_value, unsigned_int_value, long_value, assign_value)
+        float_value, int_value, unsigned_int_value, long_value, assign_value,
+        fetch_value)
+
+class RawFileAdapter():
+    ATTR_LOOKUP = {
+            'triggerNumber': ('triggerNumber', int),
+            'timestamp_seconds': ('context.mTimeStamp.mSec', int),
+            'timestamp_nanoseconds': ('context.mTimeStamp.mNanoSec',
+                int),
+            'detector': ('context.mDetId', int),
+            'nHit': ('nHit', int),
+            'charge': ('NominalCharge', float),
+            'fQuad': ('Quadrant', float),
+            'fMax': ('MaxQ', float),
+            'fPSD_t1': ('time_PSD', float),
+            'fPSD_t2': ('time_PSD1', float),
+            'f2inch_maxQ': ('MaxQ_2inchPMT', float),
+            'triggerType': ('triggerType', int),
+            'energy': ('energy', float),
+            'x': ('x', float),
+            'y': ('y', float),
+            'z': ('z', float),
+    }
+    def __init__(self, ttree_w_friend, run, fileno):
+        from ROOT import TFile
+        self.ttree = ttree_w_friend
+        self.run = run
+        self.fileno = fileno
+        self.ttree.SetBranchStatus('execNumber', 1)
+        # Hack to extract site number
+        old_status = self.ttree.GetBranchStatus('context.mSite')
+        if int(old_status) == 0:
+            self.ttree.SetBranchStatus('context.mSite', 1)
+        self.ttree.GetEntry(0)
+        self.site = {1:1, 2:2, 4:3}[fetch_value(self.ttree, 'context.mSite', int)]
+        self.ttree.SetBranchStatus('context.mSite', int(old_status))
+        # End hack
+
+    def GetEntry(self, index):
+        self.ttree.GetEntry(index)
+        self.__getattr__.cache_clear()
+
+    def GetEntries(self):
+        return self.ttree.GetEntries()
+
+    def _timestamp(self):
+        sec = self.timestamp_seconds
+        nano = self.timestamp_nanoseconds
+        return sec*1000000000 + nano
+
+    @lru_cache(maxsize=32)
+    def __getattr__(self, name):
+        if name == 'timestamp':
+            result = self._timestamp()
+            return result
+        attr_name = self.ATTR_LOOKUP.get(name, None)
+        if attr_name is None:
+            raise AttributeError('No attribute "{}"'.format(name))
+        return fetch_value(self.ttree, attr_name[0], attr_name[1])
+
+    def SetBranchStatus(self, *args):
+        self.ttree.SetBranchStatus(*args)
+
 
 def main_loop(events, indata, muon_ttree, event_ttrees, ads, debug):
     loopIndex = 0
-    #singles_caches = {ad: deque() for ad in ads}
-    #coinc_caches = {ad: (None, False) for ad in ads}
-    #singles_buf_copy = singles_ttrees[0][1].clone()
-    #coinc_buf_copy = coinc_ttrees[0][1].clone()
     while loopIndex < events:
         indata.GetEntry(loopIndex)
         if isMuon(indata):
@@ -24,41 +83,9 @@ def main_loop(events, indata, muon_ttree, event_ttrees, ads, debug):
             ttree, fill_buf = event_ttrees[indata.detector]
             load_adevent_buf(fill_buf, indata, loopIndex)
             ttree.Fill()
-            #detector = indata.detector
-            ## Process singles
-            #add_to_singles_cache(singles_caches[detector], indata,
-                    #loopIndex, singles_buf_copy)
-            #ready_to_fills = process_singles(singles_caches)
-            #fill_multiple_TTrees(singles_ttrees, ready_to_fills)
-            ## Process coincidences
-            #if isCoincidenceCandidate(indata):
-                #ready_to_fills = update_coinc_caches(coinc_caches, indata, loopIndex,
-                        #coinc_buf_copy)
-                #fill_multiple_TTrees(coinc_ttrees, ready_to_fills)
         loopIndex += 1
     return
 
-def update_coinc_caches(caches, indata, loopIndex, template_buf):
-    buf = template_buf.clone()
-    load_coinc_buf(buf, indata, loopIndex)
-    cache_buf, cache_is_coinc = caches[indata.detector]
-    if cache_buf is None:
-        caches[indata.detector] = (buf, False)
-        return []
-    dt = indata.timestamp - cache_buf.timestamp[0]
-    if dt < 600e3:
-        cache_is_coinc = True
-        current_is_coinc = True
-    else:
-        current_is_coinc = False
-    caches[indata.detector] = (buf, current_is_coinc)
-    if cache_is_coinc:
-        return [cache_buf]
-    else:
-        return []
-
-def isCoincidenceCandidate(indata):
-    return indata.energy < 14
 
 def isADEvent(indata):
     return (indata.detector in AD_DETECTORS
@@ -67,85 +94,6 @@ def isADEvent(indata):
                 None, indata.f2inch_maxQ, indata.detector)) == 0
             and (indata.triggerType & 0x1100) > 0)
 
-class CacheItem:
-    def __init__(self):
-        self.buf = None
-        # The use of sets here allows the same neighbor's data to be added
-        # multiple times without saving the duplicates. This is useful if the
-        # cache is traversed multiple times before finally deciding if an item
-        # is good or bad.
-        self.pre = set()
-        self.post = set()
-        self.is_good_neighbor = True
-        self.is_good_single = True
-        return
-
-    def __repr__(self):
-        return "<CacheItem [E={:.03}] pre={} post={} single={} neighbor={}>".format(
-                self.buf.energy[0], self.pre, self.post, self.is_good_single,
-                self.is_good_neighbor)
-
-def add_to_singles_cache(cache, indata, loopIndex, template_buf):
-    buf = template_buf.clone()
-    load_singles_buf_noneighbors(buf, indata, loopIndex)
-    item = CacheItem()
-    item.buf = buf
-    item.is_good_neighbor = isGoodSingleNeighbor(buf.energy[0])
-    item.is_good_single = isGoodSingle(buf.energy[0])
-    cache.append(item)
-    return
-
-def isGoodSingleNeighbor(energy):
-    return energy < 2
-
-def isGoodSingle(energy):
-    return energy < 14
-
-def process_singles(caches):
-    good = []
-    for cache in caches.values():
-        revisit_current = False
-        while len(cache) > 0 and not revisit_current:
-            current = cache.popleft()
-            t0 = current.buf.timestamp[0]
-            dt = 0
-            # This loop serves 2 purposes: 1. do future events cause
-            # problems for the current event, and 2. does this event cause problems for
-            # any future events.
-            for neighbor in cache:
-                dt = neighbor.buf.timestamp[0] - t0
-                if dt < 600e3:
-                    # Do future events cause problems for this one?
-                    if neighbor.is_good_neighbor:
-                        current.post.add((neighbor.buf.energy[0], dt))
-                    else:
-                        current.is_good_single = False
-                    # Does this event cause problems for future ones?
-                    if current.is_good_neighbor:
-                        neighbor.pre.add((current.buf.energy[0], dt))
-                    else:
-                        neighbor.is_good_single = False
-                else:
-                    # We've come far enough that new events have no bearing on the
-                    # current one. If the current event is still a new single, then
-                    # save it.
-                    if current.is_good_single:
-                        load_singles_buf_neighbors(current.buf,
-                            current.pre, current.post)
-                        good.append(current.buf)
-                    break
-            revisit_current = dt < 600e3
-            if revisit_current:
-                cache.appendleft(current)
-    return good
-
-
-def fill_multiple_TTrees(ttrees, bufs):
-    for buf in bufs:
-        ad_index = buf.detector[0] - 1
-        ttree, fill_buf = ttrees[ad_index]
-        buf.copyTo(fill_buf)
-        ttree.Fill()
 
 def isMuon(indata):
     is_WP = (indata.detector in WP_DETECTORS
@@ -221,10 +169,6 @@ def create_muon_TTree(host_file):
     initialize_basic_TTree(out, buf)
     return out, buf
 
-def load_coinc_buf(buf, indata, loopIndex):
-    load_singles_buf_noneighbors(buf, indata, loopIndex)
-
-#def load_singles_buf_noneighbors(buf, indata, loopIndex):
 def load_adevent_buf(buf, indata, loopIndex):
     load_basic_TTree(buf, indata, loopIndex)
     assign_value(buf.fQuad, indata.fQuad)
@@ -237,26 +181,6 @@ def load_adevent_buf(buf, indata, loopIndex):
     assign_value(buf.z, indata.z)
     assign_value(buf.fID, flashers.fID(indata.fMax, indata.fQuad))
     assign_value(buf.fPSD, flashers.fPSD(indata.fPSD_t1, indata.fPSD_t2))
-
-def load_singles_buf_neighbors(buf, pre_iter, post_iter):
-    """Load only the neighboring events into the buffer.
-
-    Assumes pre and post are iterables of (energy, dt) tuples, not necessarily
-    sorted, where dt is always positive. (dt will be deliberately negated for
-    pre events.)
-    """
-    pre = sorted(pre_iter, key=lambda x: x[1], reverse=True)
-    post = sorted(post_iter, key=lambda x: x[1])
-    npre = len(pre)
-    mult = npre + len(post)
-    assign_value(buf.num_nearby_events, mult)
-    for i, (energy, dt) in enumerate(pre):
-        assign_value(buf.nearby_dt, -dt, i)
-        assign_value(buf.nearby_energy, energy, i)
-    for i, (energy, dt) in enumerate(post):
-        assign_value(buf.nearby_dt, dt, i + npre)
-        assign_value(buf.nearby_energy, energy, i + npre)
-    return
 
 def create_singles_TTree(host_file):
     from ROOT import TTree

@@ -10,28 +10,32 @@ import flashers
 from translate import (initialize_indata_onefile as initialize, TreeBuffer,
         float_value, int_value, unsigned_int_value, long_value, assign_value)
 
-def main_loop(events, indata, muon_ttree, singles_ttrees, coinc_ttrees, ads, debug):
+def main_loop(events, indata, muon_ttree, event_ttrees, ads, debug):
     loopIndex = 0
-    singles_caches = {ad: deque() for ad in ads}
-    coinc_caches = {ad: (None, False) for ad in ads}
-    singles_buf_copy = singles_ttrees[0][1].clone()
-    coinc_buf_copy = coinc_ttrees[0][1].clone()
+    #singles_caches = {ad: deque() for ad in ads}
+    #coinc_caches = {ad: (None, False) for ad in ads}
+    #singles_buf_copy = singles_ttrees[0][1].clone()
+    #coinc_buf_copy = coinc_ttrees[0][1].clone()
     while loopIndex < events:
         indata.GetEntry(loopIndex)
         if isMuon(indata):
             fill_muon_TTree(muon_ttree, indata, loopIndex)
         if isADEvent(indata):
-            detector = indata.detector
-            # Process singles
-            add_to_singles_cache(singles_caches[detector], indata,
-                    loopIndex, singles_buf_copy)
-            ready_to_fills = process_singles(singles_caches)
-            fill_multiple_TTrees(singles_ttrees, ready_to_fills)
-            # Process coincidences
-            if isCoincidenceCandidate(indata):
-                ready_to_fills = update_coinc_caches(coinc_caches, indata, loopIndex,
-                        coinc_buf_copy)
-                fill_multiple_TTrees(coinc_ttrees, ready_to_fills)
+            ad_index = indata.detector - 1
+            ttree, fill_buf = event_ttrees[ad_index]
+            load_adevent_buf(fill_buf, indata, loopIndex)
+            ttree.Fill()
+            #detector = indata.detector
+            ## Process singles
+            #add_to_singles_cache(singles_caches[detector], indata,
+                    #loopIndex, singles_buf_copy)
+            #ready_to_fills = process_singles(singles_caches)
+            #fill_multiple_TTrees(singles_ttrees, ready_to_fills)
+            ## Process coincidences
+            #if isCoincidenceCandidate(indata):
+                #ready_to_fills = update_coinc_caches(coinc_caches, indata, loopIndex,
+                        #coinc_buf_copy)
+                #fill_multiple_TTrees(coinc_ttrees, ready_to_fills)
         loopIndex += 1
     return
 
@@ -61,7 +65,8 @@ def isADEvent(indata):
     return (indata.detector in AD_DETECTORS
             and indata.energy > 0.7
             and int(flashers.isFlasher_nH(flashers.fID(indata.fMax, indata.fQuad),
-                None, indata.f2inch_maxQ, indata.detector)) == 0)
+                None, indata.f2inch_maxQ, indata.detector)) == 0
+            and (indata.triggerType & 0x1100) > 0)
 
 class CacheItem:
     def __init__(self):
@@ -148,7 +153,8 @@ def isMuon(indata):
             and indata.nHit > 11)
     is_AD = (indata.detector in AD_DETECTORS
             and indata.energy > 18)
-    return is_WP or is_AD
+    good_trigger = (indata.triggerType & 0x1100) > 0
+    return (is_WP or is_AD) and good_trigger
 
 def fill_muon_TTree(ttree, indata, loopIndex):
     ttree, buf = ttree
@@ -219,7 +225,8 @@ def create_muon_TTree(host_file):
 def load_coinc_buf(buf, indata, loopIndex):
     load_singles_buf_noneighbors(buf, indata, loopIndex)
 
-def load_singles_buf_noneighbors(buf, indata, loopIndex):
+#def load_singles_buf_noneighbors(buf, indata, loopIndex):
+def load_adevent_buf(buf, indata, loopIndex):
     load_basic_TTree(buf, indata, loopIndex)
     assign_value(buf.fQuad, indata.fQuad)
     assign_value(buf.fMax, indata.fMax)
@@ -295,12 +302,12 @@ def create_singles_TTree(host_file):
             'nearby_energy[num_nearby_events]/F')
     return out, buf
 
-def create_coinc_TTree(host_file):
+def create_event_TTree(host_file):
     from ROOT import TTree
     host_file.cd()
-    title = 'Coincidence events by Sam Kohn (git: {})'.format(
+    title = 'AD events by Sam Kohn (git: {})'.format(
             translate.git_describe())
-    out = TTree('coincs', title)
+    out = TTree('events', title)
     buf = TreeBuffer()
     initialize_basic_TTree(out, buf)
     buf.fQuad = float_value()
@@ -334,14 +341,11 @@ def create_coinc_TTree(host_file):
 def create_outfiles(out_location, run, fileno, ads):
     from ROOT import TFile
     muon_name = 'muons_{}_{:>04}.root'.format(run, fileno)
-    singles_name = 'singles_ad{}_{}_{:>04}.root'.format('{}', run, fileno)
-    coinc_name = 'coinc_ad{}_{}_{:>04}.root'.format('{}', run, fileno)
+    events_name = 'events_ad{}_{}_{:>04}.root'.format('{}', run, fileno)
     muonFile = TFile(os.path.join(out_location, muon_name), 'RECREATE')
-    singlesFiles = [TFile(os.path.join(out_location, singles_name.format(ad)),
+    eventsFiles = [TFile(os.path.join(out_location, events_name.format(ad)),
         'RECREATE') for ad in ads]
-    coincFiles = [TFile(os.path.join(out_location, coinc_name.format(ad)),
-        'RECREATE') for ad in ads]
-    return {'muon': muonFile, 'singles': singlesFiles, 'coincs': coincFiles}
+    return {'muon': muonFile, 'events': eventsFiles}
 
 def main(events, infile, out_location, run_and_file, debug):
     from ROOT import TFile
@@ -358,18 +362,15 @@ def main(events, infile, out_location, run_and_file, debug):
     indata = process.RawFileAdapter(calibStats, run, fileno)
     outfiles = create_outfiles(out_location, run, fileno, ads)
     muon_ttree = create_muon_TTree(outfiles['muon'])
-    singles_ttrees = [create_singles_TTree(f) for f in outfiles['singles']]
-    coinc_ttrees = [create_coinc_TTree(f) for f in outfiles['coincs']]
+    event_ttrees = [create_event_TTree(f) for f in outfiles['events']]
 
     if events == -1:
         events = indata.GetEntries()
-    main_loop(events, indata, muon_ttree, singles_ttrees, coinc_ttrees, ads, debug)
+    main_loop(events, indata, muon_ttree, event_ttrees, ads, debug)
     outfiles['muon'].Write()
     outfiles['muon'].Close()
-    [x.Write() for x in outfiles['singles']]
-    [x.Close() for x in outfiles['singles']]
-    [x.Write() for x in outfiles['coincs']]
-    [x.Close() for x in outfiles['coincs']]
+    [x.Write() for x in outfiles['events']]
+    [x.Close() for x in outfiles['events']]
     return
 
 

@@ -530,19 +530,17 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                         helper.multiplicity - 1)
                 clusters_index += 1
             else:
-                if helper.multiplicity == 2:
-                    assign_value(fill_buf.multiplicity, helper.multiplicity)
-                    outdata.Fill()
+                assign_value(fill_buf.multiplicity, helper.multiplicity)
+                outdata.Fill()
                 helper.in_coincidence_window = False
                 helper.multiplicity = 0
         else:  # i.e. if not isValid
             if helper.in_coincidence_window:
                 if timestamp - helper.prompt_timestamp >= delayeds._NH_THU_DT_MAX:
                     # We've left the window
-                    if helper.multiplicity == 2:
-                        assign_value(fill_buf.multiplicity,
-                                helper.multiplicity)
-                        outdata.Fill()
+                    assign_value(fill_buf.multiplicity,
+                            helper.multiplicity)
+                    outdata.Fill()
                     helper.in_coincidence_window = False
                     helper.multiplicity = 0
             clusters_index += 1
@@ -735,34 +733,34 @@ def prepare_indata_branches(indata):
 def get_ads(run):
     return [1, 2]
 
-def main(entries, cluster_filename, muon_filename, out_filename, runfile,
+def main(entries, events_filename, muon_filename, out_filename, runfile,
         detector, debug):
     from ROOT import TFile
 
     run, fileno = runfile
-    cluster_file = TFile(cluster_filename, 'READ')
+    events_file = TFile(events_filename, 'READ')
     muon_file = TFile(muon_filename, 'READ')
-    clusters = cluster_file.Get('coincs')
+    in_events = events_file.Get('events')
     muons = muon_file.Get('muons')
     outfile = TFile(out_filename, 'RECREATE')
-    ttree_name = 'pairs'
-    ttree_description = 'Double-coincidence events (git: %s)'
+    ttree_name = 'ad_events'
+    ttree_description = 'AD events by Sam Kohn (git: %s)'
     outdata, fill_buf = create_computed_TTree(ttree_name, outfile,
         ttree_description)
 
     if entries == -1:
-        entries = clusters.GetEntries()
-    tracker = main_loop(clusters, muons, outdata, fill_buf, debug, entries)
+        entries = in_events.GetEntries()
+    tracker = main_loop(in_events, muons, outdata, fill_buf, debug, entries)
     outfile.Write()
     outfile.Close()
-    cluster_file.Close()
+    events_file.Close()
     muon_file.Close()
     with open(os.path.splitext(out_filename)[0] + '.json', 'w') as f:
         json.dump(tracker.export(), f)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--clusters', help='Input clusters file name')
+    parser.add_argument('--adevents', help='Input AD events file name')
     parser.add_argument('--muons', help='Input muons file name')
     parser.add_argument('-o', '--output', help='Output file name')
     parser.add_argument('-d', '--debug', action='store_true')
@@ -773,5 +771,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
-    main(args.events, args.clusters, args.muons, args.output, args.runfile,
+    main(args.events, args.adevents, args.muons, args.output, args.runfile,
             args.det, args.debug)

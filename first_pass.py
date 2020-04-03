@@ -21,8 +21,7 @@ def main_loop(events, indata, muon_ttree, event_ttrees, ads, debug):
         if isMuon(indata):
             fill_muon_TTree(muon_ttree, indata, loopIndex)
         if isADEvent(indata):
-            ad_index = indata.detector - 1
-            ttree, fill_buf = event_ttrees[ad_index]
+            ttree, fill_buf = event_ttrees[indata.detector]
             load_adevent_buf(fill_buf, indata, loopIndex)
             ttree.Fill()
             #detector = indata.detector
@@ -343,8 +342,8 @@ def create_outfiles(out_location, run, fileno, ads):
     muon_name = 'muons_{}_{:>04}.root'.format(run, fileno)
     events_name = 'events_ad{}_{}_{:>04}.root'.format('{}', run, fileno)
     muonFile = TFile(os.path.join(out_location, muon_name), 'RECREATE')
-    eventsFiles = [TFile(os.path.join(out_location, events_name.format(ad)),
-        'RECREATE') for ad in ads]
+    eventsFiles = {ad: TFile(os.path.join(out_location, events_name.format(ad)),
+        'RECREATE') for ad in ads}
     return {'muon': muonFile, 'events': eventsFiles}
 
 def main(events, infile, out_location, run_and_file, debug):
@@ -355,22 +354,24 @@ def main(events, infile, out_location, run_and_file, debug):
     logging.debug(run_and_file)
     logging.debug(debug)
     run, fileno = run_and_file
-    ads = process.get_ads(run)
     infile = TFile(infile, 'READ')
     calibStats, adSimple = initialize(infile)
     calibStats.AddFriend(adSimple)
-    indata = process.RawFileAdapter(calibStats, run, fileno)
+    indata = RawFileAdapter(calibStats, run, fileno)
+    ads = dets_for(indata.site, run)
     outfiles = create_outfiles(out_location, run, fileno, ads)
     muon_ttree = create_muon_TTree(outfiles['muon'])
-    event_ttrees = [create_event_TTree(f) for f in outfiles['events']]
+    event_ttrees = {ad: create_event_TTree(f) for ad, f in
+            outfiles['events'].items()}
 
     if events == -1:
         events = indata.GetEntries()
     main_loop(events, indata, muon_ttree, event_ttrees, ads, debug)
     outfiles['muon'].Write()
     outfiles['muon'].Close()
-    [x.Write() for x in outfiles['events']]
-    [x.Close() for x in outfiles['events']]
+    for x in outfiles['events'].values():
+        x.Write()
+        x.Close()
     return
 
 

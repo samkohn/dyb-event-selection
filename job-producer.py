@@ -3,6 +3,8 @@ import re
 import os.path
 import subprocess
 
+from common import dets_for
+
 def get_run_info(line):
     result = re.match('^(\d+)\s+(\d+)\s+(\d).*$', line)
     run = int(result.group(1))
@@ -23,7 +25,7 @@ def get_file_location(run, fileno):
     location = command_result.stdout.decode()
     return location.strip()
 
-def generate_worker_command(line, command_template, run_only):
+def generate_worker_command(line, command_template, run_only, per_ad):
     if run_only:
         run, site = get_run_info_run_only(line)
         args = {'run': run, 'site': site}
@@ -31,8 +33,16 @@ def generate_worker_command(line, command_template, run_only):
         run, fileno, site = get_run_info(line)
         infile = get_file_location(run, fileno)
         args = {'run': run, 'fileno': fileno, 'site': site, 'filepath': infile}
-    command = command_template.format(**args)
-    return command
+    if per_ad:
+        ads = dets_for(site, run)
+        commands = []
+        for ad in ads:
+            args['ad'] = ad
+            commands.append(command_template.format(**args))
+        return commands
+    else:
+        command = command_template.format(**args)
+        return command
 
 parser = argparse.ArgumentParser(epilog=
         '''Command template variables:
@@ -51,6 +61,7 @@ parser.add_argument('ntasks', type=int)
 parser.add_argument('--start-task', type=int, default=1)
 parser.add_argument('command', metavar='COMMAND_TEMPLATE')
 parser.add_argument('--run-only', action='store_true')
+parser.add_argument('--per-ad', action='store_true')
 args = parser.parse_args()
 runlist = args.runlist
 ntasks = args.ntasks
@@ -62,5 +73,10 @@ with open(runlist, 'r') as fin:
             continue
         if i >= ntasks + start_task - 1:
             break
-        command = generate_worker_command(line, command_template, args.run_only)
-        print(command)
+        command = generate_worker_command(line, command_template,
+                args.run_only, args.per_ad)
+        if args.per_ad:
+            for c in command:
+                print(c)
+        else:
+            print(command)

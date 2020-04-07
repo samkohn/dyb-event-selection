@@ -332,7 +332,7 @@ class MuonHelper:
         saved_entry = max(self._muon_entry - 1, 0)
         # Now find the dt to the next muon
         not_found = True
-        while not_found:
+        while not_found and self._muon_entry < total_entries:
             mu_data.GetEntry(self._muon_entry)
             is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
                     mu_data.triggerType)

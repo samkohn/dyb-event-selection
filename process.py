@@ -29,7 +29,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     host_file.cd()
     outdata = TTree(name, title)
     # Initialize the "buffer" used to fill values into the TTree
-    buffer_depth = 10
+    buffer_depth = 20
     fill_buf = TreeBuffer()
     fill_buf.loopIndex = unsigned_int_value(buffer_depth)
     fill_buf.multiplicity = unsigned_int_value()
@@ -395,7 +395,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
             if timestamp - helper.prompt_timestamp < delayeds._NH_THU_DT_MAX:
                 helper.multiplicity += 1
                 logging.debug('  multiplicity = %d', helper.multiplicity)
-                if helper.multiplicity == 11:
+                if helper.multiplicity == 21:
                     raise RuntimeError('multiplicity overflow')
                 assign_event(clusters, fill_buf, helper.multiplicity - 1)
                 assign_value(fill_buf.dt_previous_WSMuon,

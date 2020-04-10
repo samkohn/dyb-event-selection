@@ -7,70 +7,46 @@ from __future__ import print_function
 import argparse
 import os
 import json
+import sqlite3
 
-def main(run, files, site):
-    from rate_calculations import RateHelper
-    helper = RateHelper(run, 'all', site)
-    daq_livetime = 0
-    for filename in files:
-        with open(filename, 'r') as f:
-            results = json.load(f)
-        daq_livetime += results['daq_livetime']
-        for detector_str, livetime in results['usable_livetime'].items():
-            detector = int(detector_str)
-            helper.total_nonvetoed_livetime[detector] += livetime
-        for detector_str, livetime in results['singles_livetime'].items():
-            detector = int(detector_str)
-            helper.singles_livetime[detector] += livetime
-        for detector_str, number_prompts in results['number_prompts'].items():
-            detector = int(detector_str)
-            helper.number_prompts[detector] += number_prompts
-        for detector_str, number_delayeds in (
-                results['number_delayeds'].items()):
-            detector = int(detector_str)
-            helper.number_delayeds[detector] += number_delayeds
-        for detector_str, number_prompts in (
-                results['number_prompt_singles'].items()):
-            detector = int(detector_str)
-            helper.number_prompt_singles[detector] += number_prompts
-        for detector_str, number_delayeds in (
-                results['number_delayed_singles'].items()):
-            detector = int(detector_str)
-            helper.number_delayed_singles[detector] += number_delayeds
-        for detector_str, number_IBDs in results['number_IBDs'].items():
-            detector = int(detector_str)
-            helper.number_IBD_candidates[detector] += number_IBDs
-        helper.site = results['site']
-    helper.start_time = 0
-    helper.end_time = daq_livetime
-    aggregated = helper.compute_results()
-    print(aggregated)
-    with open('out_%d.json' % run, 'w') as f:
-        json.dump(aggregated, f)
-
-def main2(run, files, site, outfile):
+def main2(run, files, site, ad, outfile, db):
     daq_livetime = 0
     usable_livetime = 0
+    num_veto_windows = 0
     for filename in files:
         with open(filename, 'r') as f:
             results = json.load(f)
         daq_livetime += results['daq_livetime']
         usable_livetime += results['usable_livetime']
+        num_veto_windows += results['num_veto_windows']
     with open(outfile, 'w') as f:
         json.dump({
             'run': run,
             'site': site,
+            'ad': ad,
             'daq_livetime': daq_livetime,
             'usable_livetime': usable_livetime,
             'usable_fraction': usable_livetime/daq_livetime,
+            'num_veto_windows': num_veto_windows,
             }, f)
+    if db is not None:
+        with sqlite3.Connection(db) as conn:
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO muon_rates '
+                    'VALUES (?, ?, ?, ?, ?)',
+                    (run, ad, num_veto_windows, usable_livetime,
+                        num_veto_windows*1e9/usable_livetime))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('files', nargs='+')
     parser.add_argument('-r', '--run', type=int)
     parser.add_argument('--site', type=int)
+    parser.add_argument('--ad', type=int)
     parser.add_argument('-o', '--output')
+    parser.add_argument('--update-db',
+            help='Optional, register the run info and muon rate with the given '
+            'database')
     args = parser.parse_args()
-    main2(args.run, args.files, args.site, args.output)
+    main2(args.run, args.files, args.site, args.ad, args.output, args.update_db)
 

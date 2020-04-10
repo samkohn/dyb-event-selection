@@ -32,7 +32,7 @@ def main2(run, files, site, ad, outfile, db):
     if db is not None:
         with sqlite3.Connection(db) as conn:
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO muon_rates '
+            cursor.execute('INSERT OR REPLACE INTO muon_rates '
                     'VALUES (?, ?, ?, ?, ?)',
                     (run, ad, num_veto_windows, usable_livetime,
                         num_veto_windows*1e9/usable_livetime))

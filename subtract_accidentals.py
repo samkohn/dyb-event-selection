@@ -51,7 +51,6 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     print(livetime)
     print(num_acc_events)
     print(raw_spectrum.GetEntries())
-    final_spectrum.Draw('colz')
     outfile.cd()
     dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', 100, 0, 5000)
     dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', 100, 0, 5000)
@@ -62,19 +61,20 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', 100, 0, 5000, 210,
             1.5, 12)
     ad_events.Draw('dr_to_prompt[1] >> dr_data', 'multiplicity == 2 && '
-            'dr_to_prompt[1] < 5000')
+            'dr_to_prompt[1] < 5000', 'goff')
     scale_factor = base_rate * eps_distance * livetime / num_acc_events
     bg_pairs = accfile.Get('all_pairs')
     bg_pairs.Draw('dr_to_prompt[1] >> dr_bg', (str(scale_factor) +
             ' * 2 * (dr_to_prompt[1] < 5000 && ' +
-            'dr_to_prompt[1] >= 0)'), 'same')
-    ROOT.gPad.Print('test.pdf')
+            'dr_to_prompt[1] >= 0)'), 'same goff')
     ad_events.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_data',
-            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0')
+            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0',
+            'goff')
     ad_events.Draw('energy[0]:dr_to_prompt[1] >> ep_dr_data',
-            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0')
+            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0',
+            'goff')
     bg_pairs.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_bg', (str(scale_factor) +
-            ' * 2 * (dr_to_prompt[1] < 5000) && multiplicity == 2'))
+            ' * 2 * (dr_to_prompt[1] < 5000) && multiplicity == 2'), 'goff')
     outfile.Write()
     datafile.Close()
 
@@ -104,15 +104,9 @@ if __name__ == '__main__':
             c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
                     'RunNo = ? AND DetNo = ?', (run_number, args.ad))
             singles_rate, = c.fetchone()
-        #c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
-                #'RunNo = ? AND DetNo = ?', (run_number, args.ad))
-        #muon_rate, = c.fetchone()
-        if site == 1:
-            muon_rate = 200
-        elif site == 2:
-            muon_rate = 150
-        elif site == 3:
-            muon_rate = 15.7
+        c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
+                'RunNo = ? AND DetNo = ?', (run_number, args.ad))
+        muon_rate, = c.fetchone()
 
     main(args.output, args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
             args.override_acc_rate)

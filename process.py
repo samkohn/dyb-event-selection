@@ -381,6 +381,8 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 assign_value(fill_buf.site, clusters.site)
                 assign_value(fill_buf.run, clusters.run)
                 assign_value(fill_buf.fileno, clusters.fileno)
+                assign_value(fill_buf.dt_cluster_to_prev_ADevent,
+                        clusters.timestamp - helper.last_ADevent_timestamp)
             else:
                 isVetoed = muon_helper.isVetoed()
                 if isVetoed:
@@ -390,6 +392,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                     logging.debug('  Sh: %d', muon_helper.dt_previous_ShowerMuon())
                     logging.debug('  Ne: %d', muon_helper.dt_next_muon())
                     clusters_index += 1
+                    helper.last_ADevent_timestamp = clusters.timestamp
                     continue
                 logging.debug('survives muon veto')
             if timestamp - helper.prompt_timestamp < delayeds._NH_THU_DT_MAX:
@@ -415,6 +418,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 assign_value(fill_buf.loopIndex, clusters.loopIndex,
                         helper.multiplicity - 1)
                 clusters_index += 1
+                helper.last_ADevent_timestamp = clusters.timestamp
             else:
                 assign_value(fill_buf.multiplicity, helper.multiplicity)
                 outdata.Fill()

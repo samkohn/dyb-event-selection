@@ -396,7 +396,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 helper.multiplicity += 1
                 logging.debug('  multiplicity = %d', helper.multiplicity)
                 if helper.multiplicity == 21:
-                    raise RuntimeError('multiplicity overflow')
+                    helper.multiplicity -= 1
                 assign_event(clusters, fill_buf, helper.multiplicity - 1)
                 assign_value(fill_buf.dt_previous_WSMuon,
                         muon_helper.dt_previous_WSMuon(), helper.multiplicity - 1)

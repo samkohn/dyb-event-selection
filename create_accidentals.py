@@ -11,10 +11,10 @@ def distance(a, b):
             + (a['y'] - b['y'])**2
             + (a['z'] - b['z'])**2)
 
-def is_single(ttree_event):
+def is_single(ttree_event, energy):
     'Applies the single event criteria to the loaded entry in this TTree.'
     return (
-            ttree_event.energy[0] < 12 and ttree_event.energy[0] > 1.5
+            energy < 12 and energy > 1.5
             and ttree_event.multiplicity == 1
             and ttree_event.dt_cluster_to_prev_ADevent > 400e3)
 
@@ -35,7 +35,7 @@ def main(infilename, outfile, AD, ttree_name):
             210, 1.5, 12, 210, 1.5, 12)
     computed = infile.Get(ttree_name)
     computed.SetBranchStatus('*', 0)
-    computed.SetBranchStatus('detector', 1)
+    #computed.SetBranchStatus('detector', 1)
     computed.SetBranchStatus('energy', 1)
     computed.SetBranchStatus('multiplicity', 1)
     computed.SetBranchStatus('dt_cluster_to_prev_ADevent', 1)
@@ -44,7 +44,7 @@ def main(infilename, outfile, AD, ttree_name):
     computed.SetBranchStatus('z', 1)
     computed2 = infile2.Get(ttree_name)
     computed2.SetBranchStatus('*', 0)
-    computed2.SetBranchStatus('detector', 1)
+    #computed2.SetBranchStatus('detector', 1)
     computed2.SetBranchStatus('energy', 1)
     computed2.SetBranchStatus('multiplicity', 1)
     computed2.SetBranchStatus('dt_cluster_to_prev_ADevent', 1)
@@ -62,10 +62,10 @@ def main(infilename, outfile, AD, ttree_name):
         if phase == 1:
             # Increment first_half_index until we get a good single
             computed.GetEntry(first_half_index)
-            if (computed.detector[0] == AD
-                    and is_single(computed)):
-                first_event['energy'] = computed.energy[0]
-                first_event['detector'] = computed.detector[0]
+            energy = computed.energy[0]
+            if is_single(computed, energy):
+                first_event['energy'] = energy
+                first_event['detector'] = AD
                 first_event['x'] = computed.x[0]
                 first_event['y'] = computed.y[0]
                 first_event['z'] = computed.z[0]
@@ -75,10 +75,10 @@ def main(infilename, outfile, AD, ttree_name):
         if phase == 2:
             # Increment second_half_index until we get a good single
             computed2.GetEntry(second_half_index)
-            if (computed2.detector[0] == AD
-                    and is_single(computed2)):
-                second_event['energy'] = computed2.energy[0]
-                second_event['detector'] = computed2.detector[0]
+            energy = computed2.energy[0]
+            if is_single(computed2, energy):
+                second_event['energy'] = energy
+                second_event['detector'] = AD
                 second_event['x'] = computed2.x[0]
                 second_event['y'] = computed2.y[0]
                 second_event['z'] = computed2.z[0]

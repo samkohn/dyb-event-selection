@@ -79,7 +79,7 @@ def main_loop(events, indata, muon_ttree, event_ttrees, ads, debug):
         indata.GetEntry(loopIndex)
         if isMuon(indata):
             fill_muon_TTree(muon_ttree, indata, loopIndex)
-        if isADEvent(indata):
+        if isADEvent(indata, ads):
             ttree, fill_buf = event_ttrees[indata.detector]
             load_adevent_buf(fill_buf, indata, loopIndex)
             ttree.Fill()
@@ -87,8 +87,8 @@ def main_loop(events, indata, muon_ttree, event_ttrees, ads, debug):
     return
 
 
-def isADEvent(indata):
-    return (indata.detector in AD_DETECTORS
+def isADEvent(indata, ads):
+    return (indata.detector in ads
             and indata.energy > 0.7
             and int(flashers.isFlasher_nH(flashers.fID(indata.fMax, indata.fQuad),
                 None, indata.f2inch_maxQ, indata.detector)) == 0

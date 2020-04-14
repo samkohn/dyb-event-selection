@@ -47,7 +47,7 @@ def main(infile, update_db):
         cursor.execute('SELECT COUNT(*) FROM runs WHERE RunNo = ?',
                 (runNo,))
         if cursor.fetchone()[0] == 0:
-            cursor.execute('INSERT INTO runs VALUES (?, ?, ?)',
+            cursor.execute('INSERT OR REPLACE INTO runs VALUES (?, ?, ?)',
                     (runNo, site, start_time))
         cursor.execute('INSERT OR REPLACE INTO singles_rates '
                 'VALUES (?, ?, ?, ?, ?, ?, ?)',

@@ -27,8 +27,7 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', *hist_parameters)
     ad_events = datafile.Get('ad_events')
     ad_events.Draw('energy[1]:energy[0] >> raw_spec',
-            'multiplicity == 2 && dr_to_prompt[1] < 500'
-            ' && detector == {}'.format(ad),
+            'multiplicity == 2 && dr_to_prompt[1] < 500',
             'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
     #acc_spectrum = accfile.Get('acc_spectrum')

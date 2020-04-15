@@ -57,8 +57,14 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
             1.5, 12)
     ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data', 100, 0, 5000, 210,
             1.5, 12)
+    ep_vs_dr_bg = ROOT.TH2F('ep_dr_bg', 'ep_dr_bg', 100, 0, 5000, 210,
+            1.5, 12)
+    ep_vs_dr_sub = ROOT.TH2F('ep_dr_sub', 'ep_dr_sub', 100, 0, 5000, 210, 1.5,
+            12)
     ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', 100, 0, 5000, 210,
             1.5, 12)
+    ed_vs_dr_sub = ROOT.TH2F('ed_dr_sub', 'ed_dr_sub', 100, 0, 5000, 210, 1.5,
+            12)
     ad_events.Draw('dr_to_prompt[1] >> dr_data', 'multiplicity == 2 && '
             'dr_to_prompt[1] < 5000', 'goff')
     scale_factor = base_rate * eps_distance * livetime / num_acc_events
@@ -72,8 +78,16 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     ad_events.Draw('energy[0]:dr_to_prompt[1] >> ep_dr_data',
             'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0',
             'goff')
-    bg_pairs.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_bg', (str(scale_factor) +
-            ' * 2 * (dr_to_prompt[1] < 5000) && multiplicity == 2'), 'goff')
+    bg_pairs.Draw('energy[0]:dr_to_prompt[1] >> ed_dr_bg',
+            '2 * (dr_to_prompt[1] < 5000 && multiplicity == 2 && '
+            'dr_to_prompt[1] >= 0)', 'goff')
+    ep_vs_dr_sub.Add(ep_vs_dr_actual, ep_vs_dr_bg, 1,
+            -base_rate*eps_distance*livetime/num_acc_events)
+    bg_pairs.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_bg',
+            '2 * (dr_to_prompt[1] < 5000 && multiplicity == 2 && '
+            'dr_to_prompt[1] >= 0)', 'goff')
+    ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1,
+            -base_rate*eps_distance*livetime/num_acc_events)
     outfile.Write()
     datafile.Close()
 

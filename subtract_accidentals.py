@@ -25,14 +25,15 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     hist_parameters = (2100, 1.5, 12, 2100, 1.5, 12)
     datafile = ROOT.TFile(datafilename, 'READ')
     raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', *hist_parameters)
+    raw_spectrum.Sumw2()
     ad_events = datafile.Get('ad_events')
     ad_events.Draw('energy[1]:energy[0] >> raw_spec',
             'multiplicity == 2 && dr_to_prompt[1] < 500',
             'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
-    #acc_spectrum = accfile.Get('acc_spectrum')
     acc_entries = accfile.Get('accidentals')
     acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
+    acc_spectrum.Sumw2()
     acc_entries.Draw('energy[1]:energy[0] >> acc_spectrum', '', 'goff')
     acc_entries.Draw('energy[0]:energy[1] >>+acc_spectrum', '', 'goff')
     num_acc_events = acc_spectrum.GetEntries()
@@ -41,6 +42,7 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
             distance_fails.GetEntries() + num_acc_events)
     outfile = ROOT.TFile(outfilename, 'RECREATE')
     final_spectrum = ROOT.TH2F('final', 'final', *hist_parameters)
+    final_spectrum.Sumw2()
     datafile.cd()
     final_spectrum.Add(raw_spectrum, acc_spectrum, 1,
         -base_rate*eps_distance*livetime/num_acc_events)
@@ -52,7 +54,9 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     print(raw_spectrum.GetEntries())
     outfile.cd()
     dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', 100, 0, 5000)
+    dr_spectrum_actual.Sumw2()
     dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', 100, 0, 5000)
+    dr_spectrum_bg.Sumw2()
     ed_vs_dr_actual = ROOT.TH2F('ed_dr_data', 'ed_dr_data', 100, 0, 5000, 210,
             1.5, 12)
     ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data', 100, 0, 5000, 210,

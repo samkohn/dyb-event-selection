@@ -16,7 +16,8 @@ def coinc_rate(rs, rmu, tc):
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 
-def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate):
+def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
+        acc_rate, run_number, database):
     import ROOT
     if acc_rate is None:
         base_rate = coinc_rate(rs, rmu, 0.000399)
@@ -57,6 +58,7 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     dr_spectrum_actual.Sumw2()
     dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', 100, 0, 5000)
     dr_spectrum_bg.Sumw2()
+    dr_spectrum_sub = ROOT.TH1F('dr_sub', 'dr_sub', 100, 0, 5000)
     ed_vs_dr_actual = ROOT.TH2F('ed_dr_data', 'ed_dr_data', 100, 0, 5000, 210,
             1.5, 12)
     ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data', 100, 0, 5000, 210,
@@ -76,6 +78,12 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
     bg_pairs.Draw('dr_to_prompt[1] >> dr_bg', (str(scale_factor) +
             ' * 2 * (dr_to_prompt[1] < 5000 && ' +
             'dr_to_prompt[1] >= 0)'), 'same goff')
+    dr_spectrum_sub.Add(dr_spectrum_actual, dr_spectrum_bg, 1, -1)
+    if database is not None:
+        # Then do the fit to get the parameters for the database
+        fit_result = dr_spectrum_sub.Fit('pol0', 'QN0S', '', 2000, 5000)
+        cross_check_value = fit_result.Parameter(0)
+        cross_check_error = fit_result.ParError(0)
     ad_events.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_data',
             'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0',
             'goff')
@@ -94,6 +102,17 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime, acc_rate
             -base_rate*eps_distance*livetime/num_acc_events)
     outfile.Write()
     datafile.Close()
+    if database is not None:
+        with sqlite3.Connection(database) as conn:
+            c = conn.cursor()
+            # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
+            # DistanceCrossCheck, DistanceCrossCheck_error
+            c.execute('''INSERT OR REPLACE INTO accidental_subtraction
+            VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (run_number, ad, base_rate, eps_distance, scale_factor,
+                cross_check_value, cross_check_error))
+            conn.commit()
+
 
 
 
@@ -105,6 +124,7 @@ if __name__ == '__main__':
     parser.add_argument('ad', type=int, choices=[1, 2, 3, 4])
     parser.add_argument('--override-acc-rate', type=float, default=None)
     parser.add_argument('-o', '--output')
+    parser.add_argument('--update-db', action='store_true')
     args = parser.parse_args()
 
     with open(os.path.splitext(args.datafile)[0] + '.json', 'r') as f:
@@ -125,5 +145,6 @@ if __name__ == '__main__':
                 'RunNo = ? AND DetNo = ?', (run_number, args.ad))
         muon_rate, = c.fetchone()
 
+    database = args.database if args.update_db else None
     main(args.output, args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
-            args.override_acc_rate)
+            args.override_acc_rate, run_number, database)

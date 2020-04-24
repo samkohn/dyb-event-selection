@@ -2,10 +2,10 @@
 Translate a Daya Bay recon.*.root file into a simpler .root file.
 
 '''
-from array import array
 import argparse
 import os
 import subprocess
+from root_util import *
 
 def git_describe(directory=None):
     if directory is None:
@@ -20,72 +20,6 @@ def git_describe(directory=None):
         return output.decode()
 
 
-class TreeBuffer(object):
-    def __str__(self):
-        return str(self.__dict__)
-
-    def copyTo(self, other):
-        '''
-        Copy the values in this TreeBuffer to an existing TreeBuffer set
-        up with the same array attributes.
-
-        '''
-        for attr, value in self.__dict__.items():
-            otherArray = getattr(other, attr)
-            for i, entry in enumerate(value):
-                otherArray[i] = entry
-
-    def clone(self, dest=None):
-        '''
-        Create a new independent TreeBuffer with the same array
-        attributes and values.
-
-        '''
-        if dest is None:
-            new = TreeBuffer()
-        else:
-            new = dest
-        for attr, value in self.__dict__.items():
-            setattr(new, attr, value[:])
-        return new
-
-    def clone_type(self, dest=None):
-        '''
-        Create a new TreeBuffer with the same array attributes
-        containing values of 0.
-
-        '''
-        if dest is None:
-            new = TreeBuffer()
-        else:
-            new = dest
-        for attr, value in self.__dict__.items():
-            setattr(new, attr, array(value.typecode,
-                [0]*len(value)))
-        return new
-
-def int_value(length=1):
-    return array('i', [0]*length)
-def long_value(length=1):
-    return array('l', [0]*length)
-def unsigned_int_value(length=1):
-    return array('I', [0]*length)
-def float_value(length=1):
-    return array('f', [0]*length)
-
-def fetch_value(ttree, branch_name, type_cast):
-    branch_object = ttree.GetBranch(branch_name)
-    if 'TBranchElement' in str(type(branch_object)):
-        new_value = type_cast(branch_object.GetValue(0, 0))
-    else:
-        new_value = type_cast(getattr(ttree, branch_name))
-    return new_value
-
-def assign_value(buf_value, new_value, index=0):
-    buf_value[index] = new_value
-
-def fetch_annoying_value(ttree, branch_name, type_cast):
-    return type_cast(ttree.GetBranch(branch_name).GetValue(0, 0))
 
 def main(filenames, nevents):
     from ROOT import TFile

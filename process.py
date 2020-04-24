@@ -12,8 +12,9 @@ from common import *
 import muons
 import delayeds
 from adevent import isADEvent_THU
-from translate import (TreeBuffer, float_value, assign_value,
-        int_value, unsigned_int_value, long_value, git_describe)
+from root_util import (TreeBuffer, float_value, assign_value,
+        int_value, unsigned_int_value, long_value)
+from translate import git_describe
 
 def create_computed_TTree(name, host_file, selection_name, title=None):
     from ROOT import TTree

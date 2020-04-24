@@ -8,9 +8,8 @@ from common import *
 import process
 import translate
 import flashers
-from translate import (initialize_indata_onefile as initialize, TreeBuffer,
-        float_value, int_value, unsigned_int_value, long_value, assign_value,
-        fetch_value)
+from translate import initialize_indata_onefile as initialize
+from root_util import *
 
 class RawFileAdapter():
     ATTR_LOOKUP = {

@@ -1,5 +1,6 @@
 import argparse
 import math
+import sqlite3
 
 def crystal_ball(x, p):
     """Crystal Ball function.
@@ -25,12 +26,11 @@ def crystal_ball(x, p):
                 n/alpha - alpha - scaled)**(-n)
 
 
-def main(infilename, outfilename):
+def main(infilename, outfilename, site, ad, database):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     spectrum_2d = infile.Get('final')
     delayed_spectrum = spectrum_2d.ProjectionY()
-    delayed_spectrum.Sumw2()
     mu0 = 2.3
     sigma0 = .14
     alpha0 = 1.5
@@ -40,15 +40,31 @@ def main(infilename, outfilename):
     fitter = ROOT.TF1("cb_fitter", crystal_ball, 1.8, 3.1, 5)
     fitter.SetParameters(mu0, sigma0, alpha0, n0, norm0)
 
-    delayed_spectrum.Fit(fitter)
+    if outfilename is None:
+        options = 'QN0S'
+    else:
+        options = 'QS'
+    fit_result = delayed_spectrum.Fit(fitter, options)
+    mu, sigma, alpha, n, norm = [fit_result.Parameter(i) for i in range(5)]
     delayed_spectrum.GetXaxis().SetRangeUser(1.5, 3.4)
-    ROOT.gPad.Print(outfilename)
+    if outfilename is not None:
+        ROOT.gPad.Print(outfilename)
     infile.Close()
+    if database is not None:
+        with sqlite3.Connection(database) as conn:
+            c = conn.cursor()
+            c.execute('''INSERT OR REPLACE INTO delayed_energy_fits
+            VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (site, ad, mu, sigma, alpha, n, norm))
+            conn.commit()
     return
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input')
-    parser.add_argument('output')
+    parser.add_argument('-o', '--output', default=None)
+    parser.add_argument('--site', type=int)
+    parser.add_argument('--ad', type=int)
+    parser.add_argument('--update-db', default=None)
     args = parser.parse_args()
-    main(args.input, args.output)
+    main(args.input, args.output, args.site, args.ad, args.update_db)

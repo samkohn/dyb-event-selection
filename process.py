@@ -11,7 +11,7 @@ import json
 from common import *
 import muons
 import delayeds
-from adevent import isADEvent_THU
+from adevent import isADEvent_THU, isADEvent_THU_lowenergy
 from root_util import (TreeBuffer, float_value, assign_value,
         int_value, unsigned_int_value, long_value)
 from translate import git_describe
@@ -497,8 +497,12 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--runfile', type=int, nargs=2,
         help='<run> <fileno>')
     parser.add_argument('--det', type=int, help='AD number (1-4)')
+    parser.add_argument('--lowenergy', action='store_true',
+            help='Lower energy threshold')
     args = parser.parse_args()
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
+    if args.lowenergy:
+        isADEvent_THU = isADEvent_THU_lowenergy
     main(args.events, args.adevents, args.muons, args.output, args.runfile,
             args.det, args.debug)

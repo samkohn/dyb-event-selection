@@ -18,6 +18,11 @@ def isADEvent_THU(event_detector, event_energy):
     return (event_detector in AD_DETECTORS
             and event_energy >= _EMIN_THU)
 
+_EMIN_LOW_THU = 0.7
+def isADEvent_THU_lowenergy(event_detector, event_energy):
+    return (event_detector in AD_DETECTORS
+            and event_energy >= _EMIN_LOW_THU)
+
 _COINCIDENCE_TIME_NS = int(9e5)
 def hasCoincidence(event_isADEvent, dt_last_ADevent, dt_next_ADevent,
         event_isFlasher):

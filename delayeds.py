@@ -72,8 +72,6 @@ def isIBDDelayed_nH_DMC(tag_DelayedLike,
             or dt_next_DelayedLike == -1)
     return (passesDtCut and passesMultPre and passesMultPost)
 
-_NH_THU_DT_MIN = int(1e3)
-_NH_THU_DT_MAX = int(400e3)
 _NH_THU_MULT_PRE_MIN = int(400e3)
 _NH_THU_MULT_POST_MIN = int(400e3)
 _NH_THU_DR_MAX = 500

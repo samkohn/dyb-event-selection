@@ -16,6 +16,8 @@ from root_util import (TreeBuffer, float_value, assign_value,
         int_value, unsigned_int_value, long_value)
 from translate import git_describe
 
+COINCIDENCE_WINDOW = delayeds._NH_THU_MAX_TIME
+
 def create_computed_TTree(name, host_file, selection_name, title=None):
     from ROOT import TTree
     git_description = git_describe()
@@ -260,7 +262,7 @@ class MuonHelper:
                 or self.dt_previous_ADMuon() < muons._NH_ADMUON_VETO_LAST_NS
                 or self.dt_previous_ShowerMuon() <
                     muons._NH_SHOWER_MUON_VETO_LAST_NS
-                or self.dt_next_muon() < delayeds._NH_THU_DT_MAX)
+                or self.dt_next_muon() < COINCIDENCE_WINDOW)
 
     def isVetoed(self):
         return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
@@ -351,7 +353,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
     clusters.GetEntry(0)
     muons.GetEntry(0)
     t0 = min(clusters.timestamp, muons.timestamp)
-    tracker = TimeTracker(t0, delayeds._NH_THU_DT_MAX)
+    tracker = TimeTracker(t0, COINCIDENCE_WINDOW)
     helper = CoincidenceHelper()
     muon_helper = MuonHelper(muons, tracker, clusters.detector)
     clusters_index = 0
@@ -396,7 +398,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                     helper.last_ADevent_timestamp = clusters.timestamp
                     continue
                 logging.debug('survives muon veto')
-            if timestamp - helper.prompt_timestamp < delayeds._NH_THU_DT_MAX:
+            if timestamp - helper.prompt_timestamp < COINCIDENCE_WINDOW:
                 helper.multiplicity += 1
                 logging.debug('  multiplicity = %d', helper.multiplicity)
                 if helper.multiplicity == 21:
@@ -427,7 +429,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 helper.multiplicity = 0
         else:  # i.e. if not isValid
             if helper.in_coincidence_window:
-                if timestamp - helper.prompt_timestamp >= delayeds._NH_THU_DT_MAX:
+                if timestamp - helper.prompt_timestamp >= COINCIDENCE_WINDOW:
                     # We've left the window
                     assign_value(fill_buf.multiplicity,
                             helper.multiplicity)

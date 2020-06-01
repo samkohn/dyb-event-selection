@@ -80,6 +80,9 @@ _NH_THU_MIN_TIME = int(1e3)
 _NH_THU_DIST_TIME_MAX = 800  # Known as phi or DT cut
 _NH_THU_DIST_TIME_CONST = 1000/600e3  # Constant for converting time to distance
 
+def nH_THU_DT(dr_mm, dt_ns):
+    return dr_mm + dt_ns * _NH_THU_DIST_TIME_CONST
+
 def isDelayedLike_nH_THU(event_detector, event_energy):
     return isDelayedLike_nH_DMC(event_detector, event_energy)
 

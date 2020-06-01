@@ -114,7 +114,7 @@ def subterm(sum_term, Tc):
     return (1 - math.exp(-sum_term * Tc)) / sum_term
 
 
-def main(infile, database, update_db):
+def main(infile, database, update_db, iteration):
     with open(os.path.splitext(infile)[0] + '.json', 'r') as f:
         stats = json.load(f)
     livetime_s = stats['usable_livetime']/1e9
@@ -137,20 +137,37 @@ def main(infile, database, update_db):
         muon_rate, = cursor.fetchone()
 
     # convert to seconds and subtract off 1us
-    #window_size = _NH_THU_MAX_TIME/1e9 - 1e-6
-    window_size = 400e-6
-    neutron_efficiency = 0.6
-    tau_Gd = 28e-6
-    tau_LS = 218e-6
-    alpha = 0.5
+    window_size = _NH_THU_MAX_TIME/1e9 - 1e-6
+    if iteration > 0:
+        raise NotImplementedError("Haven't connected to database")
+    else:
+        R_corr = 0
+        neutron_efficiency = None
+        tau_Gd = None
+        tau_LS = None
+        alpha = None
 
-    parameters = (0.000, muon_rate, window_size, neutron_efficiency, tau_Gd,
+    parameters = (R_corr, muon_rate, window_size, neutron_efficiency, tau_Gd,
             tau_LS, alpha)
     underlying_uncorr_rate = fsolve(lambda x: single_rate(x, *parameters) -
             multiplicity_1_rate_Hz, multiplicity_1_rate_Hz)
-    print(f'multiplicity-1 rate: {multiplicity_1_rate_Hz} Hz')
-    print(f'relative error: {100/multiplicity_1_count_error:.2f}%')
-    print(f'underlying uncorr. rate: {underlying_uncorr_rate[0]} Hz')
+    if update_db:
+        with sqlite3.Connection(database) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''INSERT OR REPLACE INTO singles_rates
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', (
+                runNo,
+                ad,
+                iteration,
+                underlying_uncorr_rate[0],
+                multiplicity_1_count_error/livetime_s,
+                multiplicity_1_count,
+                multiplicity_1_rate_Hz,
+                R_corr))
+    else:
+        print(f'multiplicity-1 rate: {multiplicity_1_rate_Hz} Hz')
+        print(f'relative error: {100/multiplicity_1_count_error:.2f}%')
+        print(f'underlying uncorr. rate: {underlying_uncorr_rate[0]} Hz')
     return
 
 if __name__ == '__main__':
@@ -159,5 +176,8 @@ if __name__ == '__main__':
     parser.add_argument('database')
     parser.add_argument('--update-db', action='store_true',
             help='If present, store the results in the given db file')
+    parser.add_argument('--iteration', type=int, default=0,
+            help='If present, look up IBD rate in database and integrate into '
+                'the calculation')
     args = parser.parse_args()
-    main(args.infile, args.database, args.update_db)
+    main(args.infile, args.database, args.update_db, args.iteration)

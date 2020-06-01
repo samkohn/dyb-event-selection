@@ -12,7 +12,7 @@ def main(input_basepath, database):
     with sqlite3.Connection(database) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, Mean, Width FROM
+        cursor.execute('''SELECT Hall, DetNo, Peak, Resolution FROM
             delayed_energy_fits WHERE Hall > 0 AND DetNo > 0''')
         results = cursor.fetchall()
     cut_lookup = {(row['Hall'], row['DetNo']): row for row in results}
@@ -27,8 +27,8 @@ def main(input_basepath, database):
         infile = ROOT.TFile(path, 'READ')
         spectrum_2d = infile.Get('final')
         delayed_spectrum = spectrum_2d.ProjectionY()
-        low_limit = cuts['Mean'] - 3 * cuts['Width']
-        up_limit = cuts['Mean'] + 3 * cuts['Width']
+        low_limit = cuts['Peak'] - 3 * cuts['Resolution']
+        up_limit = cuts['Peak'] + 3 * cuts['Resolution']
         low_bin = delayed_spectrum.FindBin(low_limit)
         high_bin = delayed_spectrum.FindBin(up_limit)
         nominal_value = delayed_spectrum.Integral(low_bin, high_bin)

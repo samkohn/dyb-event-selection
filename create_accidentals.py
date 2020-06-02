@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import argparse
 import math
+import random
 
 import delayeds
 
@@ -70,6 +71,7 @@ def main(infilename, outfile, AD, ttree_name):
     for (first_event, second_event) in zip(first_events, second_events):
         # Compare event distances and fill the tree
         event_dr = distance(first_event, second_event)
+        event_dt = random.randint(1000, delayeds._NH_THU_MAX_TIME)
         all_acc_buf.multiplicity[0] = 2
         all_acc_buf.energy[0] = first_event['energy']
         all_acc_buf.energy[1] = second_event['energy']
@@ -77,7 +79,7 @@ def main(infilename, outfile, AD, ttree_name):
         all_acc_buf.dr_to_prompt[0] = 0
         all_acc_buf.dr_to_prompt[1] = event_dr
         all_acc_buf.dt_to_prompt[0] = 0
-        all_acc_buf.dt_to_prompt[1] = 0
+        all_acc_buf.dt_to_prompt[1] = event_dt
         if delayeds.nH_THU_DT(event_dr, event_dt) < delayeds._NH_THU_DIST_TIME_MAX:
             acc_spectrum_hist.Fill(first_event['energy'],
                     second_event['energy'])

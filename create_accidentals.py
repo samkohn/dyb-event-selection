@@ -2,6 +2,9 @@ from __future__ import print_function
 
 import argparse
 import math
+import random
+
+import delayeds
 
 def distance(a, b):
     '''Distance where coordinates are specified as 'x', 'y', 'z' keys.
@@ -16,7 +19,8 @@ def is_single(ttree_event, energy):
     return (
             energy < 12 and energy > 1.5
             and ttree_event.multiplicity == 1
-            and ttree_event.dt_cluster_to_prev_ADevent > 400e3)
+            and ttree_event.dt_cluster_to_prev_ADevent >
+                delayeds._NH_THU_MAX_TIME)
 
 def main(infilename, outfile, AD, ttree_name):
     import process
@@ -31,7 +35,7 @@ def main(infilename, outfile, AD, ttree_name):
     outfile.cd()
     acc_spectrum_hist = ROOT.TH2F('acc_spectrum', 'acc_spectrum',
             210, 1.5, 12, 210, 1.5, 12)
-    eps_distance_hist = ROOT.TH2F('distance_cut_fails', 'distance_cut_fails',
+    eps_DT_hist = ROOT.TH2F('DT_cut_fails', 'DT_cut_fails',
             210, 1.5, 12, 210, 1.5, 12)
     computed = infile.Get(ttree_name)
     computed.SetBranchStatus('*', 0)
@@ -67,13 +71,16 @@ def main(infilename, outfile, AD, ttree_name):
     for (first_event, second_event) in zip(first_events, second_events):
         # Compare event distances and fill the tree
         event_dr = distance(first_event, second_event)
+        event_dt = random.randint(1000, delayeds._NH_THU_MAX_TIME)
         all_acc_buf.multiplicity[0] = 2
         all_acc_buf.energy[0] = first_event['energy']
         all_acc_buf.energy[1] = second_event['energy']
         all_acc_buf.detector[0] = first_event['detector']
         all_acc_buf.dr_to_prompt[0] = 0
         all_acc_buf.dr_to_prompt[1] = event_dr
-        if event_dr < 500:
+        all_acc_buf.dt_to_prompt[0] = 0
+        all_acc_buf.dt_to_prompt[1] = event_dt
+        if delayeds.nH_THU_DT(event_dr, event_dt) < delayeds._NH_THU_DIST_TIME_MAX:
             acc_spectrum_hist.Fill(first_event['energy'],
                     second_event['energy'])
             acc_spectrum_hist.Fill(second_event['energy'],
@@ -81,9 +88,9 @@ def main(infilename, outfile, AD, ttree_name):
             all_acc_buf.copyTo(acc_buf)
             acc.Fill()
         else:
-            eps_distance_hist.Fill(first_event['energy'],
+            eps_DT_hist.Fill(first_event['energy'],
                     second_event['energy'])
-            eps_distance_hist.Fill(second_event['energy'],
+            eps_DT_hist.Fill(second_event['energy'],
                     first_event['energy'])
         all_acc.Fill()
     outfile.Write()

@@ -48,6 +48,9 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     final_spectrum = ROOT.TH2F('final', 'final', *hist_parameters)
     final_spectrum.Sumw2()
     datafile.cd()
+    if num_acc_events == 0:
+        print(f'Found run with 0 acc events: {run_number}, {datafilename}')
+        raise RuntimeError(f'Found run with 0 acc events: {run_number}, {datafilename}')
     final_spectrum.Add(raw_spectrum, acc_spectrum, 1,
         -base_rate*eps_distance*livetime/num_acc_events)
     final_spectrum.Rebin2D(2, 2)

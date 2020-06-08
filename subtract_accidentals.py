@@ -60,40 +60,42 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     print(num_acc_events)
     print(raw_spectrum.GetEntries())
     outfile.cd()
-    dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', 100, 0, 5000)
+    distance_axis_parameters = (100, 0, 5000)
+    energy_axis_parameters = (2100, 1.5, 12)
+    dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', *distance_axis_parameters)
     dr_spectrum_actual.Sumw2()
-    dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', 100, 0, 5000)
+    dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', *distance_axis_parameters)
     dr_spectrum_bg.Sumw2()
-    dr_spectrum_sub = ROOT.TH1F('dr_sub', 'dr_sub', 100, 0, 5000)
-    ed_vs_dr_actual = ROOT.TH2F('ed_dr_data', 'ed_dr_data', 100, 0, 5000, 210,
-            1.5, 12)
-    ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data', 100, 0, 5000, 210,
-            1.5, 12)
-    ep_vs_dr_bg = ROOT.TH2F('ep_dr_bg', 'ep_dr_bg', 100, 0, 5000, 210,
-            1.5, 12)
-    ep_vs_dr_sub = ROOT.TH2F('ep_dr_sub', 'ep_dr_sub', 100, 0, 5000, 210, 1.5,
-            12)
-    ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', 100, 0, 5000, 210,
-            1.5, 12)
-    ed_vs_dr_sub = ROOT.TH2F('ed_dr_sub', 'ed_dr_sub', 100, 0, 5000, 210, 1.5,
-            12)
-    DT_spectrum_actual = ROOT.TH1F('DT_data', 'DT_data', 100, 0, 5000)
+    dr_spectrum_sub = ROOT.TH1F('dr_sub', 'dr_sub', *distance_axis_parameters)
+    ed_vs_dr_actual = ROOT.TH2F('ed_dr_data', 'ed_dr_data',
+            *distance_axis_parameters, *energy_axis_parameters)
+    ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data',
+            *distance_axis_parameters, *energy_axis_parameters)
+    ep_vs_dr_bg = ROOT.TH2F('ep_dr_bg', 'ep_dr_bg', *distance_axis_parameters,
+            *energy_axis_parameters)
+    ep_vs_dr_sub = ROOT.TH2F('ep_dr_sub', 'ep_dr_sub', *distance_axis_parameters,
+            *energy_axis_parameters)
+    ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', *distance_axis_parameters,
+            *energy_axis_parameters)
+    ed_vs_dr_sub = ROOT.TH2F('ed_dr_sub', 'ed_dr_sub', *distance_axis_parameters,
+            *energy_axis_parameters)
+    DT_spectrum_actual = ROOT.TH1F('DT_data', 'DT_data', *distance_axis_parameters)
     DT_spectrum_actual.Sumw2()
-    DT_spectrum_bg = ROOT.TH1F('DT_bg', 'DT_bg', 100, 0, 5000)
+    DT_spectrum_bg = ROOT.TH1F('DT_bg', 'DT_bg', *distance_axis_parameters)
     DT_spectrum_bg.Sumw2()
-    DT_spectrum_sub = ROOT.TH1F('DT_sub', 'DT_sub', 100, 0, 5000)
-    ed_vs_DT_actual = ROOT.TH2F('ed_DT_data', 'ed_DT_data', 100, 0, 5000, 210,
-            1.5, 12)
-    ep_vs_DT_actual = ROOT.TH2F('ep_DT_data', 'ep_DT_data', 100, 0, 5000, 210,
-            1.5, 12)
-    ep_vs_DT_bg = ROOT.TH2F('ep_DT_bg', 'ep_DT_bg', 100, 0, 5000, 210,
-            1.5, 12)
-    ep_vs_DT_sub = ROOT.TH2F('ep_DT_sub', 'ep_DT_sub', 100, 0, 5000, 210, 1.5,
-            12)
-    ed_vs_DT_bg = ROOT.TH2F('ed_DT_bg', 'ed_DT_bg', 100, 0, 5000, 210,
-            1.5, 12)
-    ed_vs_DT_sub = ROOT.TH2F('ed_DT_sub', 'ed_DT_sub', 100, 0, 5000, 210, 1.5,
-            12)
+    DT_spectrum_sub = ROOT.TH1F('DT_sub', 'DT_sub', *distance_axis_parameters)
+    ed_vs_DT_actual = ROOT.TH2F('ed_DT_data', 'ed_DT_data',
+            *distance_axis_parameters, *energy_axis_parameters)
+    ep_vs_DT_actual = ROOT.TH2F('ep_DT_data', 'ep_DT_data',
+            *distance_axis_parameters, *energy_axis_parameters)
+    ep_vs_DT_bg = ROOT.TH2F('ep_DT_bg', 'ep_DT_bg', *distance_axis_parameters,
+            *energy_axis_parameters)
+    ep_vs_DT_sub = ROOT.TH2F('ep_DT_sub', 'ep_DT_sub',
+            *distance_axis_parameters, *energy_axis_parameters)
+    ed_vs_DT_bg = ROOT.TH2F('ed_DT_bg', 'ed_DT_bg', *distance_axis_parameters,
+            *energy_axis_parameters)
+    ed_vs_DT_sub = ROOT.TH2F('ed_DT_sub', 'ed_DT_sub',
+            *distance_axis_parameters, *energy_axis_parameters)
     ad_events.Draw('dr_to_prompt[1] >> dr_data', 'multiplicity == 2 && '
             'dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0', 'goff')
     scale_factor = base_rate * eps_distance * livetime / num_acc_events

@@ -79,7 +79,7 @@ def main(infilename, outfilename, site, ad, database):
     bin_width = delayed_spectrum.GetBinWidth(1)
     norm0 = approx_integral * bin_width
 
-    fitter = ROOT.TF1("calo_fitter", calorimeter_fn, 1.8, 3.1, 5)
+    fitter = ROOT.TF1("calo_fitter", calorimeter_fn, 1.5, 12, 5)
     fitter.SetParameters(mu0, sigma0, scale0, alpha0, norm0)
 
     if outfilename is None:
@@ -87,7 +87,7 @@ def main(infilename, outfilename, site, ad, database):
     else:
         options = 'QS'
     try:
-        fit_result = delayed_spectrum.Fit(fitter, options)
+        fit_result = delayed_spectrum.Fit(fitter, options, '', 1.6, 2.8)
     except:
         delayed_spectrum.Draw()
         fitter.Draw()

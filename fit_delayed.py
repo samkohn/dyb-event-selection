@@ -97,6 +97,9 @@ def main(infilename, outfilename, site, ad, database):
     mu, sigma, scale, alpha, norm = [fit_result.Parameter(i) for i in range(5)]
     mu_err, sigma_err, scale_err, alpha_err, norm_err = [fit_result.ParError(i)
             for i in range(5)]
+    chi_square = fit_result.Chi2()
+    num_bins = fitter.GetNumberFitPoints()
+    num_params = fitter.GetNpar()
     delayed_spectrum.GetXaxis().SetRangeUser(1.5, 3.4)
     if outfilename is not None:
         ROOT.gPad.Print(outfilename)
@@ -105,13 +108,14 @@ def main(infilename, outfilename, site, ad, database):
         with sqlite3.Connection(database) as conn:
             c = conn.cursor()
             c.execute('''INSERT OR REPLACE INTO delayed_energy_fits
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (site, ad, mu, mu_err, sigma, sigma_err, scale, scale_err, alpha,
-                alpha_err, norm, norm_err))
+                alpha_err, norm, norm_err, chi_square, num_bins, num_params))
             conn.commit()
     else:
         print(mu, sigma, scale, alpha, norm)
         print(mu_err, sigma_err, scale_err, alpha_err, norm_err)
+        print(f'Chi2/NDF: {chi_square:.03f} / ({num_bins} - {num_params})')
     return
 
 if __name__ == '__main__':

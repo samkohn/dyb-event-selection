@@ -7,7 +7,7 @@ import math
 MAGIC_LOW_BOUND = 1.6
 MAGIC_UP_BOUND = 2.8
 
-def main(input_basepath, database):
+def main(input_basepath, database, update_db):
     import ROOT
     with sqlite3.Connection(database) as conn:
         conn.row_factory = sqlite3.Row
@@ -54,21 +54,28 @@ def main(input_basepath, database):
     graph_to_fit.Draw('A*')
     fit_result = graph_to_fit.Fit('pol1', 'QS')
     y_intercept, slope = fit_result.Parameter(0), fit_result.Parameter(1)
-    with sqlite3.Connection(database) as conn:
-        cursor = conn.cursor()
+    if update_db:
+        with sqlite3.Connection(database) as conn:
+            cursor = conn.cursor()
+            for (site, det), (nominal, wide) in values_lookup.items():
+                model_value = y_intercept + slope * wide
+                relative_deviation = 1 - model_value / nominal
+                print(site, det, model_value, relative_deviation)
+                error = errors_lookup[site, det][0] / nominal
+                cursor.execute('''INSERT OR REPLACE INTO delayed_energy_uncertainty_1
+                    VALUES (?, ?, ?, ?)''', (site, det, relative_deviation, error))
+        ROOT.gPad.Print('eff_uncertainty.pdf')
+    else:
         for (site, det), (nominal, wide) in values_lookup.items():
             model_value = y_intercept + slope * wide
             relative_deviation = 1 - model_value / nominal
             print(site, det, model_value, relative_deviation)
-            error = errors_lookup[site, det][0] / nominal
-            cursor.execute('''INSERT OR REPLACE INTO delayed_energy_uncertainty_1
-                VALUES (?, ?, ?, ?)''', (site, det, relative_deviation, error))
-    ROOT.gPad.Print('eff_uncertainty.pdf')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input')
     parser.add_argument('database')
+    parser.add_argument('--update-db', action='store_true')
     args = parser.parse_args()
-    main(args.input, args.database)
+    main(args.input, args.database, args.update_db)

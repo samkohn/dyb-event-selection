@@ -10,6 +10,11 @@ import json
 
 from common import *
 import muons
+from muons import (
+        _NH_WSMUON_VETO_LAST_NS as WSMUON_VETO,
+        _NH_ADMUON_VETO_LAST_NS as ADMUON_VETO,
+        _NH_SHOWER_MUON_VETO_LAST_NS as SHOWER_MUON_VETO
+)
 import delayeds
 from adevent import isADEvent_THU, isADEvent_THU_lowenergy
 from root_util import (TreeBuffer, float_value, assign_value,
@@ -170,6 +175,32 @@ class TimeTracker:
             raise ValueError('Cannot log new veto after being closed out.')
         pre_veto = self.pre_veto
         potential_new_end = timestamp + veto_length
+        # If veto window extends from before to after start_time
+        # (crosses boundary), then count it as a real window. Otherwise
+        # if the window does not extend to after start_time (all before
+        # start_time), ignore it.
+        #
+        # The comparison is to self.end_of_veto_window because this
+        # attribute is initialized to start_time but there may be
+        # multiple muons with varying veto window sizes overlapping just
+        # before start_time. This ensures the window doesn't shrink
+        # because e.g. a shower muon is followed by a WP muon.
+        if timestamp < self.start_time and potential_new_end > self.end_of_veto_window:
+            # This is the start of the run so if we're in this code
+            # block, then there's a window and it is the first and only
+            # window so far. This direct assignment (rather than increment)
+            # neatly handles the case where there are multiple overlapping
+            # muon veto windows caused by muons just before self.start_time.
+            self.num_windows = 1
+            self.end_of_veto_window = potential_new_end
+            # Return without messing with self.last_event_tracked or any other
+            # logic. Better than wrapping the below in an else block.
+            return
+        elif timestamp > self.start_time:
+            pass  # Execute the rest of this function
+        else:  # before start_time and veto window ends before start_time
+            return
+
         # If already in a veto window
         if timestamp - pre_veto < self.end_of_veto_window:
             new_time = timestamp - self.last_event_tracked
@@ -178,6 +209,14 @@ class TimeTracker:
                 pass
             else:
                 self.end_of_veto_window = potential_new_end
+            # This code block also handles the case where a muon occurs just
+            # after start_time, and the pre-veto extends to before start_time,
+            # and there was no muon just before start_time to create a window
+            # that this new muon's pre-veto would overlap with. Certainly if we
+            # are in this block, there should be at least 1 window. Without the
+            # following line, the above-described situation would result in 0
+            # windows.
+            self.num_windows = max(1, self.num_windows)
         else:
             dt_last_event_to_window_end = (self.end_of_veto_window
                     - self.last_event_tracked)
@@ -352,11 +391,19 @@ class MuonHelper:
 def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
     clusters.GetEntry(0)
     muons.GetEntry(0)
-    t0 = min(clusters.timestamp, muons.timestamp)
+    # Start tracking DAQ and veto time after the "phantom muon" veto window
+    max_veto_window = max(WSMUON_VETO, ADMUON_VETO, SHOWER_MUON_VETO)
+    t0 = min(clusters.timestamp, muons.timestamp) + max_veto_window
     tracker = TimeTracker(t0, COINCIDENCE_WINDOW)
     helper = CoincidenceHelper()
     muon_helper = MuonHelper(muons, tracker, clusters.detector)
     clusters_index = 0
+    # Process the initial "phantom muon" veto window without tracking DAQ time
+    # or muon veto count, and without processing coincidences.
+    while clusters.timestamp < t0 and clusters_index < limit:
+        clusters_index += 1
+        clusters.GetEntry(clusters_index)
+    logging.debug(limit)
     while clusters_index < limit:
         logging.debug(clusters_index)
         clusters.GetEntry(clusters_index)

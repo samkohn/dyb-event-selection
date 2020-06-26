@@ -365,8 +365,10 @@ class MuonHelper:
             self._muon_entry += 1
             mu_data.GetEntry(self._muon_entry)
         # Test to see if we have simply run out of muons, in which
-        # case we do not need to search for a "next" muon. Note that
-        # the "next muon" timestamp will be earlier than the event
+        # case we do not need to search for a "next" muon. The latest
+        # "next" muon is the last muon, meaning there is an automatic
+        # veto window at the end of each file due to the pre-veto. Note
+        # that the "next muon" timestamp will be earlier than the event
         # timestamp, resulting in all future events being vetoed.
         if timestamp > mu_data.timestamp:  # i.e. *still* greater than
             return

@@ -3,6 +3,7 @@ Process the basic data by computing various cuts, quantities and tags.
 
 '''
 import argparse
+import itertools
 import logging
 import math
 import os
@@ -22,6 +23,25 @@ from root_util import (TreeBuffer, float_value, assign_value,
 from translate import git_describe
 
 COINCIDENCE_WINDOW = delayeds._NH_THU_MAX_TIME
+LI9_LOWENERGY_MIN = 20
+LI9_LOWENERGY_MAX = 1000
+LI9_HIGHENERGY_MIN = 2500
+LI9_MIDENERGY_MIN = LI9_LOWENERGY_MAX
+LI9_MIDENERGY_MAX = LI9_HIGHENERGY_MIN
+
+def li9_lowenergy_muon(detector, energy):
+    return (detector in AD_DETECTORS
+            and energy > LI9_LOWENERGY_MIN
+            and energy < LI9_LOWENERGY_MAX)
+
+def li9_midenergy_muon(detector, energy):
+    return (detector in AD_DETECTORS
+            and energy > LI9_MIDENERGY_MIN
+            and energy < LI9_MIDENERGY_MAX)
+
+def li9_highenergy_muon(detector, energy):
+    return (detector in AD_DETECTORS
+            and energy > LI9_HIGHENERGY_MIN)
 
 def create_computed_TTree(name, host_file, selection_name, title=None):
     from ROOT import TTree
@@ -66,9 +86,15 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.z = float_value(buffer_depth)
     fill_buf.fID = float_value(buffer_depth)
     fill_buf.fPSD = float_value(buffer_depth)
-    fill_buf.dt_previous_WSMuon = long_value(buffer_depth)
-    fill_buf.dt_previous_ADMuon = long_value(buffer_depth)
-    fill_buf.dt_previous_ShowerMuon = long_value(buffer_depth)
+    fill_buf.dt_lowenergy_muon_ntag = long_value()
+    fill_buf.dt_midenergy_muon_ntag = long_value()
+    fill_buf.dt_highenergy_muon_ntag = long_value()
+    fill_buf.dt_lowenergy_muon_no_ntag = long_value()
+    fill_buf.dt_midenergy_muon_no_ntag = long_value()
+    fill_buf.dt_highenergy_muon_no_ntag = long_value()
+    fill_buf.dt_lowenergy_muon = long_value()
+    fill_buf.dt_midenergy_muon = long_value()
+    fill_buf.dt_highenergy_muon = long_value()
 
     def branch_multiple(name, typecode):
         outdata.Branch(name, getattr(fill_buf, name), '{}[multiplicity]/{}'.format(
@@ -106,9 +132,15 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('x', 'F')
     branch_multiple('y', 'F')
     branch_multiple('z', 'F')
-    branch_multiple('dt_previous_WSMuon', 'L')
-    branch_multiple('dt_previous_ADMuon', 'L')
-    branch_multiple('dt_previous_ShowerMuon', 'L')
+    branch('dt_lowenergy_muon', 'L')
+    branch('dt_midenergy_muon', 'L')
+    branch('dt_highenergy_muon', 'L')
+    branch('dt_lowenergy_muon_ntag', 'L')
+    branch('dt_midenergy_muon_ntag', 'L')
+    branch('dt_highenergy_muon_ntag', 'L')
+    branch('dt_lowenergy_muon_no_ntag', 'L')
+    branch('dt_midenergy_muon_no_ntag', 'L')
+    branch('dt_highenergy_muon_no_ntag', 'L')
     return outdata, fill_buf
 
 def isValidTriggerType(triggerType):
@@ -258,10 +290,7 @@ def update_muons(timestamp, reasons, time_tracker, last_WSMuon, last_ADMuon,
     return (last_WSMuon, last_ADMuon, last_ShowerMuon)
 
 class CoincidenceHelper:
-    shared_last_WSMuon_timestamp = 0
     def __init__(self):
-        self.last_ADMuon_timestamp = 0
-        self.last_ShowerMuon_timestamp = 0
         self.last_ADevent_timestamp = 0
         self.in_coincidence_window = False
         self.prompt_timestamp = 0
@@ -274,9 +303,16 @@ class MuonHelper:
     def __init__(self, muon_ttree, time_tracker, ad_num):
         self.ttree = muon_ttree
         self.ad = ad_num
-        self.time_previous_WSMuon = 0
-        self.time_previous_ADMuon = 0
-        self.time_previous_ShowerMuon = 0
+        self.time_WSMuon = 0
+        self.time_lowenergy_muon = 0
+        self.time_midenergy_muon = 0
+        self.time_highenergy_muon = 0
+        self.time_lowenergy_muon_ntag = 0
+        self.time_midenergy_muon_ntag = 0
+        self.time_highenergy_muon_ntag = 0
+        self.time_lowenergy_muon_no_ntag = 0
+        self.time_midenergy_muon_no_ntag = 0
+        self.time_highenergy_muon_no_ntag = 0
         self.time_next_muon = None
         self._event_timestamp = None
         self._muon_entry = 0
@@ -285,29 +321,26 @@ class MuonHelper:
         return
 
     def dt_previous_WSMuon(self):
-        return self._event_timestamp - self.time_previous_WSMuon
+        return self._event_timestamp - self.time_WSMuon
 
-    def dt_previous_ADMuon(self):
-        return self._event_timestamp - self.time_previous_ADMuon
-
-    def dt_previous_ShowerMuon(self):
-        return self._event_timestamp - self.time_previous_ShowerMuon
+    def dt_previous_showermuons(self):
+        now = self._event_timestamp
+        labels = itertools.product(['low', 'mid', 'high'], ['', '_ntag', '_no_ntag'])
+        result = {}
+        for energy, tag in labels:
+            attribute = f'time_{energy}energy_muon{tag}'
+            result[energy, tag] = now - getattr(self, attribute)
+        return result
 
     def dt_next_muon(self):
         return self.time_next_muon - self._event_timestamp
 
     def isVetoed_strict(self):
         return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
-                or self.dt_previous_ADMuon() < muons._NH_ADMUON_VETO_LAST_NS
-                or self.dt_previous_ShowerMuon() <
-                    muons._NH_SHOWER_MUON_VETO_LAST_NS
                 or self.dt_next_muon() < COINCIDENCE_WINDOW)
 
     def isVetoed(self):
-        return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
-                or self.dt_previous_ADMuon() < muons._NH_ADMUON_VETO_LAST_NS
-                or self.dt_previous_ShowerMuon() <
-                    muons._NH_SHOWER_MUON_VETO_LAST_NS)
+        return self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
 
     def close(self, last_entry=-1):
         if last_entry == -1:
@@ -319,17 +352,8 @@ class MuonHelper:
             mu_data.GetEntry(self._muon_entry)
             is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
                     mu_data.triggerType)
-            is_AD = (mu_data.detector == self.ad
-                    and muons.isADMuon_nH(mu_data.detector, mu_data.energy))
-            is_shower = (mu_data.detector == self.ad
-                    and muons.isShowerMuon_nH(mu_data.detector,
-                        mu_data.energy))
             if is_WS:
                 log_WSMuon(self.time_tracker, mu_data.timestamp)
-            elif is_AD:
-                log_ADMuon(self.time_tracker, mu_data.timestamp)
-            elif is_shower:
-                log_ShowerMuon(self.time_tracker, mu_data.timestamp)
             self._muon_entry += 1
 
     def load(self, timestamp):
@@ -348,20 +372,24 @@ class MuonHelper:
         while timestamp > mu_data.timestamp and self._muon_entry < total_entries:
             is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
                     mu_data.triggerType)
-            is_AD = (mu_data.detector == self.ad
-                    and muons.isADMuon_nH(mu_data.detector, mu_data.energy))
-            is_shower = (mu_data.detector == self.ad
-                    and muons.isShowerMuon_nH(mu_data.detector,
+            is_lowenergy = (mu_data.detector == self.ad
+                    and li9_lowenergy_muon(mu_data.detector,
+                        mu_data.energy))
+            is_midenergy = (mu_data.detector == self.ad
+                    and li9_midenergy_muon(mu_data.detector,
+                        mu_data.energy))
+            is_highenergy = (mu_data.detector == self.ad
+                    and li9_highenergy_muon(mu_data.detector,
                         mu_data.energy))
             if is_WS:
-                self.time_previous_WSMuon = mu_data.timestamp
+                self.time_WSMuon = mu_data.timestamp
                 log_WSMuon(self.time_tracker, mu_data.timestamp)
-            elif is_AD:
-                self.time_previous_ADMuon = mu_data.timestamp
-                log_ADMuon(self.time_tracker, mu_data.timestamp)
-            elif is_shower:
-                self.time_previous_ShowerMuon = mu_data.timestamp
-                log_ShowerMuon(self.time_tracker, mu_data.timestamp)
+            elif is_lowenergy:
+                self.time_lowenergy_muon_no_ntag = mu_data.timestamp
+            elif is_midenergy:
+                self.time_midenergy_muon_no_ntag = mu_data.timestamp
+            elif is_highenergy:
+                self.time_highenergy_muon_no_ntag = mu_data.timestamp
             self._muon_entry += 1
             mu_data.GetEntry(self._muon_entry)
         # Test to see if we have simply run out of muons, in which
@@ -374,15 +402,13 @@ class MuonHelper:
             return
         # Save the muon entry number to revert back to after the search forward
         saved_entry = max(self._muon_entry - 1, 0)
-        # Now find the dt to the next muon
+        # Now find the dt to the next WS muon
         not_found = True
         while not_found and self._muon_entry < total_entries:
             mu_data.GetEntry(self._muon_entry)
             is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
                     mu_data.triggerType)
-            is_AD = muons.isADMuon_nH(mu_data.detector, mu_data.energy)
-            is_shower = muons.isShowerMuon_nH(mu_data.detector, mu_data.energy)
-            if is_WS or is_AD or is_shower:
+            if is_WS:
                 self.time_next_muon = mu_data.timestamp
                 not_found = False
             self._muon_entry += 1
@@ -419,8 +445,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 if isVetoed:
                     logging.debug('  -- is vetoed')
                     logging.debug('  WS: %d', muon_helper.dt_previous_WSMuon())
-                    logging.debug('  AD: %d', muon_helper.dt_previous_ADMuon())
-                    logging.debug('  Sh: %d', muon_helper.dt_previous_ShowerMuon())
+                    logging.debug('  Sh: %s', muon_helper.dt_previous_showermuons())
                     logging.debug('  Ne: %d', muon_helper.dt_next_muon())
                     clusters_index += 1
                     continue
@@ -435,13 +460,13 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 assign_value(fill_buf.fileno, clusters.fileno)
                 assign_value(fill_buf.dt_cluster_to_prev_ADevent,
                         clusters.timestamp - helper.last_ADevent_timestamp)
+                assign_muons(fill_buf, muon_helper)
             else:
                 isVetoed = muon_helper.isVetoed()
                 if isVetoed:
                     logging.debug('  -- is vetoed')
                     logging.debug('  WS: %d', muon_helper.dt_previous_WSMuon())
-                    logging.debug('  AD: %d', muon_helper.dt_previous_ADMuon())
-                    logging.debug('  Sh: %d', muon_helper.dt_previous_ShowerMuon())
+                    logging.debug('  Sh: %s', muon_helper.dt_previous_showermuons())
                     logging.debug('  Ne: %d', muon_helper.dt_next_muon())
                     clusters_index += 1
                     helper.last_ADevent_timestamp = clusters.timestamp
@@ -453,12 +478,6 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 if helper.multiplicity == 21:
                     helper.multiplicity -= 1
                 assign_event(clusters, fill_buf, helper.multiplicity - 1)
-                assign_value(fill_buf.dt_previous_WSMuon,
-                        muon_helper.dt_previous_WSMuon(), helper.multiplicity - 1)
-                assign_value(fill_buf.dt_previous_ADMuon,
-                        muon_helper.dt_previous_ADMuon(), helper.multiplicity - 1)
-                assign_value(fill_buf.dt_previous_ShowerMuon,
-                        muon_helper.dt_previous_ShowerMuon(), helper.multiplicity - 1)
                 assign_value(fill_buf.dt_to_prompt,
                         timestamp - helper.prompt_timestamp,
                         helper.multiplicity-1)
@@ -493,6 +512,14 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
 def copy_to_buffer(ttree, buf, index, name):
     assign_value(getattr(buf, name), getattr(ttree, name), index)
     return
+
+def assign_muons(buf, muon_helper):
+    dts = muon_helper.dt_previous_showermuons()
+    logging.debug('in assign_muons')
+    logging.debug(dts)
+    for (energy, tag), value in dts.items():
+        name = f'dt_{energy}energy_muon{tag}'
+        assign_value(getattr(buf, name), value)
 
 def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'timestamp')

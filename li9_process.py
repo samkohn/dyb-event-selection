@@ -89,9 +89,6 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.dt_lowenergy_muon_ntag = long_value()
     fill_buf.dt_midenergy_muon_ntag = long_value()
     fill_buf.dt_highenergy_muon_ntag = long_value()
-    fill_buf.dt_lowenergy_muon_no_ntag = long_value()
-    fill_buf.dt_midenergy_muon_no_ntag = long_value()
-    fill_buf.dt_highenergy_muon_no_ntag = long_value()
     fill_buf.dt_lowenergy_muon = long_value()
     fill_buf.dt_midenergy_muon = long_value()
     fill_buf.dt_highenergy_muon = long_value()
@@ -138,9 +135,6 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch('dt_lowenergy_muon_ntag', 'L')
     branch('dt_midenergy_muon_ntag', 'L')
     branch('dt_highenergy_muon_ntag', 'L')
-    branch('dt_lowenergy_muon_no_ntag', 'L')
-    branch('dt_midenergy_muon_no_ntag', 'L')
-    branch('dt_highenergy_muon_no_ntag', 'L')
     return outdata, fill_buf
 
 def isValidTriggerType(triggerType):
@@ -304,15 +298,13 @@ class MuonHelper:
         self.ttree = muon_ttree
         self.ad = ad_num
         self.time_WSMuon = 0
-        self.time_lowenergy_muon = 0
-        self.time_midenergy_muon = 0
-        self.time_highenergy_muon = 0
+        INIT_TIME = int(1.8e19)  # larger than all Dyb timestamps but fits in C long
+        self.time_lowenergy_muon = INIT_TIME
+        self.time_midenergy_muon = INIT_TIME
+        self.time_highenergy_muon = INIT_TIME
         self.time_lowenergy_muon_ntag = 0
         self.time_midenergy_muon_ntag = 0
         self.time_highenergy_muon_ntag = 0
-        self.time_lowenergy_muon_no_ntag = 0
-        self.time_midenergy_muon_no_ntag = 0
-        self.time_highenergy_muon_no_ntag = 0
         self.time_next_muon = None
         self._event_timestamp = None
         self._muon_entry = 0
@@ -320,27 +312,51 @@ class MuonHelper:
         self.time_tracker = time_tracker
         return
 
+    def neutron_tag_last_muon(self):
+        logging.debug('tagging last muon!')
+        (label, _), dt = min(self.dt_previous_showermuons(tags=['']).items(),
+                key=lambda pair:pair[1])
+        if label == 'low':
+            self.time_lowenergy_muon_ntag = self.time_lowenergy_muon
+            logging.debug('tagging last low energy muon!')
+        elif label == 'mid':
+            self.time_midenergy_muon_ntag = self.time_midenergy_muon
+            logging.debug('tagging last mid energy muon!')
+        elif label == 'high':
+            self.time_highenergy_muon_ntag = self.time_highenergy_muon
+            logging.debug('tagging last high energy muon!')
+        else:
+            raise RuntimeError("Can't find that muon")
+        return
+
     def dt_previous_WSMuon(self):
         return self._event_timestamp - self.time_WSMuon
 
-    def dt_previous_showermuons(self):
+    def dt_previous_showermuons(self, tags=None):
+        if tags is None:
+            tags = ['', '_ntag']
         now = self._event_timestamp
-        labels = itertools.product(['low', 'mid', 'high'], ['', '_ntag', '_no_ntag'])
+        labels = itertools.product(['low', 'mid', 'high'], tags)
         result = {}
         for energy, tag in labels:
             attribute = f'time_{energy}energy_muon{tag}'
-            result[energy, tag] = now - getattr(self, attribute)
+            diff = now - getattr(self, attribute)
+            if diff < 0:  # this happens when there hasn't yet been a muon
+                diff = now  # this is a sentinel value for "no muon yet"
+            result[energy, tag] = diff
         return result
 
     def dt_next_muon(self):
         return self.time_next_muon - self._event_timestamp
 
     def isVetoed_strict(self):
-        return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
-                or self.dt_next_muon() < COINCIDENCE_WINDOW)
+        return self.isVetoed() or self.dt_next_muon() < COINCIDENCE_WINDOW
 
     def isVetoed(self):
-        return self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
+        # Only veto on WS Muons that aren't accompanied by a shower muon
+        return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
+                    and min(self.dt_previous_showermuons().values()) >
+                        muons._NH_WSMUON_VETO_LAST_NS)
 
     def close(self, last_entry=-1):
         if last_entry == -1:
@@ -385,11 +401,14 @@ class MuonHelper:
                 self.time_WSMuon = mu_data.timestamp
                 log_WSMuon(self.time_tracker, mu_data.timestamp)
             elif is_lowenergy:
-                self.time_lowenergy_muon_no_ntag = mu_data.timestamp
+                logging.debug('new low energy muon')
+                self.time_lowenergy_muon = mu_data.timestamp
             elif is_midenergy:
-                self.time_midenergy_muon_no_ntag = mu_data.timestamp
+                logging.debug('new mid energy muon')
+                self.time_midenergy_muon = mu_data.timestamp
             elif is_highenergy:
-                self.time_highenergy_muon_no_ntag = mu_data.timestamp
+                logging.debug('new high energy muon')
+                self.time_highenergy_muon = mu_data.timestamp
             self._muon_entry += 1
             mu_data.GetEntry(self._muon_entry)
         # Test to see if we have simply run out of muons, in which
@@ -414,6 +433,24 @@ class MuonHelper:
             self._muon_entry += 1
         self._muon_entry = saved_entry
         mu_data.GetEntry(self._muon_entry)
+
+
+def is_neutron_tag(buf, multiplicity):
+    if multiplicity != 1:
+        # Since the coincidence time is so large,
+        # only return false if the second event
+        # is closer than 400us to the potential neutron tag.
+        if buf.dt_to_prompt[1] < 400e3:
+            return False
+    energy = buf.energy[0]
+    if energy < 1.8 or energy > 12:
+        return False
+    SOONEST = 20000
+    LATEST = 200000
+    actual = min(buf.dt_lowenergy_muon[0],
+            buf.dt_midenergy_muon[0], buf.dt_highenergy_muon[0])
+    logging.debug('neutron tag? actual time since most recent: %d', actual)
+    return (actual > SOONEST and actual < LATEST)
 
 
 def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
@@ -490,7 +527,11 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                         helper.multiplicity - 1)
                 clusters_index += 1
                 helper.last_ADevent_timestamp = clusters.timestamp
-            else:
+            else:  # The coincidence window has ended
+                # Also determine if this event is a neutron tag
+                if is_neutron_tag(fill_buf, helper.multiplicity):
+                    muon_helper.neutron_tag_last_muon()
+                # Fill the TTree and reset, without incrementing the loop index
                 assign_value(fill_buf.multiplicity, helper.multiplicity)
                 outdata.Fill()
                 helper.in_coincidence_window = False
@@ -499,6 +540,9 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
             if helper.in_coincidence_window:
                 if timestamp - helper.prompt_timestamp >= COINCIDENCE_WINDOW:
                     # We've left the window
+                    # Also determine if this event is a neutron tag
+                    if is_neutron_tag(fill_buf, helper.multiplicity):
+                        muon_helper.neutron_tag_last_muon()
                     assign_value(fill_buf.multiplicity,
                             helper.multiplicity)
                     outdata.Fill()
@@ -517,9 +561,13 @@ def assign_muons(buf, muon_helper):
     dts = muon_helper.dt_previous_showermuons()
     logging.debug('in assign_muons')
     logging.debug(dts)
-    for (energy, tag), value in dts.items():
-        name = f'dt_{energy}energy_muon{tag}'
-        assign_value(getattr(buf, name), value)
+    try:
+        for (energy, tag), value in dts.items():
+            name = f'dt_{energy}energy_muon{tag}'
+            assign_value(getattr(buf, name), value)
+    except:
+        logging.debug(value)
+        raise
 
 def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'timestamp')

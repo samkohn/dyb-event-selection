@@ -66,6 +66,10 @@ def main(input_basepath, database, update_db):
                     VALUES (?, ?, ?, ?)''', (site, det, relative_deviation, error))
         ROOT.gPad.Print('eff_uncertainty.pdf')
     else:
+        intercept_error = fit_result.ParError(0)
+        slope_error = fit_result.ParError(1)
+        print(f'y intercept = {y_intercept} +/- {intercept_error}')
+        print(f'slope = {slope} +/- {slope_error}')
         for (site, det), (nominal, wide) in values_lookup.items():
             model_value = y_intercept + slope * wide
             relative_deviation = 1 - model_value / nominal

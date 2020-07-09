@@ -4,6 +4,7 @@ import sqlite3
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 import numpy as np
 
 if __name__ == '__main__':
@@ -18,7 +19,10 @@ if __name__ == '__main__':
     plot_types = args.types
     plot_all = 'all' in plot_types
     mpl.rcParams['font.size'] = 18
-    mpl.rcParams['figure.figsize'] = (9, 5.8)
+    mpl.rcParams['figure.figsize'] = (8, 8)
+    mpl.rcParams['lines.linewidth'] = 3
+    mpl.rcParams['lines.markersize'] = 10
+    mpl.rcParams['errorbar.capsize'] = 5
     dateconv = np.vectorize(datetime.fromtimestamp)
     def get_dates(timestamp_ns_array):
         return dateconv(timestamp_ns_array/1e9)
@@ -181,54 +185,93 @@ if __name__ == '__main__':
             data = np.array(cursor.fetchall())
 
         # Peak locations
-        fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='.',
-                capsize=3)
-        ax.set_title('Delayed energy peak & fit error')
-        ax.set_ylabel('Delayed energy peak value [MeV]')
-        ax.grid()
+        fig = plt.figure()
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        ax1 = plt.subplot(spacing[0])
+        ax1.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
+        ax1.set_title('Delayed energy peak & fit error')
+        ax1.set_ylabel('Delayed energy peak value [MeV]')
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        ax1.grid()
+        ax2 = plt.subplot(spacing[1], sharex=ax1)
+        near_hall_avg = np.average(data[:4, 2], weights=data[:4, 3]**(-2))
+        rel_deviations = (data[:, 2] - near_hall_avg)/near_hall_avg
+        rel_errors = data[:, 3]/near_hall_avg
+        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
+                fmt='.')
+        ax2.set_ylim([-0.007, 0.007])
+        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_peak.pdf')
 
         # Resolution
-        fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 4], yerr=data[:, 5], fmt='.',
-                capsize=3)
-        ax.set_title('Delayed energy "resolution/width" & fit error')
-        ax.set_ylabel('Delayed energy "resolution/width" [MeV]')
-        ax.grid()
+        fig = plt.figure()
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        ax1 = plt.subplot(spacing[0])
+        ax1.errorbar(ad_names_2line, data[:, 4], yerr=data[:, 5], fmt='o')
+        ax1.set_title('Delayed energy "resolution/width" & fit error')
+        ax1.set_ylabel('Delayed energy peak width [MeV]')
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        ax1.grid()
+        ax2 = plt.subplot(spacing[1], sharex=ax1)
+        near_hall_avg = np.average(data[:4, 4], weights=data[:4, 5]**(-2))
+        rel_deviations = (data[:, 4] - near_hall_avg)/near_hall_avg
+        rel_errors = data[:, 5]/near_hall_avg
+        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
+                fmt='.')
+        ax2.set_ylim([-0.025, 0.025])
+        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_width.pdf')
 
 
         # Exponential scale
-        fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 6], yerr=data[:, 7], fmt='.',
-                capsize=3)
-        ax.set_title('Delayed energy tail expo. scale & fit error')
-        ax.set_ylabel('Delayed energy expo. scale [1/MeV]')
-        ax.grid()
+        fig = plt.figure()
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        ax1 = plt.subplot(spacing[0])
+        ax1.errorbar(ad_names_2line, data[:, 6], yerr=data[:, 7], fmt='o')
+        ax1.set_title('Delayed energy tail slope & fit error')
+        ax1.set_ylabel('Delayed energy tail slope [1/MeV]')
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        ax1.grid()
+        ax2 = plt.subplot(spacing[1], sharex=ax1)
+        near_hall_avg = np.average(data[:4, 6], weights=data[:4, 7]**(-2))
+        rel_deviations = (data[:, 6] - near_hall_avg)/near_hall_avg
+        rel_errors = data[:, 7]/near_hall_avg
+        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
+                fmt='.')
+        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_expo_scale.pdf')
 
         # Peak fraction
-        fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 8], yerr=data[:, 9], fmt='.',
-                capsize=3)
-        ax.set_title('Delayed energy peak fraction & fit error')
-        ax.set_ylabel('Delayed energy peak fraction')
-        ax.grid()
+        fig = plt.figure()
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        ax1 = plt.subplot(spacing[0])
+        ax1.errorbar(ad_names_2line, data[:, 8], yerr=data[:, 9], fmt='o')
+        ax1.set_title('Delayed energy peak fraction & fit error')
+        ax1.set_ylabel('Delayed energy peak fraction')
+        plt.setp(ax1.get_xticklabels(), visible=False)
+        ax1.grid()
+        ax2 = plt.subplot(spacing[1], sharex=ax1)
+        near_hall_avg = np.average(data[:4, 8], weights=data[:4, 9]**(-2))
+        rel_deviations = (data[:, 8] - near_hall_avg)/near_hall_avg
+        rel_errors = data[:, 9]/near_hall_avg
+        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
+                fmt='.')
+        ax2.set_ylim([-0.035, 0.035])
+        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_peak_frac.pdf')
 
         # Upper and lower fit bounds
         fig, axs = plt.subplots(2, 1, sharex=True, figsize=(9, 6.8))
         axs[0].errorbar(ad_names_2line, data[:, 2] + 3 * data[:, 4],
-                yerr=np.hypot(data[:, 3], data[:, 5]), fmt='o', capsize=3)
+                yerr=np.hypot(data[:, 3], data[:, 5]), fmt='o')
         axs[0].set_ylabel('Upper bound [MeV]')
         axs[0].grid()
         axs[1].errorbar(ad_names_2line, data[:, 2] - 3 * data[:, 4],
-                yerr=np.hypot(data[:, 3], data[:, 5]), fmt='o', capsize=3)
+                yerr=np.hypot(data[:, 3], data[:, 5]), fmt='o')
         axs[1].set_ylabel('Lower bound [MeV]')
         axs[1].grid()
         fig.tight_layout()
@@ -242,10 +285,9 @@ if __name__ == '__main__':
                 FROM delayed_energy_uncertainty_1 ORDER BY Hall, DetNo''')
             data = np.array(cursor.fetchall())
 
-        fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o',
-                capsize=3)
-        ax.set_title('Relative deviation in delayed energy efficiency')
+        fig, ax = plt.subplots(figsize=(9, 5.8))
+        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
+        ax.set_title('Delayed energy efficiency uncertainty')
         ax.set_ylabel('Relative deviation from fit model')
         ax.grid()
         fig.tight_layout()
@@ -260,8 +302,7 @@ if __name__ == '__main__':
             data = np.array(cursor.fetchall())
 
         fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o',
-                capsize=3)
+        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
         ax.set_title('Distance-time (DT) cut efficiency')
         ax.set_ylabel('Efficiency')
         ax.grid()

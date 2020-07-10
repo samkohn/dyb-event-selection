@@ -162,6 +162,7 @@ class TimeTracker:
         self.start_time = start_time
         self.closed = False
         self.num_windows = 0
+        self.muon_counts = 'uninitialized'
 
     def __repr__(self):
         total_time = self.last_event_tracked - self.start_time
@@ -179,6 +180,7 @@ class TimeTracker:
                 'daq_livetime': total_time,
                 'good_fraction': self.total_good_time/total_time,
                 'num_veto_windows': self.num_windows,
+                'muon_counts': self.muon_counts,
         }
 
     def close(self, end_time):
@@ -310,6 +312,14 @@ class MuonHelper:
         self._muon_entry = 0
         self.ttree.GetEntry(self._muon_entry)
         self.time_tracker = time_tracker
+        self.muon_counts = {
+                'low': 0,
+                'mid': 0,
+                'high': 0,
+                'low_ntag': 0,
+                'mid_ntag': 0,
+                'high_ntag': 0,
+                }
         return
 
     def neutron_tag_last_muon(self):
@@ -317,12 +327,24 @@ class MuonHelper:
         (label, _), dt = min(self.dt_previous_showermuons(tags=['']).items(),
                 key=lambda pair:pair[1])
         if label == 'low':
+            if self.time_lowenergy_muon_ntag != self.time_lowenergy_muon:
+                # only increment counter for new tags (don't want to
+                # double-count if there are 2 neutrons)
+                self.muon_counts['low_ntag'] += 1
             self.time_lowenergy_muon_ntag = self.time_lowenergy_muon
             logging.debug('tagging last low energy muon!')
         elif label == 'mid':
+            if self.time_midenergy_muon_ntag != self.time_midenergy_muon:
+                # only increment counter for new tags (don't want to
+                # double-count if there are 2 neutrons)
+                self.muon_counts['mid_ntag'] += 1
             self.time_midenergy_muon_ntag = self.time_midenergy_muon
             logging.debug('tagging last mid energy muon!')
         elif label == 'high':
+            if self.time_highenergy_muon_ntag != self.time_highenergy_muon:
+                # only increment counter for new tags (don't want to
+                # double-count if there are 2 neutrons)
+                self.muon_counts['high_ntag'] += 1
             self.time_highenergy_muon_ntag = self.time_highenergy_muon
             logging.debug('tagging last high energy muon!')
         else:
@@ -401,12 +423,15 @@ class MuonHelper:
                 self.time_WSMuon = mu_data.timestamp
                 log_WSMuon(self.time_tracker, mu_data.timestamp)
             elif is_lowenergy:
+                self.muon_counts['low'] += 1
                 logging.debug('new low energy muon')
                 self.time_lowenergy_muon = mu_data.timestamp
             elif is_midenergy:
+                self.muon_counts['mid'] += 1
                 logging.debug('new mid energy muon')
                 self.time_midenergy_muon = mu_data.timestamp
             elif is_highenergy:
+                self.muon_counts['high'] += 1
                 logging.debug('new high energy muon')
                 self.time_highenergy_muon = mu_data.timestamp
             self._muon_entry += 1
@@ -532,8 +557,9 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 if is_neutron_tag(fill_buf, helper.multiplicity):
                     muon_helper.neutron_tag_last_muon()
                 # Fill the TTree and reset, without incrementing the loop index
-                assign_value(fill_buf.multiplicity, helper.multiplicity)
-                outdata.Fill()
+                if helper.multiplicity == 2:
+                    assign_value(fill_buf.multiplicity, helper.multiplicity)
+                    outdata.Fill()
                 helper.in_coincidence_window = False
                 helper.multiplicity = 0
         else:  # i.e. if not isValid
@@ -543,14 +569,16 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                     # Also determine if this event is a neutron tag
                     if is_neutron_tag(fill_buf, helper.multiplicity):
                         muon_helper.neutron_tag_last_muon()
-                    assign_value(fill_buf.multiplicity,
-                            helper.multiplicity)
-                    outdata.Fill()
+                    if helper.multiplicity == 2:
+                        assign_value(fill_buf.multiplicity,
+                                helper.multiplicity)
+                        outdata.Fill()
                     helper.in_coincidence_window = False
                     helper.multiplicity = 0
             clusters_index += 1
     logging.debug(clusters_index)
     muon_helper.close(limit * 100)
+    tracker.muon_counts = muon_helper.muon_counts
     return tracker
 
 def copy_to_buffer(ttree, buf, index, name):

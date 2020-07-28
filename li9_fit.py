@@ -82,6 +82,12 @@ def main(infiles, outfile):
     ROOT.gPad.Print(outfile)
     canvas.Close()
 
+    writeout = ROOT.TFile('test_li9_fit.root', 'RECREATE')
+    t_last_muon_hist.SetDirectory(writeout)
+    t_last_muon_hist.Write()
+    writeout.Write()
+    writeout.Close()
+
 def li9fit(x, par):
     """x[0] = time since last muon; par = [nli9he8, nibd, nbb, rmu]"""
     n_li9he8, n_ibd, n_bb, r_mu = par

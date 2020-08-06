@@ -3,6 +3,7 @@ Process the basic data by computing various cuts, quantities and tags.
 
 '''
 import argparse
+from collections import deque
 import itertools
 import logging
 import math
@@ -320,33 +321,63 @@ class MuonHelper:
                 'mid_ntag': 0,
                 'high_ntag': 0,
                 }
+        self.recent_muons = {
+                'low': deque([], 20),
+                'mid': deque([], 20),
+                'high': deque([], 20),
+        }
         return
 
-    def neutron_tag_last_muon(self):
-        logging.debug('tagging last muon!')
-        (label, _), dt = min(self.dt_previous_showermuons(tags=['']).items(),
-                key=lambda pair:pair[1])
+    @staticmethod
+    def _search_most_recent(iterable, search):
+        last = None
+        for item in iterable:
+            if item > search:
+                return last
+            else:
+                last = item
+        return last
+
+    def _search_recent_muon(self, timestamp):
+        most_recent = {}
+        logging.debug(self.recent_muons)
+        for label, timestamps in self.recent_muons.items():
+            recent_timestamp = self._search_most_recent(timestamps, timestamp)
+            if recent_timestamp is not None:
+                most_recent[label] = recent_timestamp
+        logging.debug(most_recent)
+        return max(most_recent.items(), key=lambda pair:pair[1])
+
+    def neutron_tag_muon(self, ntag_timestamp):
+        logging.debug('tagging recent muon!')
+        logging.debug('neutron tag event timestamp: %d', ntag_timestamp)
+        #(label, _), dt = min(self.dt_previous_showermuons(tags=['']).items(),
+                #key=lambda pair:pair[1])
+        label, muon_timestamp = self._search_recent_muon(ntag_timestamp)
         if label == 'low':
-            if self.time_lowenergy_muon_ntag != self.time_lowenergy_muon:
+            if self.time_lowenergy_muon_ntag != muon_timestamp:
                 # only increment counter for new tags (don't want to
                 # double-count if there are 2 neutrons)
                 self.muon_counts['low_ntag'] += 1
-            self.time_lowenergy_muon_ntag = self.time_lowenergy_muon
-            logging.debug('tagging last low energy muon!')
+            self.time_lowenergy_muon_ntag = muon_timestamp
+            logging.debug('tagging last low energy muon at timestamp %d',
+                    self.time_lowenergy_muon_ntag)
         elif label == 'mid':
-            if self.time_midenergy_muon_ntag != self.time_midenergy_muon:
+            if self.time_midenergy_muon_ntag != muon_timestamp:
                 # only increment counter for new tags (don't want to
                 # double-count if there are 2 neutrons)
                 self.muon_counts['mid_ntag'] += 1
-            self.time_midenergy_muon_ntag = self.time_midenergy_muon
-            logging.debug('tagging last mid energy muon!')
+            self.time_midenergy_muon_ntag = muon_timestamp
+            logging.debug('tagging last mid energy muon at timestamp %d',
+                    self.time_midenergy_muon_ntag)
         elif label == 'high':
-            if self.time_highenergy_muon_ntag != self.time_highenergy_muon:
+            if self.time_highenergy_muon_ntag != muon_timestamp:
                 # only increment counter for new tags (don't want to
                 # double-count if there are 2 neutrons)
                 self.muon_counts['high_ntag'] += 1
-            self.time_highenergy_muon_ntag = self.time_highenergy_muon
-            logging.debug('tagging last high energy muon!')
+            self.time_highenergy_muon_ntag = muon_timestamp
+            logging.debug('tagging last high energy muon at timestamp %d',
+                    self.time_highenergy_muon_ntag)
         else:
             raise RuntimeError("Can't find that muon")
         return
@@ -372,13 +403,16 @@ class MuonHelper:
         return self.time_next_muon - self._event_timestamp
 
     def isVetoed_strict(self):
+        logging.debug('In isVetoed_strict')
+        logging.debug('  dt next WSMuon: %d', self.dt_next_muon())
         return self.isVetoed() or self.dt_next_muon() < COINCIDENCE_WINDOW
 
     def isVetoed(self):
-        # Only veto on WS Muons that aren't accompanied by a shower muon
-        return (self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
-                    and min(self.dt_previous_showermuons().values()) >
-                        muons._NH_WSMUON_VETO_LAST_NS)
+        logging.debug('In isVetoed')
+        logging.debug('  dt to WSMuon: %d', self.dt_previous_WSMuon())
+        logging.debug('  dt to AD/Shower: %d',
+                min(self.dt_previous_showermuons().values()))
+        return self.dt_previous_WSMuon() < muons._NH_WSMUON_VETO_LAST_NS
 
     def close(self, last_entry=-1):
         if last_entry == -1:
@@ -398,7 +432,7 @@ class MuonHelper:
         self._event_timestamp = timestamp
         mu_data = self.ttree
         if timestamp < mu_data.timestamp:
-            if self.time_previous_WSMuon == 0:
+            if self.time_WSMuon == 0:
                 # This is during the first few events, when there may be an AD
                 # event before the first muon event.
                 pass
@@ -408,6 +442,15 @@ class MuonHelper:
         total_entries = mu_data.GetEntries()
         # Find the dts to previous muons
         while timestamp > mu_data.timestamp and self._muon_entry < total_entries:
+            # This if-statement avoids double-counting the last muon
+            # found the previous time load() was called, since we
+            # backtrack and repeat the last index used to ensure that mu_data.timestamp <
+            # timestamp is always true.
+            if mu_data.timestamp in (self.time_WSMuon, self.time_lowenergy_muon,
+                    self.time_midenergy_muon, self.time_highenergy_muon):
+                self._muon_entry += 1
+                mu_data.GetEntry(self._muon_entry)
+                continue
             is_WS = muons.isWSMuon_nH(mu_data.detector, mu_data.nHit,
                     mu_data.triggerType)
             is_lowenergy = (mu_data.detector == self.ad
@@ -424,14 +467,17 @@ class MuonHelper:
                 log_WSMuon(self.time_tracker, mu_data.timestamp)
             elif is_lowenergy:
                 self.muon_counts['low'] += 1
+                self.recent_muons['low'].append(mu_data.timestamp)
                 logging.debug('new low energy muon')
                 self.time_lowenergy_muon = mu_data.timestamp
             elif is_midenergy:
                 self.muon_counts['mid'] += 1
+                self.recent_muons['mid'].append(mu_data.timestamp)
                 logging.debug('new mid energy muon')
                 self.time_midenergy_muon = mu_data.timestamp
             elif is_highenergy:
                 self.muon_counts['high'] += 1
+                self.recent_muons['high'].append(mu_data.timestamp)
                 logging.debug('new high energy muon')
                 self.time_highenergy_muon = mu_data.timestamp
             self._muon_entry += 1
@@ -460,13 +506,7 @@ class MuonHelper:
         mu_data.GetEntry(self._muon_entry)
 
 
-def is_neutron_tag(buf, multiplicity):
-    if multiplicity != 1:
-        # Since the coincidence time is so large,
-        # only return false if the second event
-        # is closer than 400us to the potential neutron tag.
-        if buf.dt_to_prompt[1] < 400e3:
-            return False
+def is_neutron_tag(buf):
     energy = buf.energy[0]
     if energy < 1.8 or energy > 12:
         return False
@@ -486,6 +526,7 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
     t0 = min(clusters.timestamp, muons.timestamp) + max_veto_window
     tracker = TimeTracker(t0, COINCIDENCE_WINDOW)
     helper = CoincidenceHelper()
+    ntag_helper = CoincidenceHelper()
     muon_helper = MuonHelper(muons, tracker, clusters.detector)
     clusters_index = 0
     # Process the initial "phantom muon" veto window without tracking DAQ time
@@ -494,6 +535,8 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
         clusters_index += 1
         clusters.GetEntry(clusters_index)
     logging.debug(limit)
+    # Set up the neutron tag isolation time window buffer
+    ntag_buf = fill_buf.clone_type()
     while clusters_index < limit:
         logging.debug(clusters_index)
         clusters.GetEntry(clusters_index)
@@ -502,6 +545,39 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
         timestamp = clusters.timestamp
         if isValid:
             muon_helper.load(timestamp)
+            # Neutron tag checks:
+            if ntag_helper.in_coincidence_window:
+                if ntag_helper.prompt_timestamp == timestamp:
+                    pass
+                elif timestamp - ntag_helper.prompt_timestamp < 400e3:  # 400us isolation window
+                    logging.debug('potential neutron tag fails isolation cut')
+                    logging.debug('  tag timestamp: %d; this event: %d; difference: %d',
+                            ntag_helper.prompt_timestamp, timestamp,
+                            timestamp - ntag_helper.prompt_timestamp)
+                    ntag_helper.in_coincidence_window = False
+                else:
+                    logging.debug('Yay! New neutron tag')
+                    # Tag "prompt" event already in the ntag_buf
+                    muon_helper.neutron_tag_muon(ntag_helper.prompt_timestamp)
+                    # Check to see if this current event should be a neutron tag
+                    assign_muons(ntag_buf, muon_helper)
+                    assign_value(ntag_buf.energy, clusters.energy)
+                    assign_value(ntag_buf.timestamp, clusters.timestamp)
+                    if is_neutron_tag(ntag_buf):
+                        ntag_helper.in_coincidence_window = True
+                        ntag_helper.prompt_timestamp = clusters.timestamp
+                    else:
+                        ntag_helper.in_coincidence_window = False
+            else:  # Start new coincidence window
+                assign_muons(ntag_buf, muon_helper)
+                assign_value(ntag_buf.energy, clusters.energy)
+                assign_value(ntag_buf.timestamp, clusters.timestamp)
+                if is_neutron_tag(ntag_buf):
+                    logging.debug('found potential neutron tag')
+                    ntag_helper.in_coincidence_window = True
+                    ntag_helper.prompt_timestamp = clusters.timestamp
+
+            # Perform the search for double coincidences
             if not helper.in_coincidence_window:
                 isVetoed = muon_helper.isVetoed_strict()
                 if isVetoed:
@@ -553,9 +629,6 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 clusters_index += 1
                 helper.last_ADevent_timestamp = clusters.timestamp
             else:  # The coincidence window has ended
-                # Also determine if this event is a neutron tag
-                if is_neutron_tag(fill_buf, helper.multiplicity):
-                    muon_helper.neutron_tag_last_muon()
                 # Fill the TTree and reset, without incrementing the loop index
                 if helper.multiplicity == 2:
                     assign_value(fill_buf.multiplicity, helper.multiplicity)
@@ -566,9 +639,6 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
             if helper.in_coincidence_window:
                 if timestamp - helper.prompt_timestamp >= COINCIDENCE_WINDOW:
                     # We've left the window
-                    # Also determine if this event is a neutron tag
-                    if is_neutron_tag(fill_buf, helper.multiplicity):
-                        muon_helper.neutron_tag_last_muon()
                     if helper.multiplicity == 2:
                         assign_value(fill_buf.multiplicity,
                                 helper.multiplicity)

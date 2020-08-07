@@ -232,6 +232,7 @@ class TimeTracker:
 
         # If already in a veto window
         if timestamp - pre_veto < self.end_of_veto_window:
+            logging.debug('Already in veto window')
             new_time = timestamp - self.last_event_tracked
             self.total_vetoed_time += new_time
             if potential_new_end < self.end_of_veto_window:
@@ -247,6 +248,7 @@ class TimeTracker:
             # windows.
             self.num_windows = max(1, self.num_windows)
         else:
+            logging.debug('new veto window')
             dt_last_event_to_window_end = (self.end_of_veto_window
                     - self.last_event_tracked)
             dt_window_end_to_pre_veto = (timestamp - self.end_of_veto_window -
@@ -464,6 +466,7 @@ class MuonHelper:
                         mu_data.energy))
             if is_WS:
                 self.time_WSMuon = mu_data.timestamp
+                logging.debug('Logging WSMuon, entry %d', mu_data.loopIndex)
                 log_WSMuon(self.time_tracker, mu_data.timestamp)
             elif is_lowenergy:
                 self.muon_counts['low'] += 1
@@ -526,7 +529,6 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
     t0 = min(clusters.timestamp, muons.timestamp) + max_veto_window
     tracker = TimeTracker(t0, COINCIDENCE_WINDOW)
     helper = CoincidenceHelper()
-    ntag_helper = CoincidenceHelper()
     muon_helper = MuonHelper(muons, tracker, clusters.detector)
     clusters_index = 0
     # Process the initial "phantom muon" veto window without tracking DAQ time
@@ -546,37 +548,12 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
         if isValid:
             muon_helper.load(timestamp)
             # Neutron tag checks:
-            if ntag_helper.in_coincidence_window:
-                if ntag_helper.prompt_timestamp == timestamp:
-                    pass
-                elif timestamp - ntag_helper.prompt_timestamp < 400e3:  # 400us isolation window
-                    logging.debug('potential neutron tag fails isolation cut')
-                    logging.debug('  tag timestamp: %d; this event: %d; difference: %d',
-                            ntag_helper.prompt_timestamp, timestamp,
-                            timestamp - ntag_helper.prompt_timestamp)
-                    ntag_helper.in_coincidence_window = False
-                else:
-                    logging.debug('Yay! New neutron tag')
-                    # Tag "prompt" event already in the ntag_buf
-                    muon_helper.neutron_tag_muon(ntag_helper.prompt_timestamp)
-                    # Check to see if this current event should be a neutron tag
-                    assign_muons(ntag_buf, muon_helper)
-                    assign_value(ntag_buf.energy, clusters.energy)
-                    assign_value(ntag_buf.timestamp, clusters.timestamp)
-                    if is_neutron_tag(ntag_buf):
-                        ntag_helper.in_coincidence_window = True
-                        ntag_helper.prompt_timestamp = clusters.timestamp
-                    else:
-                        ntag_helper.in_coincidence_window = False
-            else:  # Start new coincidence window
-                assign_muons(ntag_buf, muon_helper)
-                assign_value(ntag_buf.energy, clusters.energy)
-                assign_value(ntag_buf.timestamp, clusters.timestamp)
-                if is_neutron_tag(ntag_buf):
-                    logging.debug('found potential neutron tag')
-                    ntag_helper.in_coincidence_window = True
-                    ntag_helper.prompt_timestamp = clusters.timestamp
-
+            assign_muons(ntag_buf, muon_helper)
+            assign_value(ntag_buf.energy, clusters.energy)
+            assign_value(ntag_buf.timestamp, clusters.timestamp)
+            if is_neutron_tag(ntag_buf):
+                logging.debug('found neutron tag')
+                muon_helper.neutron_tag_muon(clusters.timestamp)
             # Perform the search for double coincidences
             if not helper.in_coincidence_window:
                 isVetoed = muon_helper.isVetoed_strict()

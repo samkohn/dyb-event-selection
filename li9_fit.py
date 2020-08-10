@@ -47,9 +47,7 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
     bins = array('f', [2.00e-03, 2.00e-02, 4.00e-02, 6.00e-02, 8.00e-02, 1.00e-01,
     2.00e-01, 3.00e-01, 4.00e-01, 5.00e-01, 7.50e-01, 1.00e+00,
     1.25e+00, 1.50e+00, 1.75e+00, 2.00e+00, 2.50e+00, 3.00e+00,
-    4.00e+00, 5.00e+00, 6.00e+00, 7.00e+00, 8.00e+00, 9.00e+00, 1.00e+01,
-    2.00e+01, 3.00e+01, 4.00e+01, 5.00e+01, 6.00e+01, 7.00e+01, 8.00e+01,
-    9.00e+01, 1.00e+02])
+    4.00e+00, 5.00e+00, 6.00e+00, 7.00e+00, 8.00e+00, 9.00e+00, 1.00e+01])
 
     test_file = ROOT.TFile(infiles[0], 'READ')
     test_histogram = test_file.Get(name)
@@ -61,8 +59,9 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
             data.Add(filename)
         data.SetBranchStatus('*', 0)
 
-        t_last_muon_hist = ROOT.TH1F(f'{label}energy{ntag_str}', f'{label}energy{ntag_str}', 33, 0.002, 10)
-        t_last_muon_hist.GetXaxis().Set(33, bins)
+        t_last_muon_hist = ROOT.TH1F(f'{label}energy{ntag_str}',
+                f'{label}energy{ntag_str}', 24, 0.002, 10)
+        t_last_muon_hist.GetXaxis().Set(24, bins)
 
         data.SetBranchStatus(f'dt_{label}energy_muon{ntag_str}', 1)
         data.SetBranchStatus('energy', 1)
@@ -82,7 +81,7 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
         t_last_muon_hist = test_histogram
 
     print('performing fit')
-    fitter = ROOT.TF1("li9fitter", li9fit, 0.002, 100, 4)
+    fitter = ROOT.TF1("li9fitter", li9fit, 0.002, 10, 4)
     n_IBD_guess = t_last_muon_hist.GetBinContent(12)/rmu  # 1s bin
     n_bkg_guess = abs(
             t_last_muon_hist.GetBinContent(6)  # 0.1s bin
@@ -94,7 +93,10 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
     ) / (rmu + 50)
     fitter.SetParameters(n_bkg_guess, n_IBD_guess, n_bb_guess)
     fitter.FixParameter(3, rmu)
-    results = t_last_muon_hist.Fit(fitter, "QS", "", 0.002, 100)
+    fitter.SetParLimits(0, 0, 1e9)
+    fitter.SetParLimits(1, 0, 1e9)
+    fitter.SetParLimits(2, 0, 1e9)
+    results = t_last_muon_hist.Fit(fitter, "QS", "", 0.002, 10)
     for name, value, error in zip(['N_li9', 'N_IBD', 'N_BB', 'R_mu'],
             results.GetParams(), results.GetErrors()):
         print(f'{name}: {value} +/- {error}')
@@ -119,19 +121,25 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
                 N_BB, N_BB_error, chi2, num_bins, num_params))
             conn.commit()
 
-    only_ibds = ROOT.TF1("only_ibds", only_ibd_term, 0.002, 100, 2)
+    only_ibds = ROOT.TF1("only_ibds", only_ibd_term, 0.002, 10, 2)
     only_ibds.SetParameters(results.Parameter(1), results.Parameter(3))
     only_ibds.SetLineColor(3)
     only_ibds.Draw("same")
-    ibds_li9 = ROOT.TF1("ibds_li9", ibd_and_li9, 0.002, 100, 3)
+    ibds_li9 = ROOT.TF1("ibds_li9", ibd_and_li9, 0.002, 10, 3)
     ibds_li9.SetParameters(results.Parameter(0), results.Parameter(1),
             results.Parameter(3))
     ibds_li9.SetLineColor(4)
     ibds_li9.Draw("same")
+    ibds_li9_he8 = ROOT.TF1("ibds_li9_he8", ibd_li9_he8, 0.002, 10, 3)
+    ibds_li9_he8.SetParameters(results.Parameter(0), results.Parameter(1),
+            results.Parameter(3))
+    ibds_li9_he8.SetLineColor(6)
+    ibds_li9_he8.Draw("same")
     legend = ROOT.TLegend(0.58, 0.63, 0.85, 0.82, '', 'NB NDC')
     legend.AddEntry(t_last_muon_hist, "Data")
     legend.AddEntry(only_ibds, "IBD")
     legend.AddEntry(ibds_li9, "IBD + {}^{9}Li")
+    legend.AddEntry(ibds_li9_he8, "IBD + {}^{9}Li + {}^{8}He")
     legend.AddEntry(fitter, "IBD + {}^{9}Li + {}^{8}He + {}^{12}B")
     legend.Draw("same")
 

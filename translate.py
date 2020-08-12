@@ -63,6 +63,7 @@ def initialize_indata_onefile(tfile_object):
                 'context.mDetId',
                 'nHit',
                 'NominalCharge',
+                'NominalChargeNL',
                 'Quadrant',
                 'MaxQ',
                 'time_PSD',

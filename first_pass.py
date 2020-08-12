@@ -19,7 +19,7 @@ class RawFileAdapter():
                 int),
             'detector': ('context.mDetId', int),
             'nHit': ('nHit', int),
-            'charge': ('NominalCharge', float),
+            'charge': ('NominalChargeNL', float),
             'fQuad': ('Quadrant', float),
             'fMax': ('MaxQ', float),
             'fPSD_t1': ('time_PSD', float),
@@ -120,6 +120,8 @@ def load_basic_TTree(buf, indata, loopIndex):
     assign_value(buf.triggerNumber, indata.triggerNumber)
     assign_value(buf.triggerType, indata.triggerType)
     assign_value(buf.nHit, indata.nHit)
+    assign_value(buf.charge, indata.charge)
+    logging.debug(indata.charge)
     assign_value(buf.energy, indata.energy)
     return
 

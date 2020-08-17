@@ -4,7 +4,7 @@ import math
 import os
 import sqlite3
 
-def main(infiles, outfile, database, label, ntag, site, update_db):
+def main(infiles, outfile, database, label, ntag, site, update_db, epcut, ngd):
     import ROOT
     ROOT.gROOT.SetBatch(True)
 
@@ -33,6 +33,8 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
             f' && energy[1] < {upper})'
             for det, (lower, upper) in bounds.items()]
     energy_cut_str = '(' + '||'.join(energy_cut_strs) + ')'
+    if ngd:
+        energy_cut_str = '(energy[1] > 6 && energy[1] < 12)'
 
     print('creating TCanvas')
     canvas = ROOT.TCanvas('c1', 'c1', 800, 800)
@@ -70,7 +72,7 @@ def main(infiles, outfile, database, label, ntag, site, update_db):
         data.SetBranchStatus('detector', 1)
         draw_expr = f'dt_{label}energy_muon{ntag_str}/1e9 >> {t_last_muon_hist.GetName()}'
         selection_expr = (f'dt_{label}energy_muon{ntag_str} < 1e10'
-                f' && dt_{label}energy_muon{ntag_str} > 2e6 && energy[0] > 3.5'
+                f' && dt_{label}energy_muon{ntag_str} > 2e6 && energy[0] > {epcut}'
                 f' && ({energy_cut_str})'
                 ' && dr_to_prompt[1] + 1000/600e3 * dt_to_prompt[1] < 800')
 
@@ -236,8 +238,10 @@ if __name__ == '__main__':
     parser.add_argument('--energy', choices=['low', 'mid', 'high'], required=True)
     parser.add_argument('--ntag', action='store_true')
     parser.add_argument('--update-db', action='store_true')
+    parser.add_argument('--epcut', type=float, default=3.5)
+    parser.add_argument('--ngd', action='store_true')
     args = parser.parse_args()
     infiles = args.infiles
     outfile = args.outfile
     main(infiles, outfile, args.database, args.energy, args.ntag, args.site,
-            args.update_db)
+            args.update_db, args.epcut, args.ngd)

@@ -20,6 +20,7 @@ from muons import (
         _NH_SHOWER_MUON_VETO_LAST_NS as SHOWER_MUON_VETO
 )
 import delayeds
+from flashers import isFlasher
 from adevent import isADEvent_THU, isADEvent_THU_lowenergy
 from root_util import (TreeBuffer, float_value, assign_value,
         int_value, unsigned_int_value, long_value)
@@ -162,6 +163,8 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('x', 'F')
     branch_multiple('y', 'F')
     branch_multiple('z', 'F')
+    branch_multiple('fID', 'F')
+    branch_multiple('fPSD', 'F')
     branch('dt_lowenergy_muon', 'L')
     branch('dt_midenergy_muon', 'L')
     branch('dt_highenergy_muon', 'L')
@@ -499,15 +502,15 @@ class MuonHelper:
             muon_object = MuonTimingNTag(0, 0, 'not relevant', False, self._muon_entry)
             self.recent_muons['all'].append(muon_object)
             self._muon_entry += 1
-        #for remaining_muon in self.recent_muons['all']:
-            #label = remaining_muon.label
-            #assign_value(self.muon_fill_buf.low_energy, int(label == 'low'))
-            #assign_value(self.muon_fill_buf.mid_energy, int(label == 'mid'))
-            #assign_value(self.muon_fill_buf.high_energy, int(label == 'high'))
-            #assign_value(self.muon_fill_buf.neutron_tag, int(remaining_muon.ntag))
-            #assign_value(self.muon_fill_buf.entry, remaining_muon.entry)
-            #self.out_muons.Fill()
-            #logging.debug('[close] Filling entry %d', remaining_muon.entry)
+        for remaining_muon in self.recent_muons['all']:
+            label = remaining_muon.label
+            assign_value(self.muon_fill_buf.low_energy, int(label == 'low'))
+            assign_value(self.muon_fill_buf.mid_energy, int(label == 'mid'))
+            assign_value(self.muon_fill_buf.high_energy, int(label == 'high'))
+            assign_value(self.muon_fill_buf.neutron_tag, int(remaining_muon.ntag))
+            assign_value(self.muon_fill_buf.entry, remaining_muon.entry)
+            self.out_muons.Fill()
+            logging.debug('[close] Filling entry %d', remaining_muon.entry)
 
         if output is not None:
             outfile = TFile(output, 'RECREATE')
@@ -571,6 +574,9 @@ class MuonHelper:
             elif is_highenergy:
                 is_muon = True
                 label = 'high'
+            if isFlasher(mu_data.fID, 1, mu_data.f2inch_maxQ, mu_data.detector) & 0b101 > 0:
+                # Reject flasher candidates (but ignore PSD cut, hence the bit logic)
+                is_muon = False
             if is_muon:
                 muon_object = MuonTimingNTag(
                         mu_data.timestamp,
@@ -581,7 +587,7 @@ class MuonHelper:
                 )
                 if mu_data.charge > 5000:
                     self.muon_spectrum_all.Fill(mu_data.charge)
-                #self.recent_muons['all'].append(muon_object)
+                self.recent_muons['all'].append(muon_object)
                 self.muon_counts[label] += 1
                 self.recent_muons[label].append(muon_object)
                 setattr(self, f'time_{label}energy_muon', mu_data.timestamp)
@@ -614,23 +620,23 @@ class MuonHelper:
         mu_data.GetEntry(self._muon_entry)
 
         # Process some of the cache by filling it into the muon TTree
-        #far_enough_past = True
-        #any_muons_in_cache = len(self.recent_muons['all']) > 0
-        #while far_enough_past and any_muons_in_cache:
-            #early_muon = self.recent_muons['all'][0]
-            #if timestamp - early_muon.timestamp > 200000:
-                #self.recent_muons['all'].popleft()
-                #label = early_muon.label
-                #assign_value(self.muon_fill_buf.low_energy, int(label == 'low'))
-                #assign_value(self.muon_fill_buf.mid_energy, int(label == 'mid'))
-                #assign_value(self.muon_fill_buf.high_energy, int(label == 'high'))
-                #assign_value(self.muon_fill_buf.neutron_tag, int(early_muon.ntag))
-                #assign_value(self.muon_fill_buf.entry, early_muon.entry)
-                #self.out_muons.Fill()
-                #logging.debug('Filling entry %d', early_muon.entry)
-            #else:
-                #far_enough_past = False
-            #any_muons_in_cache = len(self.recent_muons['all']) > 0
+        far_enough_past = True
+        any_muons_in_cache = len(self.recent_muons['all']) > 0
+        while far_enough_past and any_muons_in_cache:
+            early_muon = self.recent_muons['all'][0]
+            if timestamp - early_muon.timestamp > 200000:
+                self.recent_muons['all'].popleft()
+                label = early_muon.label
+                assign_value(self.muon_fill_buf.low_energy, int(label == 'low'))
+                assign_value(self.muon_fill_buf.mid_energy, int(label == 'mid'))
+                assign_value(self.muon_fill_buf.high_energy, int(label == 'high'))
+                assign_value(self.muon_fill_buf.neutron_tag, int(early_muon.ntag))
+                assign_value(self.muon_fill_buf.entry, early_muon.entry)
+                self.out_muons.Fill()
+                logging.debug('Filling entry %d', early_muon.entry)
+            else:
+                far_enough_past = False
+            any_muons_in_cache = len(self.recent_muons['all']) > 0
 
 
 def is_neutron_tag(energy):
@@ -778,6 +784,8 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'x')
     copy_to_buffer(source, buf, index, 'y')
     copy_to_buffer(source, buf, index, 'z')
+    copy_to_buffer(source, buf, index, 'fID')
+    copy_to_buffer(source, buf, index, 'fPSD')
 
 def main(entries, events_filename, muon_filename, out_filename, runfile,
         detector, debug):
@@ -797,7 +805,7 @@ def main(entries, events_filename, muon_filename, out_filename, runfile,
 
     if entries == -1:
         entries = in_events.GetEntries()
-    tracker = main_loop(in_events, muons, outdata, fill_buf, debug, entries,
+    tracker, muon_helper = main_loop(in_events, muons, outdata, fill_buf, debug, entries,
             out_muons, muon_fill_buf)
     muon_helper.close(100*entries, output=out_filename+'_muonrates.root')
     outfile.Write()

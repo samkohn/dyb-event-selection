@@ -29,6 +29,15 @@ def main(infiles, outfile, database, label, ntag, site, update_db, epcut, ngd):
             upper = peak + 3 * width
             lower = peak - 3 * width
             bounds[row['DetNo']] = (lower, upper)
+    if len(rows) == 0:
+        print(f'WARNING: cannot find delayed energy data for site {site}.')
+        print( '         Using default bounds of 1.8 and 2.7 MeV')
+        upper = 2.7
+        lower = 1.8
+        bounds[1] = (lower, upper)
+        bounds[2] = (lower, upper)
+        bounds[3] = (lower, upper)
+        bounds[4] = (lower, upper)
     energy_cut_strs = [f'(detector[0] == {det} && energy[1] > {lower} '
             f' && energy[1] < {upper})'
             for det, (lower, upper) in bounds.items()]

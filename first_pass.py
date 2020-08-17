@@ -123,6 +123,13 @@ def load_basic_TTree(buf, indata, loopIndex):
     assign_value(buf.charge, indata.charge)
     logging.debug(indata.charge)
     assign_value(buf.energy, indata.energy)
+    assign_value(buf.fQuad, indata.fQuad)
+    assign_value(buf.fMax, indata.fMax)
+    assign_value(buf.fPSD_t1, indata.fPSD_t1)
+    assign_value(buf.fPSD_t2, indata.fPSD_t2)
+    assign_value(buf.f2inch_maxQ, indata.f2inch_maxQ)
+    assign_value(buf.fID, flashers.fID(indata.fMax, indata.fQuad))
+    assign_value(buf.fPSD, flashers.fPSD(indata.fPSD_t1, indata.fPSD_t2))
     return
 
 def initialize_basic_TTree(ttree, buf):
@@ -139,6 +146,13 @@ def initialize_basic_TTree(ttree, buf):
     buf.nHit = int_value()
     buf.charge = float_value()
     buf.energy = float_value()
+    buf.fQuad = float_value()
+    buf.fMax = float_value()
+    buf.fPSD_t1 = float_value()
+    buf.fPSD_t2 = float_value()
+    buf.f2inch_maxQ = float_value()
+    buf.fID = float_value()
+    buf.fPSD = float_value()
 
     def branch(name, typecode):
         ttree.Branch(name, getattr(buf, name), '{}/{}'.format(name,
@@ -158,6 +172,13 @@ def initialize_basic_TTree(ttree, buf):
     branch('nHit', 'I')
     branch('charge', 'F')
     branch('energy', 'F')
+    branch('fQuad', 'F')
+    branch('fMax', 'F')
+    branch('fPSD_t1', 'F')
+    branch('fPSD_t2', 'F')
+    branch('f2inch_maxQ', 'F')
+    branch('fID', 'F')
+    branch('fPSD', 'F')
     return
 
 def create_muon_TTree(host_file):
@@ -172,16 +193,9 @@ def create_muon_TTree(host_file):
 
 def load_adevent_buf(buf, indata, loopIndex):
     load_basic_TTree(buf, indata, loopIndex)
-    assign_value(buf.fQuad, indata.fQuad)
-    assign_value(buf.fMax, indata.fMax)
-    assign_value(buf.fPSD_t1, indata.fPSD_t1)
-    assign_value(buf.fPSD_t2, indata.fPSD_t2)
-    assign_value(buf.f2inch_maxQ, indata.f2inch_maxQ)
     assign_value(buf.x, indata.x)
     assign_value(buf.y, indata.y)
     assign_value(buf.z, indata.z)
-    assign_value(buf.fID, flashers.fID(indata.fMax, indata.fQuad))
-    assign_value(buf.fPSD, flashers.fPSD(indata.fPSD_t1, indata.fPSD_t2))
 
 def create_singles_TTree(host_file):
     from ROOT import TTree
@@ -191,16 +205,9 @@ def create_singles_TTree(host_file):
     out = TTree('singles', title)
     buf = TreeBuffer()
     initialize_basic_TTree(out, buf)
-    buf.fQuad = float_value()
-    buf.fMax = float_value()
-    buf.fPSD_t1 = float_value()
-    buf.fPSD_t2 = float_value()
-    buf.f2inch_maxQ = float_value()
     buf.x = float_value()
     buf.y = float_value()
     buf.z = float_value()
-    buf.fID = float_value()
-    buf.fPSD = float_value()
     buf.num_nearby_events = unsigned_int_value()
     buf.nearby_dt = int_value(10)
     buf.nearby_energy = float_value(10)
@@ -210,16 +217,9 @@ def create_singles_TTree(host_file):
             typecode))
         return
 
-    branch('fQuad', 'F')
-    branch('fMax', 'F')
-    branch('fPSD_t1', 'F')
-    branch('fPSD_t2', 'F')
-    branch('f2inch_maxQ', 'F')
     branch('x', 'F')
     branch('y', 'F')
     branch('z', 'F')
-    branch('fID', 'F')
-    branch('fPSD', 'F')
     branch('num_nearby_events', 'I')
     out.Branch('nearby_dt', buf.nearby_dt, 'nearby_dt[num_nearby_events]/I')
     out.Branch('nearby_energy', buf.nearby_energy,
@@ -234,32 +234,18 @@ def create_event_TTree(host_file):
     out = TTree('events', title)
     buf = TreeBuffer()
     initialize_basic_TTree(out, buf)
-    buf.fQuad = float_value()
-    buf.fMax = float_value()
-    buf.fPSD_t1 = float_value()
-    buf.fPSD_t2 = float_value()
-    buf.f2inch_maxQ = float_value()
     buf.x = float_value()
     buf.y = float_value()
     buf.z = float_value()
-    buf.fID = float_value()
-    buf.fPSD = float_value()
 
     def branch(name, typecode):
         out.Branch(name, getattr(buf, name), '{}/{}'.format(name,
             typecode))
         return
 
-    branch('fQuad', 'F')
-    branch('fMax', 'F')
-    branch('fPSD_t1', 'F')
-    branch('fPSD_t2', 'F')
-    branch('f2inch_maxQ', 'F')
     branch('x', 'F')
     branch('y', 'F')
     branch('z', 'F')
-    branch('fID', 'F')
-    branch('fPSD', 'F')
     return out, buf
 
 def create_outfiles(out_location, run, fileno, ads):

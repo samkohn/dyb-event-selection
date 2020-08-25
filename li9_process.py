@@ -574,8 +574,8 @@ class MuonHelper:
             elif is_highenergy:
                 is_muon = True
                 label = 'high'
-            if isFlasher(mu_data.fID, 1, mu_data.f2inch_maxQ, mu_data.detector) & 0b101 > 0:
-                # Reject flasher candidates (but ignore PSD cut, hence the bit logic)
+            if isFlasher(mu_data.fID, -1, 0, mu_data.detector) > 0:
+                # Reject Ellipse flasher candidates
                 is_muon = False
             if is_muon:
                 muon_object = MuonTimingNTag(

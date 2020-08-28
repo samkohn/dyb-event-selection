@@ -14,19 +14,10 @@ def distance(a, b):
             + (a['y'] - b['y'])**2
             + (a['z'] - b['z'])**2)
 
-def is_single(ttree_event, energy):
-    'Applies the single event criteria to the loaded entry in this TTree.'
-    return (
-            energy < 12 and energy > 1.5
-            and ttree_event.multiplicity == 1
-            and ttree_event.dt_cluster_to_prev_ADevent >
-                delayeds._NH_THU_MAX_TIME)
-
-def main(infilename, outfile, AD, ttree_name):
+def main(infilename, outfile, ttree_name):
     import process
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
-    infile2 = ROOT.TFile(infilename, 'READ')
     outfile = ROOT.TFile(outfile, 'RECREATE')
     acc, acc_buf = process.create_computed_TTree('accidentals', outfile,
             'nh_THU', 'Accidentals sample (git: %s)')
@@ -40,8 +31,6 @@ def main(infilename, outfile, AD, ttree_name):
     computed = infile.Get(ttree_name)
     computed.SetBranchStatus('*', 0)
     computed.SetBranchStatus('energy', 1)
-    computed.SetBranchStatus('multiplicity', 1)
-    computed.SetBranchStatus('dt_cluster_to_prev_ADevent', 1)
     computed.SetBranchStatus('x', 1)
     computed.SetBranchStatus('y', 1)
     computed.SetBranchStatus('z', 1)
@@ -54,19 +43,18 @@ def main(infilename, outfile, AD, ttree_name):
     while index < entries:
         # Increment until we get a good single
         computed.GetEntry(index)
-        energy = computed.energy[0]
-        if is_single(computed, energy):
-            event = {
-                    'energy': energy,
-                    'detector': AD,
-                    'x': computed.x[0],
-                    'y': computed.y[0],
-                    'z': computed.z[0],
-                    }
-            if index < halfway:
-                first_events.append(event)
-            else:
-                second_events.append(event)
+        energy = computed.energy
+        event = {
+                'energy': energy,
+                'detector': computed.detector,
+                'x': computed.x,
+                'y': computed.y,
+                'z': computed.z,
+                }
+        if index < halfway:
+            first_events.append(event)
+        else:
+            second_events.append(event)
         index += 1
     for (first_event, second_event) in zip(first_events, second_events):
         # Compare event distances and fill the tree
@@ -76,6 +64,7 @@ def main(infilename, outfile, AD, ttree_name):
         all_acc_buf.energy[0] = first_event['energy']
         all_acc_buf.energy[1] = second_event['energy']
         all_acc_buf.detector[0] = first_event['detector']
+        all_acc_buf.detector[1] = second_event['detector']
         all_acc_buf.dr_to_prompt[0] = 0
         all_acc_buf.dr_to_prompt[1] = event_dr
         all_acc_buf.dt_to_prompt[0] = 0
@@ -101,8 +90,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('infile')
     parser.add_argument('outfile')
-    parser.add_argument('ad', type=int)
-    parser.add_argument('--ttree-name', default='computed')
+    parser.add_argument('--ttree-name', default='singles')
     args = parser.parse_args()
 
-    main(args.infile, args.outfile, args.ad, args.ttree_name)
+    main(args.infile, args.outfile, args.ttree_name)

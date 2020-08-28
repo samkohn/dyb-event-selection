@@ -20,6 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--xlabel')
     parser.add_argument('--ylabel')
     parser.add_argument('--smallxnumbers', action='store_true')
+    parser.add_argument('--invert', action='store_true', help='Reciprocal of all bins')
     args = parser.parse_args()
     ROOT.gROOT.SetBatch(True)
 
@@ -36,6 +37,14 @@ if __name__ == '__main__':
     if args.rebin2d is not None:
         hist.Rebin2D(*args.rebin2d)
 
+    if args.invert:
+        for binx in range(1, hist.GetNbinsX() + 1):
+            for biny in range(1, hist.GetNbinsY() + 1):
+                for binz in range(1, hist.GetNbinsZ() + 1):
+                    global_bin = hist.GetBin(binx, biny, binz)
+                    value = hist.GetBinContent(global_bin)
+                    hist.SetBinContent(global_bin, 1/value)
+
     ROOT.gStyle.SetOptStat(0)
     ROOT.gStyle.SetOptTitle(0)
     hist.SetTitle(args.infilename)
@@ -46,7 +55,7 @@ if __name__ == '__main__':
         hist.SetLabelSize(0.035, 'x')
     #hist.SetTitleOffset(0.95, 'y')
     canvas = ROOT.TCanvas('c1', 'c1', 800, 800)
-    margin = 0.14
+    margin = 0.16
     canvas.SetRightMargin(margin)
     canvas.SetLeftMargin(margin)
     canvas.SetTopMargin(margin)

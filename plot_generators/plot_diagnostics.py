@@ -5,13 +5,14 @@ import sqlite3
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+from scipy.ndimage.filters import uniform_filter1d
 import numpy as np
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('database')
     choices = ('all', 'singles', 'muons', 'delayed-fit',
-            'delayed-eff-unc', 'DT-eff')
+            'delayed-eff-unc', 'DT-eff', 'acc-DT-eff')
     parser.add_argument('--types', nargs='+', choices=choices, default='all',
             metavar='PLOT_TYPE', help=f'Choices: {choices}')
     args = parser.parse_args()
@@ -23,9 +24,12 @@ if __name__ == '__main__':
     mpl.rcParams['lines.linewidth'] = 3
     mpl.rcParams['lines.markersize'] = 10
     mpl.rcParams['errorbar.capsize'] = 5
+    colors = mpl.rcParams['axes.prop_cycle'].by_key()['color']
     dateconv = np.vectorize(datetime.fromtimestamp)
     def get_dates(timestamp_ns_array):
         return dateconv(timestamp_ns_array/1e9)
+    def get_ad_data(hall, det, in_data):
+        return in_data[(in_data[:, 1] == hall) & (in_data[:, 2] == det)]
     ads = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (3, 3), (3, 4)]
     near_ads = ads[:4]
     far_ads = ads[4:]
@@ -45,8 +49,6 @@ if __name__ == '__main__':
                 FROM singles_rates INNER JOIN runs USING (RunNo)
                 ORDER BY RunNo''')
             data = np.array(cursor.fetchall())
-        def get_ad_data(hall, det, in_data):
-            return in_data[(in_data[:, 1] == hall) & (in_data[:, 2] == det)]
         # All
         fig, ax = plt.subplots()
         for hall, det in ads:
@@ -308,3 +310,201 @@ if __name__ == '__main__':
         ax.grid()
         fig.tight_layout()
         fig.savefig('distance_time_cut_efficiency.pdf')
+
+    if plot_all or ('acc-DT-eff' in plot_types):
+        print('Retrieving and plotting accidentals DT efficiency data...')
+        with sqlite3.Connection(database) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''SELECT RunNo, Hall, DetNo, Start_time, Livetime_ns,
+                DistanceTime_DT_Eff
+                FROM runs NATURAL JOIN accidental_subtraction NATURAL JOIN muon_rates
+                ORDER BY RunNo, DetNo''')
+            data = np.array(cursor.fetchall())
+            cursor.execute('''SELECT RunNo, Hall, DetNo, DistanceTime_DT_Eff
+                FROM runs NATURAL JOIN distance_time_eff_study
+                WHERE PairingType = "random_N"
+                ORDER BY RunNo, DetNo''')
+            extra_data = np.array(cursor.fetchall())
+        ns_per_18h = 60e9 * 60 * 18
+        wide_fig = (16, 8)
+
+        #EH1, EH2
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in near_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            ax.plot(long_runs[:, 0], long_runs[:, 5], '.')
+        ax.legend(near_names, fontsize=12)
+        ax.set_title('Near halls, runtime >18h')
+        ax.set_xlabel('Run number')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_near_byrun.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in near_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            average = uniform_filter1d(long_runs[:, 5], size=20, mode='nearest')
+            ax.plot(long_runs[10:-10, 0], average[10:-10], '-')
+        ax.legend(near_names, fontsize=12)
+        ax.set_title('Near halls, runtime >18h, average over $\pm10$ runs')
+        ax.set_xlabel('Run number')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_avg_near_byrun.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in near_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            ax.plot_date(get_dates(long_runs[:, 3]), long_runs[:, 5], '.')
+        ax.legend(near_names, fontsize=12)
+        ax.set_title('Near halls, runtime >18h')
+        ax.set_xlabel('Start time')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_near_bydate.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in near_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            average = uniform_filter1d(long_runs[:, 5], size=20, mode='nearest')
+            ax.plot_date(get_dates(long_runs[10:-10, 3]), average[10:-10], '-')
+        ax.legend(near_names, fontsize=12)
+        ax.set_title('Near halls, runtime >18h, average over $\pm10$ runs')
+        ax.set_xlabel('Start time')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_avg_near_bydate.pdf')
+
+        #EH3
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in far_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            ax.plot(long_runs[:, 0], long_runs[:, 5], '.')
+        ax.legend(far_names, fontsize=12)
+        ax.set_title('Far halls, runtime >18h')
+        ax.set_xlabel('Run number')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_far_byrun.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in far_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            average = uniform_filter1d(long_runs[:, 5], size=20, mode='nearest')
+            ax.plot(long_runs[10:-10, 0], average[10:-10], '-')
+        ax.legend(far_names, fontsize=12)
+        ax.set_title('Far halls, runtime >18h, average over $\pm10$ runs')
+        ax.set_xlabel('Run number')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_avg_far_byrun.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in far_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            ax.plot_date(get_dates(long_runs[:, 3]), long_runs[:, 5], '.')
+        ax.legend(far_names, fontsize=12)
+        ax.set_title('Far halls, runtime >18h')
+        ax.set_xlabel('Start time')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_far_bydate.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        for hall, det in far_ads:
+            ad_data = get_ad_data(hall, det, data)
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            average = uniform_filter1d(long_runs[:, 5], size=20, mode='nearest')
+            ax.plot_date(get_dates(long_runs[10:-10, 3]), average[10:-10], '-')
+        ax.legend(far_names, fontsize=12)
+        ax.set_title('Far halls, runtime >18h, average over $\pm10$ runs')
+        ax.set_xlabel('Start time')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_avg_far_bydate.pdf')
+
+        fig, ax = plt.subplots(figsize=wide_fig)
+        fig_tmp, ax_tmp = plt.subplots()
+        fig2 = plt.figure()
+        for i, (hall, det) in enumerate(near_ads):
+            ad_data = get_ad_data(hall, det, data)
+            extra_ad_data = get_ad_data(hall, det, extra_data)
+            ad_data = np.hstack((ad_data, extra_ad_data[:, 3:]))
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            average = uniform_filter1d(long_runs[:, 5], size=20, mode='nearest')
+            ax.plot_date(get_dates(long_runs[10:-10, 3]), average[10:-10], '-')
+            average_method2 = uniform_filter1d(long_runs[:, 6], size=20, mode='nearest')
+            ax.plot_date(get_dates(long_runs[10:-10, 3]), average_method2[10:-10], '-', linewidth=1,
+                    color=colors[i])
+            ax_tmp.plot(long_runs[:, 5], long_runs[:, 6], '.')
+            mpl.rcParams['font.size'] = 12
+            ax_tmp2 = fig2.add_subplot(220 + i + 1)
+            dev = (long_runs[:, 6] - long_runs[:, 5])/long_runs[:, 5]
+            ax_tmp2.plot_date(get_dates(long_runs[:, 3]), dev, markersize=2)
+            mpl.rcParams['font.size'] = 18
+            ax_tmp2.text(0.05, 0.95,
+                    f'{near_names[i]}\n'
+                    fr'({100*np.mean(dev):.2f}$\pm${np.std(dev)*100:.2f})%',
+                    fontsize=12,
+                    transform=ax_tmp2.transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='w', alpha=0.5))
+        legend_names = np.array([[name + ' sequential', name + ' random'] for name in
+                near_names]).flatten()
+        ax.legend(legend_names, fontsize=12)
+        ax.set_title('Near halls, runtime >18h, average over $\pm10$ runs')
+        # ax.set_xlabel('Run number')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_avg_comparison_near_bydate.pdf')
+        ax_tmp.legend(near_names, fontsize=12)
+        ax_tmp.set_title('Near halls, runtime > 18h')
+        ax_tmp.set_xlabel(r'$\varepsilon_{DT,acc}$ (sequential pairing)')
+        ax_tmp.set_ylabel(r'$\varepsilon_{DT,acc}$ (random pairing)')
+        fig_tmp.tight_layout()
+        fig_tmp.savefig('acc_DT_eff_pairing_corr.pdf')
+        fig2.tight_layout()
+        fig2.savefig('acc_DT_eff_pairing_deviation_near.pdf')
+
+        # EH3
+        fig, ax = plt.subplots(figsize=wide_fig)
+        fig_tmp, ax_tmp = plt.subplots()
+        fig2 = plt.figure()
+        for i, (hall, det) in enumerate(far_ads):
+            ad_data = get_ad_data(hall, det, data)
+            extra_ad_data = get_ad_data(hall, det, extra_data)
+            ad_data = np.hstack((ad_data, extra_ad_data[:, 3:]))
+            long_runs = ad_data[ad_data[:, 4] > ns_per_18h]
+            average = uniform_filter1d(long_runs[:, 5], size=20, mode='nearest')
+            ax.plot_date(get_dates(long_runs[10:-10, 3]), average[10:-10], '-')
+            average_method2 = uniform_filter1d(long_runs[:, 6], size=20, mode='nearest')
+            ax.plot_date(get_dates(long_runs[10:-10, 3]), average_method2[10:-10], '-', linewidth=1,
+                    color=colors[i])
+            ax_tmp.plot(long_runs[:, 5], long_runs[:, 6], '.')
+            mpl.rcParams['font.size'] = 12
+            ax_tmp2 = fig2.add_subplot(220 + i + 1)
+            dev = (long_runs[:, 6] - long_runs[:, 5])/long_runs[:, 5]
+            ax_tmp2.plot_date(get_dates(long_runs[:, 3]), dev, markersize=2)
+            mpl.rcParams['font.size'] = 18
+            ax_tmp2.text(0.05, 0.95,
+                    f'{far_names[i]}\n'
+                    fr'({100*np.mean(dev):.2f}$\pm${np.std(dev)*100:.2f})%',
+                    fontsize=12,
+                    transform=ax_tmp2.transAxes, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='w', alpha=0.5))
+        legend_names = np.array([[name + ' sequential', name + ' random'] for name in
+                far_names]).flatten()
+        ax.legend(legend_names, fontsize=12)
+        ax.set_title('Far halls, runtime >18h, average over $\pm10$ runs')
+        # ax.set_xlabel('Run number')
+        ax.set_ylabel(r'$\varepsilon_{DT,acc}$')
+        fig.tight_layout()
+        fig.savefig('acc_DT_eff_avg_comparison_far_bydate.pdf')
+        fig2.tight_layout()
+        fig2.savefig('acc_DT_eff_pairing_deviation_far.pdf')

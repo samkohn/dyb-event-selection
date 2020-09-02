@@ -1,10 +1,12 @@
 from __future__ import print_function
 
 import argparse
+from collections import deque
 import math
 import random
 
 import delayeds
+from root_util import assign_value
 
 def distance(a, b):
     '''Distance where coordinates are specified as 'x', 'y', 'z' keys.
@@ -15,51 +17,42 @@ def distance(a, b):
             + (a['z'] - b['z'])**2)
 
 def get_event(computed):
-    event = {
-            'energy': computed.energy,
-            'detector': computed.detector,
-            'x': computed.x,
-            'y': computed.y,
-            'z': computed.z,
-            }
+    event = dict(
+            loopIndex=computed.loopIndex,
+            timestamp=computed.timestamp,
+            triggerNumber=computed.triggerNumber,
+            triggerType=computed.triggerType,
+            nHit=computed.nHit,
+            charge=computed.charge,
+            fQuad=computed.fQuad,
+            fMax=computed.fMax,
+            fPSD_t1=computed.fPSD_t1,
+            fPSD_t2=computed.fPSD_t2,
+            f2inch_maxQ=computed.f2inch_maxQ,
+            energy=computed.energy,
+            x=computed.x,
+            y=computed.y,
+            z=computed.z,
+    )
     return event
 
 def sequential_pairing(computed):
     entries = computed.GetEntries()
     halfway = entries//2
     index = 0
-    first_events = []
-    second_events = []
+    first_events = [None] * halfway
     while index < entries:
         # Increment until we get a good single
         computed.GetEntry(index)
         event = get_event(computed)
         if index < halfway:
-            first_events.append(event)
+            first_events[halfway - index - 1] = event
         else:
-            second_events.append(event)
+            yield first_events[2 * halfway - index - 1], event
+            first_events[2 * halfway - index] = None
         index += 1
-    return first_events, second_events
 
 def random_pairing_N(computed):
-    entries = computed.GetEntries()
-    halfway = entries//2
-    first_events = [None] * halfway
-    second_events = [None] * halfway
-    if entries % 2 == 0:
-        ordering = list(range(entries))
-    else:
-        ordering = list(range(entries - 1))
-    for entry, order in enumerate(ordering):
-        computed.GetEntry(entry)
-        event = get_event(computed)
-        if order % 2 == 0:
-            first_events[order // 2] = event
-        else:
-            second_events[order // 2] = event
-    return first_events, second_events
-
-def random_pairing_N_repeats(computed):
     entries = computed.GetEntries()
     halfway = entries//2
     first_events = [None] * halfway
@@ -74,11 +67,19 @@ def random_pairing_N_repeats(computed):
         event = get_event(computed)
         if order % 2 == 0:
             first_events[order // 2] = event
+            if second_events[order // 2] is not None:
+                yield first_events[order // 2], second_events[order // 2]
+                first_events[order // 2] = None
+                second_events[order // 2] = None
         else:
             second_events[order // 2] = event
-    return first_events, second_events
+            if first_events[order // 2] is not None:
+                yield first_events[order // 2], second_events[order // 2]
+                first_events[order // 2] = None
+                second_events[order // 2] = None
 
-def main(infilename, outfile, ttree_name, pairing_algorithm, repeat):
+
+def main(infilename, outfile, ttree_name, pairing_algorithm):
     import process
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
@@ -98,39 +99,66 @@ def main(infilename, outfile, ttree_name, pairing_algorithm, repeat):
     computed.SetBranchStatus('x', 1)
     computed.SetBranchStatus('y', 1)
     computed.SetBranchStatus('z', 1)
+    computed.GetEntry(0)
+    run = computed.run
+    detector = computed.detector
+    site = computed.site
     if pairing_algorithm == 'sequential':
-        first_events, second_events = sequential_pairing(computed)
+        #first_events, second_events = sequential_pairing(computed)
+        generator = sequential_pairing(computed)
     elif pairing_algorithm == 'random_N':
-        if repeat > 1:
-            efficiency_list = []
-            for _ in range(repeat):
-                first_events, second_events = random_pairing_N(computed)
-                num_passes_DT = 0
-                for (first_event, second_event) in zip(first_events, second_events):
-                    # Compare event distances and fill the tree
-                    event_dr = distance(first_event, second_event)
-                    event_dt = random.randint(1000, delayeds._NH_THU_MAX_TIME)
-                    if delayeds.nH_THU_DT(event_dr, event_dt) < delayeds._NH_THU_DIST_TIME_MAX:
-                        num_passes_DT += 1
-                print(num_passes_DT)
-                efficiency = num_passes_DT / len(first_events)
-                print(efficiency)
-                efficiency_list.append(efficiency)
-            print(efficiency_list)
-            return
-        else:
-            first_events, second_events = random_pairing_N(computed)
+        #first_events, second_events = random_pairing_N(computed)
+        generator = random_pairing_N(computed)
     else:
         raise NotImplemented(pairing_algorithm)
-    for (first_event, second_event) in zip(first_events, second_events):
+    #for (first_event, second_event) in zip(first_events, second_events):
+    for (first_event, second_event) in generator:
         # Compare event distances and fill the tree
         event_dr = distance(first_event, second_event)
         event_dt = random.randint(1000, delayeds._NH_THU_MAX_TIME)
         all_acc_buf.multiplicity[0] = 2
-        all_acc_buf.energy[0] = first_event['energy']
-        all_acc_buf.energy[1] = second_event['energy']
-        all_acc_buf.detector[0] = first_event['detector']
-        all_acc_buf.detector[1] = second_event['detector']
+        assign_value(all_acc_buf.run, run)
+        assign_value(all_acc_buf.site, site)
+        assign_value(all_acc_buf.loopIndex, first_event['loopIndex'], 0)
+        assign_value(all_acc_buf.timestamp, first_event['timestamp'], 0)
+        assign_value(all_acc_buf.timestamp_seconds,
+                first_event['timestamp'] // 1000000000, 0)
+        assign_value(all_acc_buf.timestamp_nanoseconds,
+                first_event['timestamp'] % 1000000000, 0)
+        assign_value(all_acc_buf.detector, detector, 0)
+        assign_value(all_acc_buf.triggerNumber, first_event['triggerNumber'], 0)
+        assign_value(all_acc_buf.triggerType, first_event['triggerType'], 0)
+        assign_value(all_acc_buf.nHit, first_event['nHit'], 0)
+        assign_value(all_acc_buf.charge, first_event['charge'], 0)
+        assign_value(all_acc_buf.fQuad, first_event['fQuad'], 0)
+        assign_value(all_acc_buf.fMax, first_event['fMax'], 0)
+        assign_value(all_acc_buf.fPSD_t1, first_event['fPSD_t1'], 0)
+        assign_value(all_acc_buf.fPSD_t2, first_event['fPSD_t2'], 0)
+        assign_value(all_acc_buf.f2inch_maxQ, first_event['f2inch_maxQ'], 0)
+        assign_value(all_acc_buf.energy, first_event['energy'], 0)
+        assign_value(all_acc_buf.x, first_event['x'], 0)
+        assign_value(all_acc_buf.y, first_event['y'], 0)
+        assign_value(all_acc_buf.z, first_event['z'], 0)
+        assign_value(all_acc_buf.loopIndex, second_event['loopIndex'], 1)
+        assign_value(all_acc_buf.timestamp, second_event['timestamp'], 1)
+        assign_value(all_acc_buf.timestamp_seconds,
+                second_event['timestamp'] // 1000000000, 1)
+        assign_value(all_acc_buf.timestamp_nanoseconds,
+                second_event['timestamp'] % 1000000000, 1)
+        assign_value(all_acc_buf.detector, detector, 0)
+        assign_value(all_acc_buf.triggerNumber, second_event['triggerNumber'], 1)
+        assign_value(all_acc_buf.triggerType, second_event['triggerType'], 1)
+        assign_value(all_acc_buf.nHit, second_event['nHit'], 1)
+        assign_value(all_acc_buf.charge, second_event['charge'], 1)
+        assign_value(all_acc_buf.fQuad, second_event['fQuad'], 1)
+        assign_value(all_acc_buf.fMax, second_event['fMax'], 1)
+        assign_value(all_acc_buf.fPSD_t1, second_event['fPSD_t1'], 1)
+        assign_value(all_acc_buf.fPSD_t2, second_event['fPSD_t2'], 1)
+        assign_value(all_acc_buf.f2inch_maxQ, second_event['f2inch_maxQ'], 1)
+        assign_value(all_acc_buf.energy, second_event['energy'], 1)
+        assign_value(all_acc_buf.x, second_event['x'], 1)
+        assign_value(all_acc_buf.y, second_event['y'], 1)
+        assign_value(all_acc_buf.z, second_event['z'], 1)
         all_acc_buf.dr_to_prompt[0] = 0
         all_acc_buf.dr_to_prompt[1] = event_dr
         all_acc_buf.dt_to_prompt[0] = 0
@@ -158,7 +186,8 @@ if __name__ == '__main__':
     parser.add_argument('outfile')
     parser.add_argument('--ttree-name', default='singles')
     parser.add_argument('--pairing', default='sequential')
-    parser.add_argument('--repeat', type=int, default=-1)
+    parser.add_argument('--seed', type=int, default=1)
     args = parser.parse_args()
 
-    main(args.infile, args.outfile, args.ttree_name, args.pairing, args.repeat)
+    random.seed(args.seed)
+    main(args.infile, args.outfile, args.ttree_name, args.pairing)

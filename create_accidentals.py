@@ -4,6 +4,10 @@ import argparse
 from collections import deque
 import math
 import random
+import sqlite3
+
+import numpy as np
+np.seterr('raise')
 
 import delayeds
 from root_util import assign_value
@@ -77,6 +81,75 @@ def random_pairing_N(computed):
                 yield first_events[order // 2], second_events[order // 2]
                 first_events[order // 2] = None
                 second_events[order // 2] = None
+
+def random_pairing_many(computed, num_samples, cut=lambda entry:False):
+    entries = computed.GetEntries()
+    events = []
+    computed.SetBranchStatus('*', 0)
+    computed.SetBranchStatus('x', 1)
+    computed.SetBranchStatus('y', 1)
+    computed.SetBranchStatus('z', 1)
+    for entry in computed:
+        if cut(entry):
+            continue
+        events.append((x, y, z))
+    events = np.array(events)
+    rng = np.random.default_rng()
+    num_repeats = (num_samples // entries) + 1
+    event_drs = np.array([])
+    for cycle in range(num_repeats):
+        first_events = events.copy()
+        second_events = events.copy()
+        rng.shuffle(first_events, axis=0)
+        rng.shuffle(second_events, axis=0)
+        event_drs = np.concatenate((event_drs, np.linalg.norm(first_events - second_events, axis=1)))
+    event_drs = event_drs[:num_samples]
+    event_dts = rng.integers(1000, delayeds._NH_THU_MAX_TIME, size=num_samples)
+    event_DTs = delayeds.nH_THU_DT(event_drs, event_dts)
+    return event_DTs
+
+def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
+    import ROOT
+    infile = ROOT.TFile(infilename, 'READ')
+    computed = infile.Get(ttree_name)
+    computed.GetEntry(0)
+    run = computed.run
+    detector = computed.detector
+    site = computed.site
+    if pairing == 'random_many':
+        num_pairs = kwargs['num_pairs']
+        event_DTs = random_pairing_many(computed, num_pairs)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    elif pairing == 'random_many_resid_flasher':
+        num_pairs = kwargs['num_pairs']
+        def cut(entry):
+            x, y, z = entry.x, entry.y, entry.z
+            return z > 2200 and np.sqrt(x*x + y*y) > 500**2  # TODO double-check this cut:
+        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    else:
+        raise NotImplemented(pairing)
+    try:
+        percent_error = 100 * error / efficiency
+    except ZeroDivisionError:
+        percent_error = 0
+    if update_db is None:
+        print(f'Pairing type: {pairing}')
+        print(f'Efficiency: {efficiency:.6f} +/- {error:.6f} ({percent_error:.1f}%)')
+        print(f'Total pairs: {num_pairs}')
+        print(f'Passed DT cut: {num_passes_cut}')
+    else:
+        with sqlite3.Connection(update_db) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
+                VALUES (?, ?, ?, ?, ?, ?)''',
+                (run, detector, pairing, efficiency, error, num_pairs))
 
 
 def main(infilename, outfile, ttree_name, pairing_algorithm):
@@ -187,7 +260,14 @@ if __name__ == '__main__':
     parser.add_argument('--ttree-name', default='singles')
     parser.add_argument('--pairing', default='sequential')
     parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--only-DT-eff', action='store_true')
+    parser.add_argument('--update-db')
+    parser.add_argument('--num-pairs', type=int)
     args = parser.parse_args()
 
     random.seed(args.seed)
-    main(args.infile, args.outfile, args.ttree_name, args.pairing)
+    if args.only_DT_eff:
+        only_DT_eff(args.infile, args.ttree_name, args.pairing,
+                args.update_db, num_pairs = args.num_pairs)
+    else:
+        main(args.infile, args.outfile, args.ttree_name, args.pairing)

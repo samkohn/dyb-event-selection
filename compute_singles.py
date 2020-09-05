@@ -114,7 +114,7 @@ def subterm(sum_term, Tc):
     return (1 - math.exp(-sum_term * Tc)) / sum_term
 
 
-def main(infile, database, update_db, iteration):
+def main(infile, database, update_db, iteration, extra_cut):
     with open(os.path.splitext(infile)[0] + '.json', 'r') as f:
         stats = json.load(f)
     livetime_s = stats['usable_livetime']/1e9
@@ -127,7 +127,7 @@ def main(infile, database, update_db, iteration):
     site = ch.site
     start_time = ch.timestamp[0]
     multiplicity_1_count = ch.Draw('energy', f'detector == {ad} && '
-        'multiplicity == 1', 'goff')
+        f'multiplicity == 1 && ({extra_cut})', 'goff')
     multiplicity_1_count_error = math.sqrt(multiplicity_1_count)
     multiplicity_1_rate_Hz = multiplicity_1_count / livetime_s
     with sqlite3.Connection(database) as conn:
@@ -179,5 +179,6 @@ if __name__ == '__main__':
     parser.add_argument('--iteration', type=int, default=0,
             help='If present, look up IBD rate in database and integrate into '
                 'the calculation')
+    parser.add_argument('--extra-cut', default='1')
     args = parser.parse_args()
-    main(args.infile, args.database, args.update_db, args.iteration)
+    main(args.infile, args.database, args.update_db, args.iteration, args.extra_cut)

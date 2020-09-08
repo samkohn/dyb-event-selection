@@ -92,7 +92,7 @@ def random_pairing_many(computed, num_samples, cut=lambda entry:False):
     for entry in computed:
         if cut(entry):
             continue
-        events.append((x, y, z))
+        events.append((entry.x, entry.y, entry.z))
     events = np.array(events)
     rng = np.random.default_rng()
     num_repeats = (num_samples // entries) + 1
@@ -127,7 +127,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
         num_pairs = kwargs['num_pairs']
         def cut(entry):
             x, y, z = entry.x, entry.y, entry.z
-            return z > 2200 and np.sqrt(x*x + y*y) > 500**2  # TODO double-check this cut:
+            return z > 2200 and np.sqrt(x*x + y*y) > 500
         event_DTs = random_pairing_many(computed, num_pairs, cut)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)

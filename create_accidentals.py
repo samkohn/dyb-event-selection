@@ -91,6 +91,7 @@ def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_r
     computed.SetBranchStatus('x', 1)
     computed.SetBranchStatus('y', 1)
     computed.SetBranchStatus('z', 1)
+    computed.SetBranchStatus('energy', 1)
     for entry in computed:
         if cut(entry):
             continue
@@ -134,6 +135,22 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
         def cut(entry):
             x, y, z = entry.x, entry.y, entry.z
             return z > 2200 and np.sqrt(x*x + y*y) > 500
+        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    elif pairing == 'energy_lt_2MeV':
+        def cut(entry):
+            return entry.energy < 2
+        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    elif pairing == 'energy_gt_2MeV':
+        def cut(entry):
+            return entry.energy >= 2
         event_DTs = random_pairing_many(computed, num_pairs, cut)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)

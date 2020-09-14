@@ -116,15 +116,14 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
     run = computed.run
     detector = computed.detector
     site = computed.site
+    num_pairs = kwargs['num_pairs']
     if pairing == 'random_many':
-        num_pairs = kwargs['num_pairs']
         event_DTs = random_pairing_many(computed, num_pairs)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
         efficiency = num_passes_cut / num_pairs
         error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
     elif pairing == 'random_many_resid_flasher':
-        num_pairs = kwargs['num_pairs']
         def cut(entry):
             x, y, z = entry.x, entry.y, entry.z
             return z > 2200 and np.sqrt(x*x + y*y) > 500

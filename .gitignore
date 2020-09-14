@@ -2,6 +2,7 @@ __*__
 *.root
 *.pyc
 *.pdf
+*.png
 *.swp
 *.txt
 *.out

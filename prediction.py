@@ -82,11 +82,10 @@ def reactor_spectrum(database, core):
 
 def livetime_by_week(database, weekly_time_bins):
     """Retrieve a 1D array of # seconds livetime for each week."""
-    dets = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (3, 3), (3, 4)]
     ordered = {}
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        for hall, det in dets:
+        for hall, det in all_ads:
             cursor.execute('''SELECT Hall, DetNo, Start_time, Livetime_ns/Efficiency
                 FROM muon_rates NATURAL JOIN runs
                 WHERE Hall = ? AND DetNo = ?
@@ -179,13 +178,12 @@ def flux_fraction(database, week_range=slice(None, None, None)):
 
     The dict has keys ((hall, det), core) with core indexed from 1.
     """
-    dets = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (3, 3), (3, 4)]
     total_spectrum = [None] * 6
     for core in range(1, 7):
         total_spectrum[core-1], energy_bins_spec = total_emitted(database, core,
                 week_range)
     to_return = {}
-    for (hall, det) in dets:
+    for (hall, det) in all_ads:
         numerators = np.zeros((len(energy_bins_spec), 6))
         for core in range(1, 7):
             spec = total_spectrum[core-1][hall, det]

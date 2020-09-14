@@ -95,7 +95,7 @@ def random_pairing_many(computed, num_samples, cut=lambda entry:False):
         events.append((entry.x, entry.y, entry.z))
     events = np.array(events)
     rng = np.random.default_rng()
-    num_repeats = (num_samples // entries) + 1
+    num_repeats = (num_samples // len(events)) + 1
     event_drs = np.array([])
     for cycle in range(num_repeats):
         first_events = events.copy()

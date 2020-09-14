@@ -1,0 +1,324 @@
+"""Near-far prediction.
+
+Based on the procedure outlined in DocDB-8774 Section 3.
+"""
+
+import argparse
+from dataclasses import dataclass
+from datetime import datetime
+import json
+import logging
+import pdb
+import sqlite3
+
+import numpy as np
+
+@dataclass
+class InputOscParams:
+    theta12: float
+    m2_21: float
+
+default_osc_params = InputOscParams(33.44*np.pi/180, 7.42e-5)
+no_osc_params = InputOscParams(0, 0)
+near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
+far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
+all_ads = near_ads + far_ads
+
+def survival_probability(L, E, theta13, m2_ee, input_osc_params=default_osc_params):
+    theta12 = input_osc_params.theta12
+    m2_21 = input_osc_params.m2_21
+    cos4theta13 = np.power(np.cos(theta13), 4)
+    sin2_2theta12 = np.power(np.sin(2*theta12), 2)
+    sin2_2theta13 = np.power(np.sin(2*theta13), 2)
+    delta_21 = delta_ij(L, E, m2_21)
+    delta_ee = delta_ij(L, E, m2_ee)
+    sin2_delta_21 = np.power(np.sin(delta_21), 2)
+    sin2_delta_ee = np.power(np.sin(delta_ee), 2)
+
+    return (
+        1 - cos4theta13 * sin2_2theta12 * sin2_delta_21 - sin2_2theta13 * sin2_delta_ee
+    )
+
+
+def delta_ij(L, E, m2_ij):
+    return 1.267 * m2_ij * L / E
+
+def reactor_spectrum(database, core):
+    """Returns (spectrum, weekly_time_bins, energy_bins).
+
+    spectrum[i, j] has energy bin i and time/week bin j,
+    and units of nuebar/MeV/s.
+    """
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''SELECT U235, U238, Pu239, Pu241 FROM thermal_energy_per_fission
+            WHERE Source = "Phys. Rev. C 88, 014605 (2013)"''')
+        energy_per_fission = np.array(cursor.fetchone())
+        cursor.execute('''SELECT StartTime_s, EndTime_s, FractionalPower, FracU235, FracU238, FracPu239,
+            FracPu241 FROM reactor_power_fissionfrac
+            WHERE Core = ? AND Source = "DybBerkFit/Matt/WeeklyAvg_P17B_by_Beda.txt"
+            ORDER BY StartTime_s''', (core,))
+        power_fissionfrac_history = np.array(cursor.fetchall())
+        cursor.execute('''SELECT Energy, U235, U238, Pu239, Pu241 FROM reactor_nuebar_spectrum
+            WHERE Source = "DybBerkFit/Matt/C. Lewis/Huber/PRD70, 053011 (2004)"
+            ORDER BY Energy''')
+        nuebar_spectrum_with_bins = np.array(cursor.fetchall())
+        energy_bins = nuebar_spectrum_with_bins[:, 0]
+        nuebar_spectrum = nuebar_spectrum_with_bins[:, 1:5]
+    weekly_time_bins = power_fissionfrac_history[:, 0:2]
+    weekly_power_frac = power_fissionfrac_history[:, 2]
+    weekly_fissionfracs = power_fissionfrac_history[:, 3:7]
+    MEV_PER_GIGAJOULE = 6.24150907e21
+    NOMINAL_POWER_GW = 2.9
+    NOMINAL_POWER_MEV_PER_S = NOMINAL_POWER_GW * MEV_PER_GIGAJOULE
+    weekly_num_fissions = NOMINAL_POWER_MEV_PER_S * weekly_power_frac / np.sum(weekly_fissionfracs *
+            energy_per_fission, axis=1)
+    weekly_isotope_spectrum = np.array([
+            fissionfracs * nuebar_spectrum for fissionfracs in weekly_fissionfracs
+    ])  # indexes: (week, energy, isotope)
+    spectrum_per_fission = weekly_isotope_spectrum.sum(axis=2)  # sum over isotopes
+    spectrum = weekly_num_fissions * spectrum_per_fission.T
+    return spectrum, weekly_time_bins, energy_bins
+
+def livetime_by_week(database, weekly_time_bins):
+    """Retrieve a 1D array of # seconds livetime for each week."""
+    dets = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (3, 3), (3, 4)]
+    ordered = {}
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        for hall, det in dets:
+            cursor.execute('''SELECT Hall, DetNo, Start_time, Livetime_ns/Efficiency
+                FROM muon_rates NATURAL JOIN runs
+                WHERE Hall = ? AND DetNo = ?
+                ORDER BY Start_time''', (hall, det))
+            ordered[(hall, det)] = np.array(cursor.fetchall())
+    by_week = {}
+    for (hall, det), by_run in ordered.items():
+        start_times_s = by_run[:, 2]/1e9
+        livetimes_s = by_run[:, 3]/1e9
+        end_times_s = start_times_s + livetimes_s
+        weekly_livetimes_s = np.zeros((len(weekly_time_bins),))
+        time_index = 0
+        week_start_s, week_end_s = weekly_time_bins[time_index]
+        for start_time_s, end_time_s, livetime_s in zip(start_times_s, end_times_s,
+                livetimes_s):
+            if start_time_s < week_start_s:
+                raise ValueError(f'Got out of order with run starting {start_time_s},'
+                        f'week starts {week_start_s}')
+            if start_time_s > week_end_s:
+                while start_time_s > week_end_s and time_index < len(weekly_time_bins):
+                    time_index += 1
+                    week_start_s, week_end_s = weekly_time_bins[time_index]
+                if time_index == len(weekly_time_bins):
+                    logging.warn('Reached end of weekly time bins without finishing all runs')
+            if end_time_s <= week_end_s:
+                weekly_livetimes_s[time_index] += livetime_s
+            elif start_time_s < week_end_s and end_time_s > week_end_s:
+                in_next_week = end_time_s - week_end_s
+                within_current_week = livetime_s - in_next_week
+                weekly_livetimes_s[time_index] += within_current_week
+                time_index += 1
+                week_start_s, week_end_s = weekly_time_bins[time_index]
+                weekly_livetimes_s[time_index] += in_next_week
+
+        by_week[(hall, det)] = weekly_livetimes_s
+    return by_week
+
+def total_emitted(database, core, week_range):
+    """Return a dict of (hall, det) -> spectrum[i] with energy bin i,
+    and an array of energy bins (dict, array as a tuple).
+
+    Units are nuebar/MeV emitted during the livetime of a particular AD.
+
+    ret[0][(hall, det)] corresponds roughly to phi_j in Eq. 1 in DocDB-8774.
+    The only difference is that this return value is adjusted
+    to compensate for the livetime for each AD
+    (and how it overlaps with reactor power, fission fraction, etc.).
+    I believe that phi_j should also be adjusted in that way.
+    """
+    spectrum, time_bins, energies = reactor_spectrum(database, core)
+    by_week = livetime_by_week(database, time_bins)
+    total_spectrum_by_AD = {}
+    for (hall, det), AD_livetime_by_week in by_week.items():
+        spectrum_by_week_AD = spectrum * AD_livetime_by_week
+        total_spectrum_by_AD[hall, det] = np.sum(spectrum_by_week_AD[:, week_range], axis=1)
+    return total_spectrum_by_AD, energies
+
+def cross_section(database):
+    """Return (xsec, energy) in units of cm^2, MeV."""
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''SELECT Energy, CrossSection FROM xsec
+                WHERE Source = "DybBerkFit/toySpectra//Wei on 7/11/2012"
+                ORDER BY Energy''')
+        values = np.array(cursor.fetchall())
+    xsec = values[:, 1]
+    energy = values[:, 0]
+    return xsec, energy
+
+def xsec_weighted_spec(database):
+    """Return a tuple (dict of weighted spectrum, energy bins).
+
+    The dict has keys ((hall, det), core) with core indexed from 1.
+
+    weighted spectrum is a 1D array with units IBDs * cm^2/MeV.
+    It needs to be converted to IBDs/MeV by being multiplied by P_sur(L/E)/L^2.
+    """
+    to_return = {}
+    for core in range(6):
+        total_spectrum, energy_bins_spec = total_emitted(database, core)
+        for (hall, det), spec in total_spectrum:
+            xsec, energy_bins_xsec = cross_section(database)
+            if not np.array_equal(energy_bins_spec, energy_bins_xsec):
+                raise ValueError("Energy bins don't line up :(")
+            to_return[(hall, det), core] = total_spectrum * xsec
+    return to_return, energy_bins_xsec
+
+def flux_fraction(database, week_range=slice(None, None, None)):
+    """Return a tuple (dict of flux fractions, energy bins).
+
+    The dict has keys ((hall, det), core) with core indexed from 1.
+    """
+    dets = [(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (3, 3), (3, 4)]
+    total_spectrum = [None] * 6
+    for core in range(1, 7):
+        total_spectrum[core-1], energy_bins_spec = total_emitted(database, core,
+                week_range)
+    to_return = {}
+    for (hall, det) in dets:
+        numerators = np.zeros((len(energy_bins_spec), 6))
+        for core in range(1, 7):
+            spec = total_spectrum[core-1][hall, det]
+            core_group = distance_conversion[core][0]
+            core_index = int(distance_conversion[core][1])-1
+            distance_m = distances[core_group][core_index][f'EH{hall}'][det-1]
+            p_osc = survival_probability(
+                    distance_m,
+                    energy_bins_spec,
+                    #0.15,
+                    0,
+                    2.5e-3,
+                    input_osc_params=no_osc_params
+            )
+            numerators[:, core-1] = spec * p_osc / distance_m**2
+        denominators = np.sum(numerators, axis=1)
+        for core in range(1, 7):
+            if any(denominators == 0):
+                to_return[(hall, det), core] = np.zeros_like(denominators)
+            else:
+                to_return[(hall, det), core] = numerators[:, core-1] / denominators
+    return to_return, energy_bins_spec
+
+def num_IBDs_per_AD(database):
+    """Retrieve the number of observed IBDs in each AD, binned by energy.
+
+    Returns a tuple of (dict, energy_bins),
+    where the dict maps (hall, det) to a 1D array of N_IBDs.
+    This method assumes that all ADs have the same binning.
+    """
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''SELECT Hall, DetNo, Energy, NumIBDs FROM obs_spectra
+        ORDER BY Hall, DetNo, Energy''')
+        full_data = np.array(cursor.fetchall())
+    results = {}
+    for hall, det in all_ads:
+        ad_data = full_data[(full_data[:, 0] == hall) & (full_data[:, 1] == det)]
+        results[hall, det] = ad_data[:, 3]
+    return results, ad_data[:, 2]
+
+def true_to_reco_energy_matrix(database):
+    """Retrieve the conversion matrix from true to/from reconstructed energy.
+
+    Returns a tuple of (conversion, true_bins, reco_bins).
+    The conversion is a 2D array indexed by [true_bin, reco_bin].
+    The true and reco bins give the low bin edge value
+    for the corresponding axis.
+    Note that the true bins are generally taken to be much finer
+    than the reco bins.
+
+    There is no particular normalization to the returned array.
+    """
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''SELECT Matrix, RecoBins, TrueBins
+            FROM detector_response''')
+        matrix_str, reco_bins_str, true_bins_str = cursor.fetchone()
+    matrix = np.array(json.loads(matrix_str))
+    reco_bins = np.array(json.loads(reco_bins_str))
+    true_bins = np.array(json.loads(true_bins_str))
+    return matrix, true_bins, reco_bins
+
+def apply_reco_to_true_energy(database):
+    """Apply the detector response to get the "true" observed spectrum.
+
+    Returns a tuple of (true_spectrum, true_bins).
+    The units of the spectrum are antineutrinos per MeV.
+    """
+    detector_response, true_bins, reco_bins = true_to_reco_energy_matrix(database)
+    num_IBDs_per_AD, reco_bins = num_IBDs_per_AD(database)
+
+
+def num_IBDs_from_core(database):
+    """Compute the number of IBDs in each AD that come from a given core.
+
+    Return a dict of (hall, det), core) -> N_ij, and an array of energy bins,
+    as a tuple (dict, array).
+    (N_ij from Eq. 2 of DocDB-8774.)
+    N_ij is a 1D array with bins of energy given by the second return value.
+    """
+    flux_fractions = flux_fraction(database)
+    ibds = num_IBDs_per_AD(database)
+
+
+
+
+
+
+distance_conversion = {
+    1: 'D1',
+    2: 'D2',
+    3: 'L1',
+    4: 'L2',
+    5: 'L3',
+    6: 'L4',
+}
+
+
+distances = {
+        'D': [{
+            'EH1': [362.38, 357.94],
+            'EH2': [1332.48, 1337.43],
+            'EH3': [1919.63, 1917.52, 1925.26, 1923.15]
+            }, {
+            'EH1': [371.76, 368.41],
+            'EH2': [1358.15, 1362.88],
+            'EH3': [1894.34, 1891.98, 1899.86, 1897.51]
+            }],
+        'L': [{
+            'EH1': [903.47, 903.35],
+            'EH2': [467.57, 472.97],
+            'EH3': [1533.18, 1534.92, 1538.93, 1540.67]
+            }, {
+            'EH1': [817.16, 816.90],
+            'EH2': [489.58, 495.35],
+            'EH3': [1533.63, 1535.03, 1539.47, 1540.87]
+            }, {
+            'EH1': [1353.62, 1354.23],
+            'EH2': [557.58, 558.71],
+            'EH3': [1551.38, 1554.77, 1556.34, 1559.72]
+            }, {
+            'EH1': [1265.32, 1265.89],
+            'EH2': [499.21, 501.07],
+            'EH3': [1524.94, 1528.05, 1530.08, 1533.18]
+            }]
+        }
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('database')
+    parser.add_argument('-d', '--debug', action='store_true')
+    args = parser.parse_args()
+    spectrum, time_bins, energies = reactor_spectrum(args.database, 1)
+    by_week = livetime_by_week(args.database, time_bins)
+    print(by_week[(1, 1)][:20]/60/60/24)

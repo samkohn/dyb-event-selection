@@ -82,7 +82,9 @@ def random_pairing_N(computed):
                 first_events[order // 2] = None
                 second_events[order // 2] = None
 
-def random_pairing_many(computed, num_samples, cut=lambda entry:False):
+def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_rate=None):
+    if singles_rate is None:
+        singles_rate = 0.01
     entries = computed.GetEntries()
     events = []
     computed.SetBranchStatus('*', 0)
@@ -104,7 +106,12 @@ def random_pairing_many(computed, num_samples, cut=lambda entry:False):
         rng.shuffle(second_events, axis=0)
         event_drs = np.concatenate((event_drs, np.linalg.norm(first_events - second_events, axis=1)))
     event_drs = event_drs[:num_samples]
-    event_dts = rng.integers(1000, delayeds._NH_THU_MAX_TIME, size=num_samples)
+    dt_value_choices = np.linspace(1e-6, delayeds._NH_THU_MAX_TIME/1e9, 1500)
+    # Exponential distribution
+    dt_value_probabilities = singles_rate * np.exp(-singles_rate * dt_value_choices)
+    dt_value_probabilities /= sum(dt_value_probabilities)
+    event_dts_s = rng.choice(dt_value_choices, p=dt_value_probabilities, size=num_samples)
+    event_dts = (1e9 * event_dts_s).astype(int)
     event_DTs = delayeds.nH_THU_DT(event_drs, event_dts)
     return event_DTs
 

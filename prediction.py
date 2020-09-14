@@ -209,6 +209,60 @@ def flux_fraction(database, week_range=slice(None, None, None)):
                 to_return[(hall, det), core] = numerators[:, core-1] / denominators
     return to_return, energy_bins_spec
 
+def extrapolation_factor(database):
+    """Return a tuple (dict of extrapolation factors, energy bins).
+
+    The dict has keys ((far_hall, far_det), core, (near_hall, near_det))
+    with core indexed from 1.
+    """
+    total_spectrum = [None] * 6
+    for core in range(1, 7):
+        total_spectrum[core-1], energy_bins_spec = total_emitted(database, core,
+                week_range)
+    to_return = {}
+    for (near_hall, near_det) in near_ads:
+        denominators = np.zeros((len(energy_bins_spec), 6))
+        for core in range(1, 7):
+            spec = total_spectrum[core-1][near_hall, near_det]
+            # Split the label "D1", "L2", etc.
+            # into D or L (core_group) and the core index within the group.
+            core_group = distance_conversion[core][0]
+            core_index = int(distance_conversion[core][1])-1
+            distance_m = distances[core_group][core_index][f'EH{near_hall}'][near_det-1]
+            p_osc = survival_probability(
+                    distance_m,
+                    energy_bins_spec,
+                    #0.15,
+                    0,
+                    2.5e-3,
+                    input_osc_params=no_osc_params
+            )
+            denominators[:, core-1] = spec * p_osc / distance_m**2
+            numerators = np.zeros_like(denominators)
+            for (far_hall, far_det) in far_ads:
+                spec = total_spectrum[core-1][far_hall, far_det]
+                # Split the label "D1", "L2", etc.
+                # into D or L (core_group) and the core index within the group.
+                core_group = distance_conversion[core][0]
+                core_index = int(distance_conversion[core][1])-1
+                distance_m = distances[core_group][core_index][f'EH{far_hall}'][far_det-1]
+                p_osc = survival_probability(
+                        distance_m,
+                        energy_bins_spec,
+                        #0.15,
+                        0,
+                        2.5e-3,
+                        input_osc_params=no_osc_params
+                )
+                numerators[:, core-1] = spec * p_osc / distance_m**2
+                to_return[(far_hall, far_det), core, (near_hall, near_det)] = (
+                        numerators[:, core-1]/denominators[:, core-1]
+                )
+    return to_return
+
+
+
+
 def num_IBDs_per_AD(database):
     """Retrieve the number of observed IBDs in each AD, binned by energy.
 

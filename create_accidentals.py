@@ -1,10 +1,16 @@
 from __future__ import print_function
 
 import argparse
+from collections import deque
 import math
 import random
+import sqlite3
+
+import numpy as np
+np.seterr('raise')
 
 import delayeds
+from root_util import assign_value
 
 def distance(a, b):
     '''Distance where coordinates are specified as 'x', 'y', 'z' keys.
@@ -14,19 +20,165 @@ def distance(a, b):
             + (a['y'] - b['y'])**2
             + (a['z'] - b['z'])**2)
 
-def is_single(ttree_event, energy):
-    'Applies the single event criteria to the loaded entry in this TTree.'
-    return (
-            energy < 12 and energy > 1.5
-            and ttree_event.multiplicity == 1
-            and ttree_event.dt_cluster_to_prev_ADevent >
-                delayeds._NH_THU_MAX_TIME)
+def get_event(computed):
+    event = dict(
+            loopIndex=computed.loopIndex,
+            timestamp=computed.timestamp,
+            triggerNumber=computed.triggerNumber,
+            triggerType=computed.triggerType,
+            nHit=computed.nHit,
+            charge=computed.charge,
+            fQuad=computed.fQuad,
+            fMax=computed.fMax,
+            fPSD_t1=computed.fPSD_t1,
+            fPSD_t2=computed.fPSD_t2,
+            f2inch_maxQ=computed.f2inch_maxQ,
+            energy=computed.energy,
+            x=computed.x,
+            y=computed.y,
+            z=computed.z,
+    )
+    return event
 
-def main(infilename, outfile, AD, ttree_name):
+def sequential_pairing(computed):
+    entries = computed.GetEntries()
+    halfway = entries//2
+    index = 0
+    first_events = [None] * halfway
+    while index < entries:
+        # Increment until we get a good single
+        computed.GetEntry(index)
+        event = get_event(computed)
+        if index < halfway:
+            first_events[halfway - index - 1] = event
+        else:
+            yield first_events[2 * halfway - index - 1], event
+            first_events[2 * halfway - index] = None
+        index += 1
+
+def random_pairing_N(computed):
+    entries = computed.GetEntries()
+    halfway = entries//2
+    first_events = [None] * halfway
+    second_events = [None] * halfway
+    if entries % 2 == 0:
+        ordering = list(range(entries))
+    else:
+        ordering = list(range(entries - 1))
+    random.shuffle(ordering)
+    for entry, order in enumerate(ordering):
+        computed.GetEntry(entry)
+        event = get_event(computed)
+        if order % 2 == 0:
+            first_events[order // 2] = event
+            if second_events[order // 2] is not None:
+                yield first_events[order // 2], second_events[order // 2]
+                first_events[order // 2] = None
+                second_events[order // 2] = None
+        else:
+            second_events[order // 2] = event
+            if first_events[order // 2] is not None:
+                yield first_events[order // 2], second_events[order // 2]
+                first_events[order // 2] = None
+                second_events[order // 2] = None
+
+def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_rate=None):
+    if singles_rate is None:
+        singles_rate = 0.01
+    entries = computed.GetEntries()
+    events = []
+    computed.SetBranchStatus('*', 0)
+    computed.SetBranchStatus('x', 1)
+    computed.SetBranchStatus('y', 1)
+    computed.SetBranchStatus('z', 1)
+    computed.SetBranchStatus('energy', 1)
+    for entry in computed:
+        if cut(entry):
+            continue
+        events.append((entry.x, entry.y, entry.z))
+    events = np.array(events)
+    rng = np.random.default_rng()
+    num_repeats = (num_samples // len(events)) + 1
+    event_drs = np.array([])
+    for cycle in range(num_repeats):
+        first_events = events.copy()
+        second_events = events.copy()
+        rng.shuffle(first_events, axis=0)
+        rng.shuffle(second_events, axis=0)
+        event_drs = np.concatenate((event_drs, np.linalg.norm(first_events - second_events, axis=1)))
+    event_drs = event_drs[:num_samples]
+    dt_value_choices = np.linspace(1e-6, delayeds._NH_THU_MAX_TIME/1e9, 1500)
+    # Exponential distribution
+    dt_value_probabilities = singles_rate * np.exp(-singles_rate * dt_value_choices)
+    dt_value_probabilities /= sum(dt_value_probabilities)
+    event_dts_s = rng.choice(dt_value_choices, p=dt_value_probabilities, size=num_samples)
+    event_dts = (1e9 * event_dts_s).astype(int)
+    event_DTs = delayeds.nH_THU_DT(event_drs, event_dts)
+    return event_DTs
+
+def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
+    import ROOT
+    infile = ROOT.TFile(infilename, 'READ')
+    computed = infile.Get(ttree_name)
+    computed.GetEntry(0)
+    run = computed.run
+    detector = computed.detector
+    site = computed.site
+    num_pairs = kwargs['num_pairs']
+    if pairing == 'random_many':
+        event_DTs = random_pairing_many(computed, num_pairs)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    elif pairing == 'random_many_resid_flasher':
+        def cut(entry):
+            x, y, z = entry.x, entry.y, entry.z
+            return z > 2200 and np.sqrt(x*x + y*y) > 500
+        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    elif pairing == 'energy_lt_2MeV':
+        def cut(entry):
+            return entry.energy < 2
+        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    elif pairing == 'energy_gt_2MeV':
+        def cut(entry):
+            return entry.energy >= 2
+        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    else:
+        raise NotImplemented(pairing)
+    try:
+        percent_error = 100 * error / efficiency
+    except ZeroDivisionError:
+        percent_error = 0
+    if update_db is None:
+        print(f'Pairing type: {pairing}')
+        print(f'Efficiency: {efficiency:.6f} +/- {error:.6f} ({percent_error:.1f}%)')
+        print(f'Total pairs: {num_pairs}')
+        print(f'Passed DT cut: {num_passes_cut}')
+    else:
+        with sqlite3.Connection(update_db) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
+                VALUES (?, ?, ?, ?, ?, ?)''',
+                (run, detector, pairing, efficiency, error, num_pairs))
+
+
+def main(infilename, outfile, ttree_name, pairing_algorithm):
     import process
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
-    infile2 = ROOT.TFile(infilename, 'READ')
     outfile = ROOT.TFile(outfile, 'RECREATE')
     acc, acc_buf = process.create_computed_TTree('accidentals', outfile,
             'nh_THU', 'Accidentals sample (git: %s)')
@@ -40,42 +192,69 @@ def main(infilename, outfile, AD, ttree_name):
     computed = infile.Get(ttree_name)
     computed.SetBranchStatus('*', 0)
     computed.SetBranchStatus('energy', 1)
-    computed.SetBranchStatus('multiplicity', 1)
-    computed.SetBranchStatus('dt_cluster_to_prev_ADevent', 1)
     computed.SetBranchStatus('x', 1)
     computed.SetBranchStatus('y', 1)
     computed.SetBranchStatus('z', 1)
-    entries = computed.GetEntries()
-    halfway = entries//2
-    index = 0
-    phase = 1
-    first_events = []
-    second_events = []
-    while index < entries:
-        # Increment until we get a good single
-        computed.GetEntry(index)
-        energy = computed.energy[0]
-        if is_single(computed, energy):
-            event = {
-                    'energy': energy,
-                    'detector': AD,
-                    'x': computed.x[0],
-                    'y': computed.y[0],
-                    'z': computed.z[0],
-                    }
-            if index < halfway:
-                first_events.append(event)
-            else:
-                second_events.append(event)
-        index += 1
-    for (first_event, second_event) in zip(first_events, second_events):
+    computed.GetEntry(0)
+    run = computed.run
+    detector = computed.detector
+    site = computed.site
+    if pairing_algorithm == 'sequential':
+        #first_events, second_events = sequential_pairing(computed)
+        generator = sequential_pairing(computed)
+    elif pairing_algorithm == 'random_N':
+        #first_events, second_events = random_pairing_N(computed)
+        generator = random_pairing_N(computed)
+    else:
+        raise NotImplemented(pairing_algorithm)
+    #for (first_event, second_event) in zip(first_events, second_events):
+    for (first_event, second_event) in generator:
         # Compare event distances and fill the tree
         event_dr = distance(first_event, second_event)
         event_dt = random.randint(1000, delayeds._NH_THU_MAX_TIME)
         all_acc_buf.multiplicity[0] = 2
-        all_acc_buf.energy[0] = first_event['energy']
-        all_acc_buf.energy[1] = second_event['energy']
-        all_acc_buf.detector[0] = first_event['detector']
+        assign_value(all_acc_buf.run, run)
+        assign_value(all_acc_buf.site, site)
+        assign_value(all_acc_buf.loopIndex, first_event['loopIndex'], 0)
+        assign_value(all_acc_buf.timestamp, first_event['timestamp'], 0)
+        assign_value(all_acc_buf.timestamp_seconds,
+                first_event['timestamp'] // 1000000000, 0)
+        assign_value(all_acc_buf.timestamp_nanoseconds,
+                first_event['timestamp'] % 1000000000, 0)
+        assign_value(all_acc_buf.detector, detector, 0)
+        assign_value(all_acc_buf.triggerNumber, first_event['triggerNumber'], 0)
+        assign_value(all_acc_buf.triggerType, first_event['triggerType'], 0)
+        assign_value(all_acc_buf.nHit, first_event['nHit'], 0)
+        assign_value(all_acc_buf.charge, first_event['charge'], 0)
+        assign_value(all_acc_buf.fQuad, first_event['fQuad'], 0)
+        assign_value(all_acc_buf.fMax, first_event['fMax'], 0)
+        assign_value(all_acc_buf.fPSD_t1, first_event['fPSD_t1'], 0)
+        assign_value(all_acc_buf.fPSD_t2, first_event['fPSD_t2'], 0)
+        assign_value(all_acc_buf.f2inch_maxQ, first_event['f2inch_maxQ'], 0)
+        assign_value(all_acc_buf.energy, first_event['energy'], 0)
+        assign_value(all_acc_buf.x, first_event['x'], 0)
+        assign_value(all_acc_buf.y, first_event['y'], 0)
+        assign_value(all_acc_buf.z, first_event['z'], 0)
+        assign_value(all_acc_buf.loopIndex, second_event['loopIndex'], 1)
+        assign_value(all_acc_buf.timestamp, second_event['timestamp'], 1)
+        assign_value(all_acc_buf.timestamp_seconds,
+                second_event['timestamp'] // 1000000000, 1)
+        assign_value(all_acc_buf.timestamp_nanoseconds,
+                second_event['timestamp'] % 1000000000, 1)
+        assign_value(all_acc_buf.detector, detector, 0)
+        assign_value(all_acc_buf.triggerNumber, second_event['triggerNumber'], 1)
+        assign_value(all_acc_buf.triggerType, second_event['triggerType'], 1)
+        assign_value(all_acc_buf.nHit, second_event['nHit'], 1)
+        assign_value(all_acc_buf.charge, second_event['charge'], 1)
+        assign_value(all_acc_buf.fQuad, second_event['fQuad'], 1)
+        assign_value(all_acc_buf.fMax, second_event['fMax'], 1)
+        assign_value(all_acc_buf.fPSD_t1, second_event['fPSD_t1'], 1)
+        assign_value(all_acc_buf.fPSD_t2, second_event['fPSD_t2'], 1)
+        assign_value(all_acc_buf.f2inch_maxQ, second_event['f2inch_maxQ'], 1)
+        assign_value(all_acc_buf.energy, second_event['energy'], 1)
+        assign_value(all_acc_buf.x, second_event['x'], 1)
+        assign_value(all_acc_buf.y, second_event['y'], 1)
+        assign_value(all_acc_buf.z, second_event['z'], 1)
         all_acc_buf.dr_to_prompt[0] = 0
         all_acc_buf.dr_to_prompt[1] = event_dr
         all_acc_buf.dt_to_prompt[0] = 0
@@ -101,8 +280,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('infile')
     parser.add_argument('outfile')
-    parser.add_argument('ad', type=int)
-    parser.add_argument('--ttree-name', default='computed')
+    parser.add_argument('--ttree-name', default='singles')
+    parser.add_argument('--pairing', default='sequential')
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--only-DT-eff', action='store_true')
+    parser.add_argument('--update-db')
+    parser.add_argument('--num-pairs', type=int)
     args = parser.parse_args()
 
-    main(args.infile, args.outfile, args.ad, args.ttree_name)
+    random.seed(args.seed)
+    if args.only_DT_eff:
+        only_DT_eff(args.infile, args.ttree_name, args.pairing,
+                args.update_db, num_pairs = args.num_pairs)
+    else:
+        main(args.infile, args.outfile, args.ttree_name, args.pairing)

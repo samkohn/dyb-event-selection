@@ -16,10 +16,10 @@ def main(toymc_infile, update_db, image_outfile):
     ROOT.gROOT.SetBatch(True)
     infile = ROOT.TFile(toymc_infile, 'READ')
     toy_data = infile.Get('toy')
-    nbins = (204, 1.8, 12, 27, 1, 12)
+    nbins = (164, 1.8, 12, 27, 1, 12)
     # Bins: 0.25MeV from 1.5 to 8MeV, then 8-12MeV as 1 bin
     hardcoded_reco_bins = array('f', [1.5 + 0.25 * i for i in range(27)] + [12])
-    hardcoded_true_bins = array('f', [1.8 + 0.05 * i for i in range(204)] + [12])
+    hardcoded_true_bins = array('f', [1.8 + 0.05 * i for i in range(164)] + [12])
     detector_response_hist = ROOT.TH2F('det_response', 'det_response', *nbins)
     detector_response_hist.GetXaxis().Set(nbins[0], hardcoded_true_bins)
     detector_response_hist.GetYaxis().Set(nbins[3], hardcoded_reco_bins)
@@ -55,7 +55,7 @@ def main(toymc_infile, update_db, image_outfile):
         with sqlite3.Connection(update_db) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO detector_response
-                VALUES ("THU ToyMC res_p:Ev No Cuts", ?, ?, ?)''',
+                VALUES ("THU ToyMC res_p:Ev No Cuts Better binning", ?, ?, ?)''',
                 (
                     json.dumps(response_matrix),
                     json.dumps(hardcoded_reco_bins.tolist()),

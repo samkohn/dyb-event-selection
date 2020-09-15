@@ -218,7 +218,7 @@ def extrapolation_factor(database):
     total_spectrum = [None] * 6
     for core in range(1, 7):
         total_spectrum[core-1], energy_bins_spec = total_emitted(database, core,
-                week_range)
+                slice(None))
     to_return = {}
     for (near_hall, near_det) in near_ads:
         denominators = np.zeros((len(energy_bins_spec), 6))
@@ -258,7 +258,7 @@ def extrapolation_factor(database):
                 to_return[(far_hall, far_det), core, (near_hall, near_det)] = (
                         numerators[:, core-1]/denominators[:, core-1]
                 )
-    return to_return
+    return to_return, energy_bins_spec
 
 
 def num_IBDs_per_AD(database):

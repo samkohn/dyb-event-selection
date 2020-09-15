@@ -187,6 +187,8 @@ def flux_fraction(database, week_range=slice(None, None, None)):
         numerators = np.zeros((len(energy_bins_spec), 6))
         for core in range(1, 7):
             spec = total_spectrum[core-1][hall, det]
+            # Split the label "D1", "L2", etc.
+            # into D or L (core_group) and the core index within the group.
             core_group = distance_conversion[core][0]
             core_index = int(distance_conversion[core][1])-1
             distance_m = distances[core_group][core_index][f'EH{hall}'][det-1]
@@ -259,8 +261,6 @@ def extrapolation_factor(database):
     return to_return
 
 
-
-
 def num_IBDs_per_AD(database):
     """Retrieve the number of observed IBDs in each AD, binned by energy.
 
@@ -270,14 +270,18 @@ def num_IBDs_per_AD(database):
     """
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, Energy, NumIBDs FROM obs_spectra
-        ORDER BY Hall, DetNo, Energy''')
-        full_data = np.array(cursor.fetchall())
+        cursor.execute('''SELECT Hall, DetNo, Energy_keV, BinWidth_keV, NumIBDs FROM obs_spectra
+        ORDER BY Hall, DetNo, Energy_keV''')
+        full_data = np.array(cursor.fetchall(), dtype=float)
+    # convert keV to MeV
+    full_data[:, [2,3]] /= 1000
     results = {}
     for hall, det in all_ads:
         ad_data = full_data[(full_data[:, 0] == hall) & (full_data[:, 1] == det)]
-        results[hall, det] = ad_data[:, 3]
-    return results, ad_data[:, 2]
+        results[hall, det] = ad_data[:, 4]
+    # Add upper edge of last bin to bins array
+    bins = np.concatenate((ad_data[:, 2], [ad_data[-1, 2] + ad_data[-1, 3]]))
+    return results, bins
 
 def true_to_reco_energy_matrix(database):
     """Retrieve the conversion matrix from true to/from reconstructed energy.
@@ -294,33 +298,111 @@ def true_to_reco_energy_matrix(database):
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Matrix, RecoBins, TrueBins
-            FROM detector_response''')
+            FROM detector_response
+            WHERE Source = "THU ToyMC res_p:Ev No Cuts Better binning"''')
         matrix_str, reco_bins_str, true_bins_str = cursor.fetchone()
-    matrix = np.array(json.loads(matrix_str))
+    # Matrix is stored transposed so we need to un-transpose it
+    matrix = np.array(json.loads(matrix_str)).T
     reco_bins = np.array(json.loads(reco_bins_str))
     true_bins = np.array(json.loads(true_bins_str))
     return matrix, true_bins, reco_bins
 
-def apply_reco_to_true_energy(database):
+def reco_to_true_energy(database):
     """Apply the detector response to get the "true" observed spectrum.
 
-    Returns a tuple of (true_spectrum, true_bins).
-    The units of the spectrum are antineutrinos per MeV.
-    """
-    detector_response, true_bins, reco_bins = true_to_reco_energy_matrix(database)
-    num_IBDs_per_AD, reco_bins = num_IBDs_per_AD(database)
+    This is handled independently for each reconstructed energy bin,
+    so the returned spectrum arrays are 2-dimensional.
 
+    Returns a tuple of (true_spectrum_dict, true_bins, reco_bins).
+    The units of the spectrum are IBDs per MeV.
+    The dict maps (hall, det) to a 2D array with indexes [true_index, reco_index].
+    """
+    detector_response, true_bins, reco_bins_resp = true_to_reco_energy_matrix(database)
+    num_per_AD, reco_bins_num = num_IBDs_per_AD(database)
+    # Normalize the matrix so that each column sums to 1.
+    # (Thus each reco event will be spread among true energy bins
+    # in a unitary manner).
+    weights_per_reco_bin = detector_response.sum(axis=0, keepdims=True)
+    normalized_response = detector_response/weights_per_reco_bin
+    if not np.array_equal(reco_bins_resp, reco_bins_num):
+        print(reco_bins_resp)
+        print(reco_bins_num)
+        raise NotImplementedError("Different reco binnings")
+    true_energies = {}
+    for (hall, det), num_IBDs in num_per_AD.items():
+        true_energies[hall, det] = normalized_response * np.expand_dims(num_IBDs, axis=0)
+    return true_energies, true_bins, reco_bins_resp
 
 def num_IBDs_from_core(database):
     """Compute the number of IBDs in each AD that come from a given core.
 
-    Return a dict of (hall, det), core) -> N_ij, and an array of energy bins,
-    as a tuple (dict, array).
+    Return a dict of ((hall, det), core) -> N_ij, and the binnings,
+    as a tuple (N_ij_dict, true_bins, reco_bins).
     (N_ij from Eq. 2 of DocDB-8774.)
-    N_ij is a 1D array with bins of energy given by the second return value.
+    N_ij is a 2D array with index [true_index, reco_index]
+    with bins of energy given by the second return value.
     """
-    flux_fractions = flux_fraction(database)
-    ibds = num_IBDs_per_AD(database)
+    flux_fractions, true_bins_spec = flux_fraction(database)
+    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(database)
+    # reactor flux bins don't include the upper edge of 12 MeV
+    true_bins_spec = np.concatenate((true_bins_spec, [12]))
+    n_ij = {}
+    for (halldet, core), flux_frac in flux_fractions.items():
+        rebinned_fluxfrac = average_bins(flux_frac, true_bins_spec, true_bins_resp)
+        # Must expand dims so that the shape of the arrays is
+        # (N_true, 1) * (N_true, N_reco)
+        n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_energies[halldet]
+    return n_ij, true_bins_resp, reco_bins
+
+def average_bins(values_fine, bins_fine, bins_coarse):
+    """Average the values from the fine bins into a coarser binning.
+
+    Weighted average with weight = bin width.
+
+    Assumptions:
+
+    - ``len(values_fine) + 1 == len(bins_fine)``
+    - ``bins_fine[0] == bins_coarse[0]``
+    - ``bins_fine[-1] == bins_coarse[-1]``
+    - ``len(bins_coarse) < len(bins_fine)``
+    - bins_coarse is a subset of bins_fine (i.e. no fine bins cross a coarse bin edge)
+    - bins_coarse and bins_fine are strictly increasing
+    - and that all inputs are 1D arrays.
+    """
+    # Test assumptions
+    test_bins = len(values_fine) + 1 == len(bins_fine)
+    test_start_bin = np.isclose(bins_fine[0], bins_coarse[0])
+    test_end_bin = np.isclose(bins_fine[-1], bins_coarse[-1])
+    test_fine_really_fine = len(bins_coarse) < len(bins_fine)
+    test_no_crossings = True  # Trust the user!
+    bin_weights = np.diff(bins_fine)
+    test_increasing = np.all(bin_weights > 0)
+    test_1D = True  # Trust the user!
+    if not np.all([
+        test_bins, test_start_bin, test_end_bin,
+        test_fine_really_fine, test_no_crossings,
+        test_increasing, test_1D
+    ]):
+        print(bins_fine[0], bins_coarse[0])
+        print(bins_fine[-1], bins_coarse[-1])
+        raise ValueError("Invalid inputs. Check assumptions!")
+    values_coarse = np.empty((len(bins_coarse)-1,))
+    fine_index = 0
+    fine_up_edge = bins_fine[0]  # initial value only for first comparison in while loop
+    for coarse_index, coarse_up_edge in enumerate(bins_coarse[1:]):
+        next_coarse_value = 0
+        next_coarse_weights_sum = 0
+        while not np.isclose(fine_up_edge, coarse_up_edge):
+            fine_up_edge = bins_fine[fine_index + 1]
+            fine_value = values_fine[fine_index]
+            fine_weight = bin_weights[fine_index]
+            next_coarse_value += fine_value * fine_weight
+            next_coarse_weights_sum += fine_weight
+            fine_index += 1
+        # Then we can finalize the bin
+        next_coarse_value /= next_coarse_weights_sum
+        values_coarse[coarse_index] = next_coarse_value
+    return values_coarse
 
 
 

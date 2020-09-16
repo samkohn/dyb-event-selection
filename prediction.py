@@ -24,6 +24,39 @@ near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
 
+@dataclass
+class FitConstants:
+    detector_response : dict
+    true_bins_response : np.array
+    reco_bins_response : np.array
+    observed_spectra : dict
+    reco_bins : np.array
+    total_emitted_by_AD : dict
+    true_bins_spectrum : np.array
+    input_osc_params: InputOscParams
+
+@dataclass
+class FitParams:
+    theta13: float
+    m2_ee: float
+
+
+def default_constants(database):
+    matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(database)
+    num_IBDs, reco_bins = num_IBDs_per_AD(database)
+    total_emitted_by_AD, true_bins_spectrum = total_emitted(database, slice(None))
+    return FitConstants(
+            matrix,
+            true_bins_response,
+            reco_bins_response,
+            num_IBDs,
+            reco_bins,
+            total_emitted_by_AD,
+            true_bins_spectrum,
+            default_osc_params,
+    )
+
+
 def survival_probability(L, E, theta13, m2_ee, input_osc_params=default_osc_params):
     theta12 = input_osc_params.theta12
     m2_21 = input_osc_params.m2_21
@@ -123,8 +156,8 @@ def livetime_by_week(database, weekly_time_bins):
         by_week[(hall, det)] = weekly_livetimes_s
     return by_week
 
-def total_emitted(database, core, week_range):
-    """Return a dict of (hall, det) -> spectrum[i] with energy bin i,
+def total_emitted(database, week_range):
+    """Return a dict of ((hall, det), core) -> spectrum[i] with energy bin i,
     and an array of energy bins (dict, array as a tuple).
 
     Units are nuebar/MeV emitted during the livetime of a particular AD.
@@ -135,12 +168,13 @@ def total_emitted(database, core, week_range):
     (and how it overlaps with reactor power, fission fraction, etc.).
     I believe that phi_j should also be adjusted in that way.
     """
-    spectrum, time_bins, energies = reactor_spectrum(database, core)
-    by_week = livetime_by_week(database, time_bins)
     total_spectrum_by_AD = {}
-    for (hall, det), AD_livetime_by_week in by_week.items():
-        spectrum_by_week_AD = spectrum * AD_livetime_by_week
-        total_spectrum_by_AD[hall, det] = np.sum(spectrum_by_week_AD[:, week_range], axis=1)
+    for core in range(1, 7):
+        spectrum, time_bins, energies = reactor_spectrum(database, core)
+        by_week = livetime_by_week(database, time_bins)
+        for (hall, det), AD_livetime_by_week in by_week.items():
+            spectrum_by_week_AD = spectrum * AD_livetime_by_week
+            total_spectrum_by_AD[(hall, det), core] = np.sum(spectrum_by_week_AD[:, week_range], axis=1)
     return total_spectrum_by_AD, energies
 
 def cross_section(database):
@@ -164,29 +198,25 @@ def xsec_weighted_spec(database):
     It needs to be converted to IBDs/MeV by being multiplied by P_sur(L/E)/L^2.
     """
     to_return = {}
-    for core in range(6):
-        total_spectrum, energy_bins_spec = total_emitted(database, core)
-        for (hall, det), spec in total_spectrum:
+    total_spectrum, energy_bins_spec = total_emitted(database, core)
+    for ((hall, det), core), spec in total_spectrum.items():
             xsec, energy_bins_xsec = cross_section(database)
             if not np.array_equal(energy_bins_spec, energy_bins_xsec):
                 raise ValueError("Energy bins don't line up :(")
             to_return[(hall, det), core] = total_spectrum * xsec
     return to_return, energy_bins_xsec
 
-def flux_fraction(database, week_range=slice(None, None, None)):
+def flux_fraction(database, constants, fit_params, week_range=slice(None, None, None)):
     """Return a tuple (dict of flux fractions, energy bins).
 
     The dict has keys ((hall, det), core) with core indexed from 1.
     """
-    total_spectrum = [None] * 6
-    for core in range(1, 7):
-        total_spectrum[core-1], energy_bins_spec = total_emitted(database, core,
-                week_range)
+    #total_spectrum, energy_bins_spec = total_emitted(database, week_range)
     to_return = {}
     for (hall, det) in all_ads:
-        numerators = np.zeros((len(energy_bins_spec), 6))
+        numerators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
-            spec = total_spectrum[core-1][hall, det]
+            spec = constants.total_emitted_by_AD[(hall, det), core]
             # Split the label "D1", "L2", etc.
             # into D or L (core_group) and the core index within the group.
             core_group = distance_conversion[core][0]
@@ -194,11 +224,10 @@ def flux_fraction(database, week_range=slice(None, None, None)):
             distance_m = distances[core_group][core_index][f'EH{hall}'][det-1]
             p_osc = survival_probability(
                     distance_m,
-                    energy_bins_spec,
-                    #0.15,
-                    0,
-                    2.5e-3,
-                    input_osc_params=no_osc_params
+                    constants.true_bins_spectrum,
+                    fit_params.theta13,
+                    fit_params.m2_ee,
+                    input_osc_params=constants.input_osc_params
             )
             numerators[:, core-1] = spec * p_osc / distance_m**2
         denominators = np.sum(numerators, axis=1)
@@ -207,23 +236,20 @@ def flux_fraction(database, week_range=slice(None, None, None)):
                 to_return[(hall, det), core] = np.zeros_like(denominators)
             else:
                 to_return[(hall, det), core] = numerators[:, core-1] / denominators
-    return to_return, energy_bins_spec
+    return to_return, constants.true_bins_spectrum
 
-def extrapolation_factor(database):
+def extrapolation_factor(database, constants, fit_params):
     """Return a tuple (dict of extrapolation factors, energy bins).
 
     The dict has keys ((far_hall, far_det), core, (near_hall, near_det))
     with core indexed from 1.
     """
-    total_spectrum = [None] * 6
-    for core in range(1, 7):
-        total_spectrum[core-1], energy_bins_spec = total_emitted(database, core,
-                slice(None))
+    #total_spectrum, energy_bins_spec = total_emitted(database, slice(None))
     to_return = {}
     for (near_hall, near_det) in near_ads:
-        denominators = np.zeros((len(energy_bins_spec), 6))
+        denominators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
-            spec = total_spectrum[core-1][near_hall, near_det]
+            spec = constants.total_emitted_by_AD[(near_hall, near_det), core]
             # Split the label "D1", "L2", etc.
             # into D or L (core_group) and the core index within the group.
             core_group = distance_conversion[core][0]
@@ -231,16 +257,15 @@ def extrapolation_factor(database):
             distance_m = distances[core_group][core_index][f'EH{near_hall}'][near_det-1]
             p_osc = survival_probability(
                     distance_m,
-                    energy_bins_spec,
-                    #0.15,
-                    0,
-                    2.5e-3,
-                    input_osc_params=no_osc_params
+                    constants.true_bins_spectrum,
+                    fit_params.theta13,
+                    fit_params.m2_ee,
+                    input_osc_params=constants.input_osc_params
             )
             denominators[:, core-1] = spec * p_osc / distance_m**2
             numerators = np.zeros_like(denominators)
             for (far_hall, far_det) in far_ads:
-                spec = total_spectrum[core-1][far_hall, far_det]
+                spec = constants.total_emitted_by_AD[(far_hall, far_det), core]
                 # Split the label "D1", "L2", etc.
                 # into D or L (core_group) and the core index within the group.
                 core_group = distance_conversion[core][0]
@@ -248,17 +273,16 @@ def extrapolation_factor(database):
                 distance_m = distances[core_group][core_index][f'EH{far_hall}'][far_det-1]
                 p_osc = survival_probability(
                         distance_m,
-                        energy_bins_spec,
-                        #0.15,
-                        0,
-                        2.5e-3,
-                        input_osc_params=no_osc_params
+                        constants.true_bins_spectrum,
+                        fit_params.theta13,
+                        fit_params.m2_ee,
+                        input_osc_params=constants.input_osc_params
                 )
                 numerators[:, core-1] = spec * p_osc / distance_m**2
                 to_return[(far_hall, far_det), core, (near_hall, near_det)] = (
                         numerators[:, core-1]/denominators[:, core-1]
                 )
-    return to_return, energy_bins_spec
+    return to_return, constants.true_bins_spectrum
 
 
 def num_IBDs_per_AD(database):
@@ -308,7 +332,7 @@ def true_to_reco_energy_matrix(database):
     true_bins = np.array(json.loads(true_bins_str))/1000
     return matrix, true_bins, reco_bins
 
-def reco_to_true_energy(database):
+def reco_to_true_energy(database, constants):
     """Apply the detector response to get the "true" observed spectrum.
 
     This is handled independently for each reconstructed energy bin,
@@ -318,23 +342,23 @@ def reco_to_true_energy(database):
     The units of the spectrum are IBDs per MeV.
     The dict maps (hall, det) to a 2D array with indexes [true_index, reco_index].
     """
-    detector_response, true_bins, reco_bins_resp = true_to_reco_energy_matrix(database)
-    num_per_AD, reco_bins_num = num_IBDs_per_AD(database)
+    #detector_response, true_bins, reco_bins_resp = true_to_reco_energy_matrix(database)
+    #num_per_AD, reco_bins_num = num_IBDs_per_AD(database, constants)
     # Normalize the matrix so that each column sums to 1.
     # (Thus each reco event will be spread among true energy bins
     # in a unitary manner).
-    weights_per_reco_bin = detector_response.sum(axis=0, keepdims=True)
-    normalized_response = detector_response/weights_per_reco_bin
-    if not np.array_equal(reco_bins_resp, reco_bins_num):
-        print(reco_bins_resp)
-        print(reco_bins_num)
+    weights_per_reco_bin = constants.detector_response.sum(axis=0, keepdims=True)
+    normalized_response = constants.detector_response/weights_per_reco_bin
+    if not np.array_equal(constants.reco_bins_response, constants.reco_bins):
+        print(constants.reco_bins_response)
+        print(constants.reco_bins)
         raise NotImplementedError("Different reco binnings")
     true_energies = {}
-    for (hall, det), num_IBDs in num_per_AD.items():
+    for (hall, det), num_IBDs in constants.observed_spectra.items():
         true_energies[hall, det] = normalized_response * np.expand_dims(num_IBDs, axis=0)
-    return true_energies, true_bins, reco_bins_resp
+    return true_energies, constants.true_bins_response, constants.reco_bins_response
 
-def num_IBDs_from_core(database):
+def num_IBDs_from_core(database, constants, fit_params):
     """Compute the number of IBDs in each AD that come from a given core.
 
     Return a dict of ((hall, det), core) -> N_ij, and the binnings,
@@ -343,8 +367,8 @@ def num_IBDs_from_core(database):
     N_ij is a 2D array with index [true_index, reco_index]
     with bins of energy given by the second return value.
     """
-    flux_fractions, true_bins_spec = flux_fraction(database)
-    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(database)
+    flux_fractions, true_bins_spec = flux_fraction(database, constants, fit_params)
+    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(database, constants)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     n_ij = {}
@@ -355,7 +379,7 @@ def num_IBDs_from_core(database):
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_energies[halldet]
     return n_ij, true_bins_resp, reco_bins
 
-def predict_IBD_true_energy(database):
+def predict_IBD_true_energy(database, constants, fit_params):
     """Compute the predicted number of IBDs for a given pair of ADs, by true and reco
     energy.
 
@@ -363,8 +387,9 @@ def predict_IBD_true_energy(database):
     ((far_hall, far_det), core, (near_hall, near_det)) -> N,
     with core indexed from 1 and N[true_index, reco_index].
     """
-    num_from_core, true_bins, reco_bins = num_IBDs_from_core(database)
-    extrap_factor, true_bins_spec = extrapolation_factor(database)
+    num_from_core, true_bins, reco_bins = num_IBDs_from_core(database, constants,
+            fit_params)
+    extrap_factor, true_bins_spec = extrapolation_factor(database, constants, fit_params)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     f_kji = {}
@@ -376,7 +401,7 @@ def predict_IBD_true_energy(database):
         )
     return f_kji, true_bins, reco_bins
 
-def predict_ad_to_ad(database):
+def predict_ad_to_ad(database, constants, fit_params):
     """Compute the predicted number of IBDs for a given pair of ADs, summed over all
     cores.
 
@@ -384,7 +409,7 @@ def predict_ad_to_ad(database):
     ((far_hall, far_det), (near_hall, near_det)) -> N,
     and N indexed by reco_index.
     """
-    f_kji, true_bins, reco_bins = predict_IBD_true_energy(database)
+    f_kji, true_bins, reco_bins = predict_IBD_true_energy(database, constants, fit_params)
     f_ki = {}
     for (far_halldet, core, near_halldet), n in f_kji.items():
         if (far_halldet, near_halldet) in f_ki:
@@ -393,7 +418,7 @@ def predict_ad_to_ad(database):
             f_ki[far_halldet, near_halldet] = n.sum(axis=0)
     return f_ki, reco_bins
 
-def predict_halls(database):
+def predict_halls(database, constants, fit_params):
     """Compute the predicted number of IBDs in EH3 based on EH1 or EH2.
 
     Return a tuple (f_pred, reco_bins) where f_pred is a dict with keys
@@ -405,7 +430,7 @@ def predict_halls(database):
     The predictions are all summed to represent combining the far-hall ADs
     and then halved to represent averaging over the 2 near AD predictions.
     """
-    f_ki, reco_bins = predict_ad_to_ad(database)
+    f_ki, reco_bins = predict_ad_to_ad(database, constants, fit_params)
     prediction = {
             1: np.zeros_like(reco_bins[:-1]),
             2: np.zeros_like(reco_bins[:-1])
@@ -431,29 +456,33 @@ def average_bins(values_fine, bins_fine, bins_coarse):
     - and that all inputs are 1D arrays.
     """
     # Test assumptions
-    test_bins = len(values_fine) + 1 == len(bins_fine)
-    test_start_bin = np.isclose(bins_fine[0], bins_coarse[0])
-    test_end_bin = np.isclose(bins_fine[-1], bins_coarse[-1])
-    test_fine_really_fine = len(bins_coarse) < len(bins_fine)
-    test_no_crossings = True  # Trust the user!
+    #test_bins = len(values_fine) + 1 == len(bins_fine)
+    #test_start_bin = np.isclose(bins_fine[0], bins_coarse[0])
+    #test_end_bin = np.isclose(bins_fine[-1], bins_coarse[-1])
+    #test_fine_really_fine = len(bins_coarse) < len(bins_fine)
+    #test_no_crossings = True  # Trust the user!
     bin_weights = np.diff(bins_fine)
-    test_increasing = np.all(bin_weights > 0)
-    test_1D = True  # Trust the user!
-    if not np.all([
-        test_bins, test_start_bin, test_end_bin,
-        test_fine_really_fine, test_no_crossings,
-        test_increasing, test_1D
-    ]):
-        print(bins_fine[0], bins_coarse[0])
-        print(bins_fine[-1], bins_coarse[-1])
-        raise ValueError("Invalid inputs. Check assumptions!")
+    #test_increasing = np.all(bin_weights > 0)
+    #test_1D = True  # Trust the user!
+    #if not np.all([
+        #test_bins, test_start_bin, test_end_bin,
+        #test_fine_really_fine, test_no_crossings,
+        #test_increasing, test_1D
+    #]):
+        #print(bins_fine[0], bins_coarse[0])
+        #print(bins_fine[-1], bins_coarse[-1])
+        #raise ValueError("Invalid inputs. Check assumptions!")
     values_coarse = np.empty((len(bins_coarse)-1,))
     fine_index = 0
     fine_up_edge = bins_fine[0]  # initial value only for first comparison in while loop
     for coarse_index, coarse_up_edge in enumerate(bins_coarse[1:]):
         next_coarse_value = 0
         next_coarse_weights_sum = 0
-        while not np.isclose(fine_up_edge, coarse_up_edge):
+        #while not np.isclose(fine_up_edge, coarse_up_edge):
+        while fine_up_edge != coarse_up_edge:
+            #if fine_up_edge > coarse_up_edge:
+                #print(fine_up_edge, coarse_up_edge)
+                #return
             fine_up_edge = bins_fine[fine_index + 1]
             fine_value = values_fine[fine_index]
             fine_weight = bin_weights[fine_index]
@@ -509,11 +538,13 @@ distances = {
             }]
         }
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('database')
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
-    spectrum, time_bins, energies = reactor_spectrum(args.database, 1)
-    by_week = livetime_by_week(args.database, time_bins)
-    print(by_week[(1, 1)][:20]/60/60/24)
+    constants = default_constants(args.database)
+    fit_params = FitParams(0.15, 2.5e-3)
+    for _ in range(10):
+        predict_halls(args.database, constants, fit_params)

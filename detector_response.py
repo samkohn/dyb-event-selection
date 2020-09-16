@@ -5,21 +5,24 @@ and true antineutrino energy.
 """
 
 import argparse
-from array import array
 import json
 import sqlite3
 import time
 
+import numpy as np
 
 def main(toymc_infile, update_db, image_outfile):
     import ROOT
     ROOT.gROOT.SetBatch(True)
     infile = ROOT.TFile(toymc_infile, 'READ')
     toy_data = infile.Get('toy')
-    nbins = (164, 1.8, 12, 27, 1, 12)
+    keV = 1000
+    nbins = (164, 1.8*keV, 12*keV, 27, 1*keV, 12*keV)
     # Bins: 0.25MeV from 1.5 to 8MeV, then 8-12MeV as 1 bin
-    hardcoded_reco_bins = array('f', [1.5 + 0.25 * i for i in range(27)] + [12])
-    hardcoded_true_bins = array('f', [1.8 + 0.05 * i for i in range(164)] + [12])
+    hardcoded_reco_bins = np.concatenate((np.linspace(1.5*keV, 8*keV, 27), [12*keV]))
+    #hardcoded_reco_bins = array('f', [1.5 + 0.25 * i for i in range(27)] + [12])
+    #hardcoded_true_bins = array('f', [1.8 + 0.05 * i for i in range(164)] + [12])
+    hardcoded_true_bins = np.concatenate((np.linspace(1.8*keV, 9.95*keV, 164), [12*keV]))
     detector_response_hist = ROOT.TH2F('det_response', 'det_response', *nbins)
     detector_response_hist.GetXaxis().Set(nbins[0], hardcoded_true_bins)
     detector_response_hist.GetYaxis().Set(nbins[3], hardcoded_reco_bins)
@@ -32,8 +35,8 @@ def main(toymc_infile, update_db, image_outfile):
         canvas.SetBottomMargin(margin)
     toy_data.Draw("res_p:Ev >> det_response", "", "colz")
     if image_outfile:
-        detector_response_hist.GetXaxis().SetTitle("E_{#nu,true} [MeV]")
-        detector_response_hist.GetYaxis().SetTitle("E_{p,reco} [MeV]")
+        detector_response_hist.GetXaxis().SetTitle("E_{#nu,true} [keV]")
+        detector_response_hist.GetYaxis().SetTitle("E_{p,reco} [keV]")
         detector_response_hist.SetLabelSize(0.05, 'xy')
         detector_response_hist.SetLabelSize(0.05, 'z')
         detector_response_hist.SetTitleSize(0.05, 'z')

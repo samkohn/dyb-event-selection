@@ -303,8 +303,9 @@ def true_to_reco_energy_matrix(database):
         matrix_str, reco_bins_str, true_bins_str = cursor.fetchone()
     # Matrix is stored transposed so we need to un-transpose it
     matrix = np.array(json.loads(matrix_str)).T
-    reco_bins = np.array(json.loads(reco_bins_str))
-    true_bins = np.array(json.loads(true_bins_str))
+    # Divide by 1000 because we store the energies in keV
+    reco_bins = np.array(json.loads(reco_bins_str))/1000
+    true_bins = np.array(json.loads(true_bins_str))/1000
     return matrix, true_bins, reco_bins
 
 def reco_to_true_energy(database):

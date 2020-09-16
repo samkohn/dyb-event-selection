@@ -354,6 +354,66 @@ def num_IBDs_from_core(database):
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_energies[halldet]
     return n_ij, true_bins_resp, reco_bins
 
+def predict_IBD_true_energy(database):
+    """Compute the predicted number of IBDs for a given pair of ADs, by true and reco
+    energy.
+
+    Return a tuple (f_kji, true_bins, reco_bins) where f_kji is a dict of
+    ((far_hall, far_det), core, (near_hall, near_det)) -> N,
+    with core indexed from 1 and N[true_index, reco_index].
+    """
+    num_from_core, true_bins, reco_bins = num_IBDs_from_core(database)
+    extrap_factor, true_bins_spec = extrapolation_factor(database)
+    # reactor flux bins don't include the upper edge of 12 MeV
+    true_bins_spec = np.concatenate((true_bins_spec, [12]))
+    f_kji = {}
+    for (far_halldet, core, near_halldet), extrap_fact in extrap_factor.items():
+        rebinned_extrap_fact = average_bins(extrap_fact, true_bins_spec, true_bins)
+        n_ij = num_from_core[near_halldet, core]
+        f_kji[far_halldet, core, near_halldet] = (
+                np.expand_dims(rebinned_extrap_fact, axis=1) * n_ij
+        )
+    return f_kji, true_bins, reco_bins
+
+def predict_ad_to_ad(database):
+    """Compute the predicted number of IBDs for a given pair of ADs, summed over all
+    cores.
+
+    Return a tuple (f_ki, reco_bins) where f_ki is a dict of
+    ((far_hall, far_det), (near_hall, near_det)) -> N,
+    and N indexed by reco_index.
+    """
+    f_kji, true_bins, reco_bins = predict_IBD_true_energy(database)
+    f_ki = {}
+    for (far_halldet, core, near_halldet), n in f_kji.items():
+        if (far_halldet, near_halldet) in f_ki:
+            f_ki[far_halldet, near_halldet] += n.sum(axis=0)
+        else:
+            f_ki[far_halldet, near_halldet] = n.sum(axis=0)
+    return f_ki, reco_bins
+
+def predict_halls(database):
+    """Compute the predicted number of IBDs in EH3 based on EH1 or EH2.
+
+    Return a tuple (f_pred, reco_bins) where f_pred is a dict with keys
+    1 and 2 corresponding to EH1 and EH2, and values of a 1D array
+    indexed by reco_index.
+
+    There are 8 AD pairs from a near hall to the far hall,
+    and therefore 8 predictions.
+    The predictions are all summed to represent combining the far-hall ADs
+    and then halved to represent averaging over the 2 near AD predictions.
+    """
+    f_ki, reco_bins = predict_ad_to_ad(database)
+    prediction = {
+            1: np.zeros_like(reco_bins[:-1]),
+            2: np.zeros_like(reco_bins[:-1])
+    }
+    for (far_halldet, (near_hall, near_det)), ad_prediction in f_ki.items():
+        prediction[near_hall] += ad_prediction/2
+    return prediction, reco_bins
+
+
 def average_bins(values_fine, bins_fine, bins_coarse):
     """Average the values from the fine bins into a coarser binning.
 

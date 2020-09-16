@@ -206,12 +206,11 @@ def xsec_weighted_spec(database):
             to_return[(hall, det), core] = total_spectrum * xsec
     return to_return, energy_bins_xsec
 
-def flux_fraction(database, constants, fit_params, week_range=slice(None, None, None)):
+def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
     """Return a tuple (dict of flux fractions, energy bins).
 
     The dict has keys ((hall, det), core) with core indexed from 1.
     """
-    #total_spectrum, energy_bins_spec = total_emitted(database, week_range)
     to_return = {}
     for (hall, det) in all_ads:
         numerators = np.zeros((len(constants.true_bins_spectrum), 6))
@@ -238,13 +237,12 @@ def flux_fraction(database, constants, fit_params, week_range=slice(None, None, 
                 to_return[(hall, det), core] = numerators[:, core-1] / denominators
     return to_return, constants.true_bins_spectrum
 
-def extrapolation_factor(database, constants, fit_params):
+def extrapolation_factor(constants, fit_params):
     """Return a tuple (dict of extrapolation factors, energy bins).
 
     The dict has keys ((far_hall, far_det), core, (near_hall, near_det))
     with core indexed from 1.
     """
-    #total_spectrum, energy_bins_spec = total_emitted(database, slice(None))
     to_return = {}
     for (near_hall, near_det) in near_ads:
         denominators = np.zeros((len(constants.true_bins_spectrum), 6))
@@ -332,7 +330,7 @@ def true_to_reco_energy_matrix(database):
     true_bins = np.array(json.loads(true_bins_str))/1000
     return matrix, true_bins, reco_bins
 
-def reco_to_true_energy(database, constants):
+def reco_to_true_energy(constants):
     """Apply the detector response to get the "true" observed spectrum.
 
     This is handled independently for each reconstructed energy bin,
@@ -342,8 +340,6 @@ def reco_to_true_energy(database, constants):
     The units of the spectrum are IBDs per MeV.
     The dict maps (hall, det) to a 2D array with indexes [true_index, reco_index].
     """
-    #detector_response, true_bins, reco_bins_resp = true_to_reco_energy_matrix(database)
-    #num_per_AD, reco_bins_num = num_IBDs_per_AD(database, constants)
     # Normalize the matrix so that each column sums to 1.
     # (Thus each reco event will be spread among true energy bins
     # in a unitary manner).
@@ -358,7 +354,7 @@ def reco_to_true_energy(database, constants):
         true_energies[hall, det] = normalized_response * np.expand_dims(num_IBDs, axis=0)
     return true_energies, constants.true_bins_response, constants.reco_bins_response
 
-def num_IBDs_from_core(database, constants, fit_params):
+def num_IBDs_from_core(constants, fit_params):
     """Compute the number of IBDs in each AD that come from a given core.
 
     Return a dict of ((hall, det), core) -> N_ij, and the binnings,
@@ -367,8 +363,8 @@ def num_IBDs_from_core(database, constants, fit_params):
     N_ij is a 2D array with index [true_index, reco_index]
     with bins of energy given by the second return value.
     """
-    flux_fractions, true_bins_spec = flux_fraction(database, constants, fit_params)
-    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(database, constants)
+    flux_fractions, true_bins_spec = flux_fraction(constants, fit_params)
+    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(constants)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     n_ij = {}
@@ -379,7 +375,7 @@ def num_IBDs_from_core(database, constants, fit_params):
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_energies[halldet]
     return n_ij, true_bins_resp, reco_bins
 
-def predict_IBD_true_energy(database, constants, fit_params):
+def predict_IBD_true_energy(constants, fit_params):
     """Compute the predicted number of IBDs for a given pair of ADs, by true and reco
     energy.
 
@@ -387,9 +383,8 @@ def predict_IBD_true_energy(database, constants, fit_params):
     ((far_hall, far_det), core, (near_hall, near_det)) -> N,
     with core indexed from 1 and N[true_index, reco_index].
     """
-    num_from_core, true_bins, reco_bins = num_IBDs_from_core(database, constants,
-            fit_params)
-    extrap_factor, true_bins_spec = extrapolation_factor(database, constants, fit_params)
+    num_from_core, true_bins, reco_bins = num_IBDs_from_core(constants, fit_params)
+    extrap_factor, true_bins_spec = extrapolation_factor(constants, fit_params)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     f_kji = {}
@@ -401,7 +396,7 @@ def predict_IBD_true_energy(database, constants, fit_params):
         )
     return f_kji, true_bins, reco_bins
 
-def predict_ad_to_ad(database, constants, fit_params):
+def predict_ad_to_ad(constants, fit_params):
     """Compute the predicted number of IBDs for a given pair of ADs, summed over all
     cores.
 
@@ -409,7 +404,7 @@ def predict_ad_to_ad(database, constants, fit_params):
     ((far_hall, far_det), (near_hall, near_det)) -> N,
     and N indexed by reco_index.
     """
-    f_kji, true_bins, reco_bins = predict_IBD_true_energy(database, constants, fit_params)
+    f_kji, true_bins, reco_bins = predict_IBD_true_energy(constants, fit_params)
     f_ki = {}
     for (far_halldet, core, near_halldet), n in f_kji.items():
         if (far_halldet, near_halldet) in f_ki:
@@ -418,7 +413,7 @@ def predict_ad_to_ad(database, constants, fit_params):
             f_ki[far_halldet, near_halldet] = n.sum(axis=0)
     return f_ki, reco_bins
 
-def predict_halls(database, constants, fit_params):
+def predict_halls(constants, fit_params):
     """Compute the predicted number of IBDs in EH3 based on EH1 or EH2.
 
     Return a tuple (f_pred, reco_bins) where f_pred is a dict with keys
@@ -430,7 +425,7 @@ def predict_halls(database, constants, fit_params):
     The predictions are all summed to represent combining the far-hall ADs
     and then halved to represent averaging over the 2 near AD predictions.
     """
-    f_ki, reco_bins = predict_ad_to_ad(database, constants, fit_params)
+    f_ki, reco_bins = predict_ad_to_ad(constants, fit_params)
     prediction = {
             1: np.zeros_like(reco_bins[:-1]),
             2: np.zeros_like(reco_bins[:-1])
@@ -547,4 +542,4 @@ if __name__ == '__main__':
     constants = default_constants(args.database)
     fit_params = FitParams(0.15, 2.5e-3)
     for _ in range(10):
-        predict_halls(args.database, constants, fit_params)
+        predict_halls(constants, fit_params)

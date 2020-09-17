@@ -8,6 +8,10 @@ ALL_DETECTORS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 AD_DETECTORS = [1, 2, 3, 4]
 WP_DETECTORS = [5, 6]
 
+near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
+far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
+all_ads = near_ads + far_ads
+
 def phase_for_run(runno):
     if 21221 <= runno <= 26694:
         return 1
@@ -15,7 +19,7 @@ def phase_for_run(runno):
         return 2
     if runno >= 67625:
         return 3
-    raise "Nonsensical run number"
+    raise ValueError(f"Nonsensical run number: {runno}")
 
 def phase_for_day(day):
     if 0 <= day <= 217:

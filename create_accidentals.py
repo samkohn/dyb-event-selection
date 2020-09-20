@@ -82,7 +82,8 @@ def random_pairing_N(computed):
                 first_events[order // 2] = None
                 second_events[order // 2] = None
 
-def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_rate=None):
+def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_rate=None,
+        seed=1):
     if singles_rate is None:
         singles_rate = 0.01
     entries = computed.GetEntries()
@@ -97,7 +98,7 @@ def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_r
             continue
         events.append((entry.x, entry.y, entry.z))
     events = np.array(events)
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
     num_repeats = (num_samples // len(events)) + 1
     event_drs = np.array([])
     for cycle in range(num_repeats):
@@ -125,8 +126,9 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
     detector = computed.detector
     site = computed.site
     num_pairs = kwargs['num_pairs']
+    seed = kwargs['seed']
     if pairing == 'random_many':
-        event_DTs = random_pairing_many(computed, num_pairs)
+        event_DTs = random_pairing_many(computed, num_pairs, seed=seed)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
         efficiency = num_passes_cut / num_pairs
@@ -135,7 +137,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
         def cut(entry):
             x, y, z = entry.x, entry.y, entry.z
             return z > 2200 and np.sqrt(x*x + y*y) > 500
-        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
         efficiency = num_passes_cut / num_pairs
@@ -143,7 +145,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
     elif pairing == 'energy_lt_2MeV':
         def cut(entry):
             return entry.energy < 2
-        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
         efficiency = num_passes_cut / num_pairs
@@ -151,7 +153,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
     elif pairing == 'energy_gt_2MeV':
         def cut(entry):
             return entry.energy >= 2
-        event_DTs = random_pairing_many(computed, num_pairs, cut)
+        event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
         DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
         efficiency = num_passes_cut / num_pairs
@@ -162,6 +164,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
         percent_error = 100 * error / efficiency
     except ZeroDivisionError:
         percent_error = 0
+    pairing = pairing + '_expo_time'
     if update_db is None:
         print(f'Pairing type: {pairing}')
         print(f'Efficiency: {efficiency:.6f} +/- {error:.6f} ({percent_error:.1f}%)')
@@ -291,6 +294,6 @@ if __name__ == '__main__':
     random.seed(args.seed)
     if args.only_DT_eff:
         only_DT_eff(args.infile, args.ttree_name, args.pairing,
-                args.update_db, num_pairs = args.num_pairs)
+                args.update_db, num_pairs=args.num_pairs, seed=args.seed)
     else:
         main(args.infile, args.outfile, args.ttree_name, args.pairing)

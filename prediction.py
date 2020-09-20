@@ -29,7 +29,8 @@ class FitConstants:
     detector_response : dict
     true_bins_response : np.array
     reco_bins_response : np.array
-    observed_spectra : dict
+    observed_candidates : dict
+    nominal_bgs : dict
     reco_bins : np.array
     total_emitted_by_AD : dict
     true_bins_spectrum : np.array
@@ -39,17 +40,24 @@ class FitConstants:
 class FitParams:
     theta13: float
     m2_ee: float
+    pull_bg : dict
 
 
 def default_constants(database):
-    matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(database)
-    num_IBDs, reco_bins = num_IBDs_per_AD(database)
+    source_events = 'Nominal rate-only 9/17/2020'
+    source_det_resp = 'THU ToyMC res_p:Ev No Cuts rate-only binning'
+    matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(
+            database, source_det_resp
+    )
+    num_coincidences, reco_bins = num_coincidences_per_AD(database, source_events)
     total_emitted_by_AD, true_bins_spectrum = total_emitted(database, slice(None))
+    nominal_bgs, reco_bins = backgrounds_per_AD(database, source_events)
     return FitConstants(
             matrix,
             true_bins_response,
             reco_bins_response,
-            num_IBDs,
+            num_coincidences,
+            nominal_bgs,
             reco_bins,
             total_emitted_by_AD,
             true_bins_spectrum,
@@ -283,29 +291,74 @@ def extrapolation_factor(constants, fit_params):
     return to_return, constants.true_bins_spectrum
 
 
-def num_IBDs_per_AD(database):
-    """Retrieve the number of observed IBDs in each AD, binned by energy.
+def num_coincidences_per_AD(database, source):
+    """Retrieve the number of observed IBD candidates in each AD, *including backgrounds*.
 
     Returns a tuple of (dict, energy_bins),
-    where the dict maps (hall, det) to a 1D array of N_IBDs.
+    where the dict maps (hall, det) to a 1D array of N_coincidences.
     This method assumes that all ADs have the same binning.
     """
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, Energy_keV, BinWidth_keV, NumIBDs FROM obs_spectra
-        ORDER BY Hall, DetNo, Energy_keV''')
-        full_data = np.array(cursor.fetchall(), dtype=float)
-    # convert keV to MeV
-    full_data[:, [2,3]] /= 1000
+        cursor.execute('''SELECT Hall, DetNo, NumCoincidences_binned, BinEdges
+        FROM num_coincidences
+        WHERE Source = ?
+        ORDER BY Hall, DetNo''', (source,))
+        full_data = cursor.fetchall()
     results = {}
-    for hall, det in all_ads:
-        ad_data = full_data[(full_data[:, 0] == hall) & (full_data[:, 1] == det)]
-        results[hall, det] = ad_data[:, 4]
-    # Add upper edge of last bin to bins array
-    bins = np.concatenate((ad_data[:, 2], [ad_data[-1, 2] + ad_data[-1, 3]]))
+    # Parse binned records
+    for hall, det, coincidence_str, bins_str in full_data:
+        results[hall, det] = np.array(json.loads(coincidence_str))
+    bins = np.array(json.loads(bins_str), dtype=float)
+    # convert keV to MeV
+    bins /= 1000
     return results, bins
 
-def true_to_reco_energy_matrix(database):
+def backgrounds_per_AD(database, source):
+    """Retrieve the number of predicted background events in each AD.
+
+    Returns a tuple of (dict, energy_bins),
+    where the dict maps (hall, det) to a 1D array of N_bg_events
+    for that AD, over all background types.
+    This method assumes that all ADs and background sources
+    have the same binning.
+
+    Currently-included backgrounds:
+
+    - Accidentals
+    """
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''SELECT Hall, DetNo, NumAccs_binned, BinEdges
+        FROM num_accs
+        WHERE Source = ?
+        ORDER BY Hall, DetNo''', (source,))
+        acc_data = cursor.fetchall()
+    results = {}
+    # Parse binned records
+    for hall, det, num_accs_str, bins_str in acc_data:
+        results[hall, det] = np.array(json.loads(num_accs_str))
+    bins = np.array(json.loads(bins_str), dtype=float)
+    # convert keV to MeV
+    bins /= 1000
+    return results, bins
+
+def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
+    """Compute the bg-subtracted IBD spectra for each AD.
+
+    Eventually this will depend on the fit parameters (pull parameters).
+
+    Returns the same style values as num_coincidences_per_AD.
+    """
+    observed_candidates = constants.observed_candidates
+    predicted_bg = constants.nominal_bgs
+    results = {}
+    for (hall, det), bg_spec in predicted_bg.items():
+        pull = fit_params.pull_bg[hall, det]
+        results[hall, det] = observed_candidates[hall, det] - bg_spec * (1 + pull)
+    return results, constants.reco_bins
+
+def true_to_reco_energy_matrix(database, source):
     """Retrieve the conversion matrix from true to/from reconstructed energy.
 
     Returns a tuple of (conversion, true_bins, reco_bins).
@@ -321,7 +374,7 @@ def true_to_reco_energy_matrix(database):
         cursor = conn.cursor()
         cursor.execute('''SELECT Matrix, RecoBins, TrueBins
             FROM detector_response
-            WHERE Source = "THU ToyMC res_p:Ev No Cuts Better binning"''')
+            WHERE Source = ?''', (source,))
         matrix_str, reco_bins_str, true_bins_str = cursor.fetchone()
     # Matrix is stored transposed so we need to un-transpose it
     matrix = np.array(json.loads(matrix_str)).T
@@ -330,7 +383,7 @@ def true_to_reco_energy_matrix(database):
     true_bins = np.array(json.loads(true_bins_str))/1000
     return matrix, true_bins, reco_bins
 
-def reco_to_true_energy(constants):
+def reco_to_true_energy(constants, fit_params):
     """Apply the detector response to get the "true" observed spectrum.
 
     This is handled independently for each reconstructed energy bin,
@@ -350,7 +403,8 @@ def reco_to_true_energy(constants):
         print(constants.reco_bins)
         raise NotImplementedError("Different reco binnings")
     true_energies = {}
-    for (hall, det), num_IBDs in constants.observed_spectra.items():
+    bg_subtracted, bins = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
+    for (hall, det), num_IBDs in bg_subtracted.items():
         true_energies[hall, det] = normalized_response * np.expand_dims(num_IBDs, axis=0)
     return true_energies, constants.true_bins_response, constants.reco_bins_response
 
@@ -364,7 +418,7 @@ def num_IBDs_from_core(constants, fit_params):
     with bins of energy given by the second return value.
     """
     flux_fractions, true_bins_spec = flux_fraction(constants, fit_params)
-    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(constants)
+    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(constants, fit_params)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     n_ij = {}
@@ -396,7 +450,7 @@ def predict_IBD_true_energy(constants, fit_params):
         )
     return f_kji, true_bins, reco_bins
 
-def predict_ad_to_ad(constants, fit_params):
+def predict_ad_to_ad_IBDs(constants, fit_params):
     """Compute the predicted number of IBDs for a given pair of ADs, summed over all
     cores.
 
@@ -413,6 +467,25 @@ def predict_ad_to_ad(constants, fit_params):
             f_ki[far_halldet, near_halldet] = n.sum(axis=0)
     return f_ki, reco_bins
 
+def predict_ad_to_ad_obs(constants, fit_params):
+    """Compute the number of observed coincidences for a given pair of ADs.
+
+    Includes the background events added back to the far halls.
+
+    Return a tuple (f_ki, reco_bins) where f_ki is a dict of
+    ((far_hall, far_det), (near_hall, near_det)) -> N,
+    and N indexed by reco_index.
+    """
+    f_ki, reco_bins = predict_ad_to_ad_IBDs(constants, fit_params)
+    predicted_bg = constants.nominal_bgs
+    results = f_ki.copy()
+    for (far_hall, far_det), near_halldet in f_ki:
+        bg_for_far = predicted_bg[far_hall, far_det]
+        pull = fit_params.pull_bg[far_hall, far_det]
+        results[(far_hall, far_det), near_halldet] += bg_for_far * (1 + pull)
+    return results, constants.reco_bins
+
+
 def predict_halls(constants, fit_params):
     """Compute the predicted number of IBDs in EH3 based on EH1 or EH2.
 
@@ -425,7 +498,7 @@ def predict_halls(constants, fit_params):
     The predictions are all summed to represent combining the far-hall ADs
     and then halved to represent averaging over the 2 near AD predictions.
     """
-    f_ki, reco_bins = predict_ad_to_ad(constants, fit_params)
+    f_ki, reco_bins = predict_ad_to_ad_obs(constants, fit_params)
     prediction = {
             1: np.zeros_like(reco_bins[:-1]),
             2: np.zeros_like(reco_bins[:-1])
@@ -540,6 +613,5 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
     constants = default_constants(args.database)
-    fit_params = FitParams(0.15, 2.5e-3)
-    for _ in range(10):
-        predict_halls(constants, fit_params)
+    fit_params = FitParams(0.15, 2.5e-3, dict(zip(all_ads, [0]*len(all_ads))))
+    print(predict_halls(constants, fit_params))

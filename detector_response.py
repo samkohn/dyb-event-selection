@@ -11,18 +11,22 @@ import time
 
 import numpy as np
 
-def main(toymc_infile, update_db, image_outfile):
+def main(toymc_infile, update_db, image_outfile, binning):
     import ROOT
     ROOT.gROOT.SetBatch(True)
     infile = ROOT.TFile(toymc_infile, 'READ')
     toy_data = infile.Get('toy')
     keV = 1000
-    nbins = (164, 1.8*keV, 12*keV, 27, 1*keV, 12*keV)
     # Bins: 0.25MeV from 1.5 to 8MeV, then 8-12MeV as 1 bin
-    hardcoded_reco_bins = np.concatenate((np.linspace(1.5*keV, 8*keV, 27), [12*keV]))
+    hardcoded_true_bins = np.concatenate((np.linspace(1.8*keV, 9.95*keV, 164), [12*keV]))
+    if binning == 'nominal' or binning is None:
+        hardcoded_reco_bins = np.concatenate((np.linspace(1.5*keV, 8*keV, 27), [12*keV]))
+        nbins = (164, 1.8*keV, 12*keV, 27, 1*keV, 12*keV)
+    elif binning == 'rate-only':
+        hardcoded_reco_bins = np.array([1.5*keV, 12*keV])
+        nbins = (164, 1.8*keV, 12*keV, 1, 1.5*keV, 12*keV)
     #hardcoded_reco_bins = array('f', [1.5 + 0.25 * i for i in range(27)] + [12])
     #hardcoded_true_bins = array('f', [1.8 + 0.05 * i for i in range(164)] + [12])
-    hardcoded_true_bins = np.concatenate((np.linspace(1.8*keV, 9.95*keV, 164), [12*keV]))
     detector_response_hist = ROOT.TH2F('det_response', 'det_response', *nbins)
     detector_response_hist.GetXaxis().Set(nbins[0], hardcoded_true_bins)
     detector_response_hist.GetYaxis().Set(nbins[3], hardcoded_reco_bins)
@@ -33,7 +37,7 @@ def main(toymc_infile, update_db, image_outfile):
         canvas.SetLeftMargin(margin)
         canvas.SetTopMargin(margin)
         canvas.SetBottomMargin(margin)
-    toy_data.Draw("res_p:Ev >> det_response", "", "colz")
+    toy_data.Draw("res_p*1000:Ev*1000 >> det_response", "", "colz")
     if image_outfile:
         detector_response_hist.GetXaxis().SetTitle("E_{#nu,true} [keV]")
         detector_response_hist.GetYaxis().SetTitle("E_{p,reco} [keV]")
@@ -57,9 +61,11 @@ def main(toymc_infile, update_db, image_outfile):
     if update_db:
         with sqlite3.Connection(update_db) as conn:
             cursor = conn.cursor()
+            label = f"THU ToyMC res_p:Ev No Cuts {binning} binning"
             cursor.execute('''INSERT OR REPLACE INTO detector_response
-                VALUES ("THU ToyMC res_p:Ev No Cuts Better binning", ?, ?, ?)''',
+                VALUES (?, ?, ?, ?)''',
                 (
+                    label,
                     json.dumps(response_matrix),
                     json.dumps(hardcoded_reco_bins.tolist()),
                     json.dumps(hardcoded_true_bins.tolist()),
@@ -74,5 +80,6 @@ if __name__ == '__main__':
     parser.add_argument('input')
     parser.add_argument('--update-db')
     parser.add_argument('--pdf')
+    parser.add_argument('--binning')
     args = parser.parse_args()
-    main(args.input, args.update_db, args.pdf)
+    main(args.input, args.update_db, args.pdf, args.binning)

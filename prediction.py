@@ -24,6 +24,9 @@ near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
 
+def ad_dict(initial_value):
+    return dict(zip(all_ads, [initial_value]*len(all_ads)))
+
 @dataclass
 class FitConstants:
     detector_response : dict
@@ -498,7 +501,7 @@ def predict_halls(constants, fit_params):
     The predictions are all summed to represent combining the far-hall ADs
     and then halved to represent averaging over the 2 near AD predictions.
     """
-    f_ki, reco_bins = predict_ad_to_ad_obs(constants, fit_params)
+    f_ki, reco_bins = predict_ad_to_ad_IBDs(constants, fit_params)
     prediction = {
             1: np.zeros_like(reco_bins[:-1]),
             2: np.zeros_like(reco_bins[:-1])

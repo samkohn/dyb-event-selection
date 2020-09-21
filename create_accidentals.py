@@ -127,43 +127,47 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
     site = computed.site
     num_pairs = kwargs['num_pairs']
     seed = kwargs['seed']
-    if pairing == 'random_many':
-        event_DTs = random_pairing_many(computed, num_pairs, seed=seed)
-        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
-        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
-        efficiency = num_passes_cut / num_pairs
-        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
-    elif pairing == 'random_many_resid_flasher':
-        def cut(entry):
-            x, y, z = entry.x, entry.y, entry.z
-            return z > 2200 and np.sqrt(x*x + y*y) > 500
-        event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
-        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
-        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
-        efficiency = num_passes_cut / num_pairs
-        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
-    elif pairing == 'energy_lt_2MeV':
-        def cut(entry):
-            return entry.energy < 2
-        event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
-        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
-        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
-        efficiency = num_passes_cut / num_pairs
-        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
-    elif pairing == 'energy_gt_2MeV':
-        def cut(entry):
-            return entry.energy >= 2
-        event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
-        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
-        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
-        efficiency = num_passes_cut / num_pairs
-        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+    if computed.GetEntries() < 61200:
+        efficiency = None
+        error = None
     else:
-        raise NotImplemented(pairing)
-    try:
-        percent_error = 100 * error / efficiency
-    except ZeroDivisionError:
-        percent_error = 0
+        if pairing == 'random_many':
+            event_DTs = random_pairing_many(computed, num_pairs, seed=seed)
+            DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+            num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+            efficiency = num_passes_cut / num_pairs
+            error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+        elif pairing == 'random_many_resid_flasher':
+            def cut(entry):
+                x, y, z = entry.x, entry.y, entry.z
+                return z > 2200 and np.sqrt(x*x + y*y) > 500
+            event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
+            DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+            num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+            efficiency = num_passes_cut / num_pairs
+            error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+        elif pairing == 'energy_lt_2MeV':
+            def cut(entry):
+                return entry.energy < 2
+            event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
+            DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+            num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+            efficiency = num_passes_cut / num_pairs
+            error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+        elif pairing == 'energy_gt_2MeV':
+            def cut(entry):
+                return entry.energy >= 2
+            event_DTs = random_pairing_many(computed, num_pairs, cut, seed=seed)
+            DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+            num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+            efficiency = num_passes_cut / num_pairs
+            error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+        else:
+            raise NotImplemented(pairing)
+        try:
+            percent_error = 100 * error / efficiency
+        except ZeroDivisionError:
+            percent_error = 0
     pairing = pairing + '_expo_time'
     if update_db is None:
         print(f'Pairing type: {pairing}')

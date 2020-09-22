@@ -46,6 +46,20 @@ class FitParams:
     theta13: float
     m2_ee: float
     pull_bg : dict
+    @classmethod
+    def from_list(cls, in_list):
+        theta13 = in_list[0]
+        m2_ee = in_list[1]
+        pull_bg = {}
+        for pull, halldet in zip(in_list[2:10], all_ads):
+            pull_bg[halldet] = pull
+        return cls(theta13, m2_ee, pull_bg)
+    def to_list(self):
+        return (
+            [self.theta13, self.m2_ee]
+            + [self.pull_bg[halldet] for halldet in all_ads]
+        )
+
 
 
 def default_constants(database):

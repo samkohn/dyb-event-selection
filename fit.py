@@ -2,6 +2,7 @@ import argparse
 from pprint import pprint
 
 import numpy as np
+from scipy.optimize import minimize
 
 import prediction as pred
 
@@ -12,8 +13,6 @@ def chi_square(constants, fit_params):
     chi_square = 0
     observed = {ad: constants.observed_candidates[ad] for ad in pred.far_ads}
     predicted, reco_bins = pred.predict_ad_to_ad_obs(constants, fit_params)
-    pprint(observed)
-    pprint(predicted)
     #Main part
     for (far_halldet, near_halldet), n_predicted in predicted.items():
         n_observed = observed[far_halldet]
@@ -25,10 +24,26 @@ def chi_square(constants, fit_params):
     # Pull terms
     for halldet, pull in fit_params.pull_bg.items():
         numerator = pull*pull
-        denominator = 245 * 245  # TODO placeholder error
+        denominator = 0.010*0.010  # TODO relative error on accidentals
         chi_square += numerator/denominator
     return chi_square
 
+def objective_fn(x, constants):
+    """Convert arguments from scipy to desired format and return chi_square.
+    """
+    fit_params = pred.FitParams.from_list(x)
+    return chi_square(constants, fit_params)
+
+def fit(starting_params, constants):
+    """Perform the fit with the given starting parameters.
+    """
+    positive = (0, None)
+    nobound = (None, None)
+    bounds = [positive, (2.5e-3, 2.5e-3)] + [nobound] * 8
+
+    result = minimize(objective_fn, np.array(starting_params.to_list()),
+            args=(constants,), bounds=bounds)
+    return result
 
 
 
@@ -39,3 +54,8 @@ if __name__ == "__main__":
     constants = pred.default_constants(args.database)
     starting_params = pred.FitParams(0.15, 2.5e-3, pred.ad_dict(0))
     print(chi_square(constants, starting_params))
+    result = fit(starting_params, constants)
+    print(result)
+    cov = np.array(result.hess_inv.todense())
+    print(np.sqrt(cov[0,0]))
+    print(np.sqrt(cov[1, 1]))

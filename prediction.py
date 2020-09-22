@@ -57,6 +57,8 @@ def default_constants(database):
     num_coincidences, reco_bins = num_coincidences_per_AD(database, source_events)
     total_emitted_by_AD, true_bins_spectrum = total_emitted(database, slice(None))
     nominal_bgs, reco_bins = backgrounds_per_AD(database, source_events)
+    muon_eff = muon_veto_efficiency(database)
+    multiplicity_eff = multiplicity_efficiency(database)
     return FitConstants(
             matrix,
             true_bins_response,
@@ -67,6 +69,8 @@ def default_constants(database):
             total_emitted_by_AD,
             true_bins_spectrum,
             default_osc_params,
+            muon_eff,
+            multiplicity_eff
     )
 
 
@@ -368,6 +372,21 @@ def num_coincidences_per_AD(database, source):
     bins /= 1000
     return results, bins
 
+def fixed_efficiency_weighted_counts(constants):
+    """Adjust the observed counts by dividing by muon & multiplicity efficiencies.
+
+    Returns a dict mapping (hall, det) to a 1D array of N_coincidences.
+    """
+    num_coincidences = constants.observed_candidates
+    mult_effs = constants.multiplicity_eff
+    muon_effs = constants.muon_eff
+    to_return = {}
+    for halldet, coincidences in num_coincidences.items():
+        mult_eff = mult_effs[halldet]
+        muon_eff = muon_effs[halldet]
+        to_return[halldet] = coincidences / (mult_eff * muon_eff)
+    return to_return
+
 def backgrounds_per_AD(database, source):
     """Retrieve the number of predicted background events in each AD.
 
@@ -400,16 +419,14 @@ def backgrounds_per_AD(database, source):
 def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     """Compute the bg-subtracted IBD spectra for each AD.
 
-    Eventually this will depend on the fit parameters (pull parameters).
-
     Returns the same style values as num_coincidences_per_AD.
     """
-    observed_candidates = constants.observed_candidates
+    num_candidates = fixed_efficiency_weighted_counts(constants)
     predicted_bg = constants.nominal_bgs
     results = {}
     for (hall, det), bg_spec in predicted_bg.items():
         pull = fit_params.pull_bg[hall, det]
-        results[hall, det] = observed_candidates[hall, det] - bg_spec * (1 + pull)
+        results[hall, det] = num_candidates[hall, det] - bg_spec * (1 + pull)
     return results, constants.reco_bins
 
 def true_to_reco_energy_matrix(database, source):
@@ -524,19 +541,30 @@ def predict_ad_to_ad_IBDs(constants, fit_params):
 def predict_ad_to_ad_obs(constants, fit_params):
     """Compute the number of observed coincidences for a given pair of ADs.
 
-    Includes the background events added back to the far halls.
+    The background events are added back to the far halls
+    and the muon-veto and multiplicity-veto efficiencies are re-applied.
 
     Return a tuple (f_ki, reco_bins) where f_ki is a dict of
     ((far_hall, far_det), (near_hall, near_det)) -> N,
     and N indexed by reco_index.
+
+    The return value of this function should be directly comparable
+    to the number of observed coincidences at the far hall ADs,
+    without adjusting the observed counts for backgrounds or any efficiencies.
     """
     f_ki, reco_bins = predict_ad_to_ad_IBDs(constants, fit_params)
     predicted_bg = constants.nominal_bgs
+    muon_effs = constants.muon_eff
+    mult_effs = constants.multiplicity_eff
     results = f_ki.copy()
     for (far_hall, far_det), near_halldet in f_ki:
         bg_for_far = predicted_bg[far_hall, far_det]
         pull = fit_params.pull_bg[far_hall, far_det]
         results[(far_hall, far_det), near_halldet] += bg_for_far * (1 + pull)
+    for (far_halldet, near_halldet), result in results.items():
+        muon_eff = muon_effs[far_halldet]
+        mult_eff = mult_effs[far_halldet]
+        results[far_halldet, near_halldet] = result * muon_eff * mult_eff
     return results, constants.reco_bins
 
 

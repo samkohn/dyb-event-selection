@@ -38,6 +38,8 @@ class FitConstants:
     total_emitted_by_AD : dict
     true_bins_spectrum : np.array
     input_osc_params: InputOscParams
+    muon_eff: dict
+    multiplicity_eff: dict
 
 @dataclass
 class FitParams:
@@ -86,6 +88,55 @@ def survival_probability(L, E, theta13, m2_ee, input_osc_params=default_osc_para
 
 def delta_ij(L, E, m2_ij):
     return 1.267 * m2_ij * L / E
+
+def muon_veto_efficiency(database):
+    """Compute the DAQ-livetime-weighted muon livetime efficiency by AD.
+
+    Return a dict of (hall, det) -> efficiency (as a float).
+    """
+    run_by_run = {}
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        for hall, det in all_ads:
+            cursor.execute('''SELECT Livetime_ns, Efficiency
+            FROM muon_rates NATURAL JOIN runs
+            WHERE Hall = ? AND DetNo = ?''', (hall, det))
+            run_by_run[hall, det] = np.array(cursor.fetchall())
+    to_return = {}
+    for (hall, det), by_run in run_by_run.items():
+        # Weighted average by total livetime.
+        # IMPORTANT: `Livetime_ns` is already multiplied by efficiency.
+        # True DAQ livetime = Livetime_ns/Efficiency
+        total_livetime_ns = by_run[:, 0]/by_run[:, 1]
+        efficiency = np.average(by_run[:, 1], weights=total_livetime_ns)
+        to_return[hall, det] = efficiency
+    return to_return
+
+def multiplicity_efficiency(database):
+    """Compute the DAQ-livetime-weighted multiplicity efficiency by AD.
+
+    Return a dict of (hall, det) -> efficiency (as a float).
+    """
+    run_by_run = {}
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        for hall, det in all_ads:
+            cursor.execute('''SELECT Livetime_ns, Efficiency,
+                MultiplicityVetoEfficiency
+            FROM (muon_rates NATURAL JOIN runs)
+                INNER JOIN singles_rates USING (RunNo, DetNo)
+            WHERE Hall = ? AND DetNo = ?''', (hall, det))
+            run_by_run[hall, det] = np.array(cursor.fetchall())
+    to_return = {}
+    for (hall, det), by_run in run_by_run.items():
+        # Weighted average by total livetime.
+        # IMPORTANT: `Livetime_ns` is already multiplied by efficiency.
+        # True DAQ livetime = Livetime_ns/Efficiency
+        total_livetime_ns = by_run[:, 0]/by_run[:, 1]
+        efficiency = np.average(by_run[:, 2], weights=total_livetime_ns)
+        to_return[hall, det] = efficiency
+    return to_return
+
 
 def reactor_spectrum(database, core):
     """Returns (spectrum, weekly_time_bins, energy_bins).

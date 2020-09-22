@@ -45,6 +45,16 @@ def single_uncorr_rate(R_single, R_corr, R_mu, Tc):
     prob_of_finishing_alone = poisson(0, (R_single + R_corr) * Tc)
     return opportunity_rate * prob_of_starting * prob_of_finishing_alone
 
+def multiplicity_efficiency(R_single, R_corr, R_mu, Tc):
+    """The multiplicity veto efficiency.
+
+    Probability of an event at a given time not lying within a previous
+    coincidence window and having no uncorrelated events within
+    its own coincidence window.
+    """
+    prob_of_starting = P_start(R_single + R_corr, R_mu, Tc)
+    prob_of_finishing_alone = poisson(0, (R_single + R_corr) * Tc)
+    return prob_of_starting * prob_of_finishing_alone
 
 def single_e_rate(R_single, R_corr, R_mu, Tc, neutron_efficiency):
     """The rate of single events due to IBD/correlated positrons."""
@@ -150,24 +160,29 @@ def main(infile, database, update_db, iteration, extra_cut):
     parameters = (R_corr, muon_rate, window_size, neutron_efficiency, tau_Gd,
             tau_LS, alpha)
     underlying_uncorr_rate = fsolve(lambda x: single_rate(x, *parameters) -
-            multiplicity_1_rate_Hz, multiplicity_1_rate_Hz)
+            multiplicity_1_rate_Hz, multiplicity_1_rate_Hz)[0]
+    multiplicity_eff = multiplicity_efficiency(underlying_uncorr_rate,
+            R_corr, muon_rate, window_size)
     if update_db:
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO singles_rates
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', (
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
                 runNo,
                 ad,
                 iteration,
-                underlying_uncorr_rate[0],
+                underlying_uncorr_rate,
                 multiplicity_1_count_error/livetime_s,
                 multiplicity_1_count,
                 multiplicity_1_rate_Hz,
-                R_corr))
+                R_corr,
+                multiplicity_eff,
+            ))
     else:
         print(f'multiplicity-1 rate: {multiplicity_1_rate_Hz} Hz')
         print(f'relative error: {100/multiplicity_1_count_error:.2f}%')
-        print(f'underlying uncorr. rate: {underlying_uncorr_rate[0]} Hz')
+        print(f'underlying uncorr. rate: {underlying_uncorr_rate} Hz')
+        print(f'multiplicity efficiency: {multiplicity_eff}')
     return
 
 if __name__ == '__main__':

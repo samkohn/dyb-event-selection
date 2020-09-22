@@ -34,7 +34,7 @@ def main(database, datafile_base, hall_constraint, det_constraint, update_db):
         lower = mean - 3 * width
         energy_bounds[row['Hall'], row['DetNo']] = (lower, upper)
     coincidences_by_det = {halldet: 0 for halldet in common.all_ads}
-    for run, hall in runs[:10]:
+    for run, hall in runs:
         if hall_constraint is not None and hall != hall_constraint:
             continue
         dets = common.dets_for(hall, run)  # Fetch AD numbers given EH and 6/8/7AD period
@@ -58,11 +58,16 @@ def main(database, datafile_base, hall_constraint, det_constraint, update_db):
                     f'({delayeds._NH_THU_DIST_TIME_CUT_STR})',
                     'goff'
             )
+            if update_db:
+                with sqlite3.Connection(database) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''INSERT OR REPLACE INTO num_coincidences_by_run
+                        VALUES (?, ?, ?, ?, "Nominal rate-only 9/17/2020")''',
+                        (run, det, json.dumps([num_candidates]), json.dumps([1500, 12000])))
+            else:
+                print(f'Finished Run {run} EH{hall}-AD{det}: {num_candidates}')
             coincidences_by_det[hall, det] += num_candidates
-            print(f'Finished Run {run} EH{hall}-AD{det}')
-    if update_db is None:
-        pprint.pprint(coincidences_by_det)
-    else:
+    if update_db:
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
             for (hall, det), num in coincidences_by_det.items():
@@ -70,6 +75,8 @@ def main(database, datafile_base, hall_constraint, det_constraint, update_db):
                     cursor.execute('''INSERT OR REPLACE INTO num_coincidences
                         VALUES (?, ?, ?, ?, "Nominal rate-only 9/17/2020")''',
                         (hall, det, json.dumps([num]), json.dumps([1500, 12000])))
+    else:
+        pprint.pprint(coincidences_by_det)
 
 
 if __name__ == '__main__':

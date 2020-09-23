@@ -24,8 +24,16 @@ near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
 
-def ad_dict(initial_value):
-    return dict(zip(all_ads, [initial_value]*len(all_ads)))
+def ad_dict(initial_value, halls='all'):
+    if halls == 'all':
+        ads = all_ads
+    elif halls == 'near':
+        ads = near_ads
+    elif halls == 'far':
+        ads = far_ads
+    else:
+        raise ValueError(f'Invalid halls: {halls} (must be "all", "near", or "far")')
+    return dict(zip(ads, [initial_value]*len(ads)))
 
 @dataclass
 class FitConstants:
@@ -46,18 +54,25 @@ class FitParams:
     theta13: float
     m2_ee: float
     pull_bg : dict
+    pull_near_stat : dict
     @classmethod
     def from_list(cls, in_list):
         theta13 = in_list[0]
         m2_ee = in_list[1]
+        # Background pull parameters
         pull_bg = {}
         for pull, halldet in zip(in_list[2:10], all_ads):
             pull_bg[halldet] = pull
-        return cls(theta13, m2_ee, pull_bg)
+        # Near statistics pull parameters
+        pull_near_stat = {}
+        for pull, halldet in zip(in_list[10:13], near_ads):
+            pull_near_stat[halldet] = pull
+        return cls(theta13, m2_ee, pull_bg, pull_near_stat)
     def to_list(self):
         return (
             [self.theta13, self.m2_ee]
             + [self.pull_bg[halldet] for halldet in all_ads]
+            + [self.pull_near_stat[halldet] for halldet in near_ads]
         )
 
 
@@ -386,7 +401,7 @@ def num_coincidences_per_AD(database, source):
     bins /= 1000
     return results, bins
 
-def fixed_efficiency_weighted_counts(constants):
+def fixed_efficiency_weighted_counts(constants, fit_params):
     """Adjust the observed counts by dividing by muon & multiplicity efficiencies.
 
     Returns a dict mapping (hall, det) to a 1D array of N_coincidences.
@@ -394,11 +409,17 @@ def fixed_efficiency_weighted_counts(constants):
     num_coincidences = constants.observed_candidates
     mult_effs = constants.multiplicity_eff
     muon_effs = constants.muon_eff
+    pull_near_stat = fit_params.pull_near_stat
     to_return = {}
     for halldet, coincidences in num_coincidences.items():
         mult_eff = mult_effs[halldet]
         muon_eff = muon_effs[halldet]
-        to_return[halldet] = coincidences / (mult_eff * muon_eff)
+        # Account for near hall statistics pull parameter
+        #if halldet in pull_near_stat:
+            #pulled_coincidences = (1 + pull_near_stat[halldet]) * coincidences
+        #else:
+        pulled_coincidences = coincidences
+        to_return[halldet] = pulled_coincidences / (mult_eff * muon_eff)
     return to_return
 
 def backgrounds_per_AD(database, source):
@@ -435,7 +456,7 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
 
     Returns the same style values as num_coincidences_per_AD.
     """
-    num_candidates = fixed_efficiency_weighted_counts(constants)
+    num_candidates = fixed_efficiency_weighted_counts(constants, fit_params)
     predicted_bg = constants.nominal_bgs
     results = {}
     for (hall, det), bg_spec in predicted_bg.items():

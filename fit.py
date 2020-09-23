@@ -26,6 +26,10 @@ def chi_square(constants, fit_params):
         numerator = pull*pull
         denominator = 0.010*0.010  # TODO relative error on accidentals
         chi_square += numerator/denominator
+    for halldet, pull in fit_params.pull_near_stat.items():
+        numerator = pull * pull
+        denominator = np.power(1/np.sqrt(constants.observed_candidates[halldet]), 2)
+        chi_square += numerator/denominator
     return chi_square
 
 def objective_fn(x, constants):
@@ -39,7 +43,10 @@ def fit(starting_params, constants):
     """
     positive = (0, None)
     nobound = (None, None)
-    bounds = [positive, (2.5e-3, 2.5e-3)] + [nobound] * 8
+    bounds = ([positive, (2.5e-3, 2.5e-3)]
+        + [nobound] * 8
+        + [nobound] * 4
+    )
 
     result = minimize(objective_fn, np.array(starting_params.to_list()),
             args=(constants,), bounds=bounds)
@@ -52,7 +59,12 @@ if __name__ == "__main__":
     parser.add_argument("database")
     args = parser.parse_args()
     constants = pred.default_constants(args.database)
-    starting_params = pred.FitParams(0.15, 2.5e-3, pred.ad_dict(0))
+    starting_params = pred.FitParams(
+            0.15,
+            2.5e-3,
+            pred.ad_dict(0),
+            pred.ad_dict(0, halls='near')
+    )
     print(chi_square(constants, starting_params))
     result = fit(starting_params, constants)
     print(result)

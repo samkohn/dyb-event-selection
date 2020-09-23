@@ -15,7 +15,7 @@ import delayeds
 def main(database, datafile_base, hall_constraint, det_constraint, update_db):
     import ROOT
     bins = [1500, 12000]
-    source = "Nominal rate-only 9/17/2020"
+    source = "Nominal rate-only 9/22/2020"
     with sqlite3.Connection(database) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -25,7 +25,7 @@ def main(database, datafile_base, hall_constraint, det_constraint, update_db):
         FROM (runs INNER JOIN singles_rates as singles USING (RunNo))
             INNER JOIN muon_rates as muons USING (RunNo, DetNo)
             INNER JOIN distance_time_eff_study USING (RunNo, DetNo)
-        WHERE PairingType = "random_many_resid_flasher"
+        WHERE PairingType = "random_many_expo_time"
         ORDER BY RunNo
         ''')
         runs = cursor.fetchall()
@@ -45,6 +45,8 @@ def main(database, datafile_base, hall_constraint, det_constraint, update_db):
         if hall_constraint is not None and hall != hall_constraint:
             continue
         if det_constraint is not None and det != det_constraint:
+            continue
+        if acc_DT_eff is None:
             continue
         r_ss = r_s * r_1fold * COINCIDENCE_WINDOW_S
         livetime_s = livetime_ns/1e9

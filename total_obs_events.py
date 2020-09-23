@@ -22,6 +22,9 @@ def main(database, datafile_base, hall_constraint, det_constraint, update_db):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('''SELECT RunNo, Hall FROM runs ORDER BY Hall, RunNo''')
+        #cursor.execute('''SELECT runs.RunNo, Hall FROM runs LEFT JOIN num_coincidences_by_run ON
+        #runs.RunNo = num_coincidences_by_run.RunNo WHERE num_coincidences_by_run.RunNo IS
+        #NULL;''')
         runs = cursor.fetchall()
         cursor.execute('''SELECT Hall, DetNo, Peak, Resolution
             FROM delayed_energy_fits''')

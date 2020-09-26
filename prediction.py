@@ -10,6 +10,7 @@ import json
 import logging
 import pdb
 import sqlite3
+from typing import Any
 
 import numpy as np
 
@@ -75,9 +76,20 @@ class FitParams:
             + [self.pull_near_stat[halldet] for halldet in near_ads]
         )
 
+@dataclass
+class Config:
+    database: Any
+    period: Any
+    backgrounds: Any
+    mult_eff: Any
+    muon_eff: Any
 
 
-def default_constants(database):
+def load_constants(config_file):
+    with open(config_file, 'r') as f:
+        config_dict = json.load(f)
+        config = Config(**config_dict)
+    database = config.database
     source_events = 'Nominal rate-only 9/17/2020'
     source_det_resp = 'THU ToyMC res_p:Ev No Cuts rate-only binning'
     matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(
@@ -85,9 +97,44 @@ def default_constants(database):
     )
     num_coincidences, reco_bins = num_coincidences_per_AD(database, source_events)
     total_emitted_by_AD, true_bins_spectrum = total_emitted(database, slice(None))
-    nominal_bgs, reco_bins = backgrounds_per_AD(database, source_events)
-    muon_eff = muon_veto_efficiency(database)
-    multiplicity_eff = multiplicity_efficiency(database)
+
+    # Parse backgrounds: Nominal, 0, hard-coded, or alternate database
+    if config.backgrounds is True:
+        nominal_bgs, reco_bins = backgrounds_per_AD(database, source_events)
+    elif config.backgrounds is False:
+        nominal_bgs = ad_dict(0)
+    elif isinstance(config.backgrounds, list):
+        bg_arrays = [np.array(bg) for bg in config.backgrounds]
+        nominal_bgs = dict(zip(all_ads, bg_arrays))
+    elif isinstance(config.backgrounds, str):
+        nominal_bgs, reco_bins = backgrounds_per_AD(config.backgrounds, source_events)
+    else:
+        raise ValueError(f"Invalid backgrounds specification: {config.backgrounds}")
+
+    # Parse muon_eff: Nominal, 1, hard-coded, or alternate database
+    if config.muon_eff is True:
+        muon_eff = muon_veto_efficiency(database)
+    elif config.muon_eff is False:
+        muon_eff = ad_dict(1)
+    elif isinstance(config.muon_eff, list):
+        muon_eff = dict(zip(all_ads, config.muon_eff))
+    elif isinstance(config.muon_eff, str):
+        muon_eff = muon_veto_efficiency(config.muon_eff)
+    else:
+        raise ValueError(f"Invalid muon_eff specification: {config.muon_eff}")
+
+    # Parse mult_eff: Nominal, 1, hard-coded, or alternate database
+    if config.mult_eff is True:
+        multiplicity_eff = multiplicity_efficiency(database)
+    elif config.mult_eff is False:
+        multiplicity_eff = ad_dict(1)
+    elif isinstance(config.mult_eff, list):
+        multiplicity_eff = dict(zip(all_ads, config.mult_eff))
+    elif isinstance(config.mult_eff, str):
+        multiplicity_eff = multiplicity_efficiency(config.mult_eff)
+    else:
+        raise ValueError(f"Invalid mult_eff specification: {config.mult_eff}")
+
     return FitConstants(
             matrix,
             true_bins_response,
@@ -726,9 +773,9 @@ distances = {
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('database')
+    parser.add_argument('config')
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
-    constants = default_constants(args.database)
-    fit_params = FitParams(0.15, 2.5e-3, dict(zip(all_ads, [0]*len(all_ads))))
+    constants = load_constants(args.config)
+    fit_params = FitParams(0.15, 2.5e-3, ad_dict(0), ad_dict(0))
     print(predict_halls(constants, fit_params))

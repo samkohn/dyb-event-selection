@@ -78,11 +78,64 @@ class FitParams:
 
 @dataclass
 class Config:
-    database: Any
+    database: str
     period: Any
     backgrounds: Any
+    backgrounds_source: str
     mult_eff: Any
     muon_eff: Any
+    num_coincs: Any
+    num_coincs_source: str
+    reco_bins: Any
+    det_response_source: str
+
+@dataclass
+class ADPeriod:
+    name: str
+    start_week: int
+    end_week: int
+    start_run: int
+    end_run: int
+    start_time_s: int
+    end_time_s: int
+    live_ads: list
+
+# Hard-code AD Period constants
+period_6ad = ADPeriod(
+        name="6ad",
+        start_week=0,
+        end_week=31,  # TODO double-check
+        start_run=21221,
+        end_run=26694,
+        start_time_s=1324684800,
+        end_time_s=1344038400,
+        live_ads=near_ads[:-1] + far_ads[:-1],
+)
+period_8ad = ADPeriod(
+        name="8ad",
+        start_week=42,
+        end_week=260,
+        start_run=34523,
+        end_run=67012,
+        start_time_s=1350086400,
+        end_time_s=1482537600,
+        live_ads=all_ads,
+)
+period_7ad = ADPeriod(
+        name="7ad",
+        start_week=265,
+        end_week=296,
+        start_run=67625,
+        end_run=72455,
+        start_time_s=1484956800,
+        end_time_s=1504310400,
+        live_ads=all_ads[1:],
+)
+ad_periods = {
+        "6ad": period_6ad,
+        "8ad": period_8ad,
+        "7ad": period_7ad,
+}
 
 
 def load_constants(config_file):
@@ -90,24 +143,47 @@ def load_constants(config_file):
         config_dict = json.load(f)
         config = Config(**config_dict)
     database = config.database
-    source_events = 'Nominal rate-only 9/17/2020'
-    source_det_resp = 'THU ToyMC res_p:Ev No Cuts rate-only binning'
+    ad_period = ad_periods[config.period]
+    source_det_resp = config.det_response_source
     matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(
             database, source_det_resp
     )
-    num_coincidences, reco_bins = num_coincidences_per_AD(database, source_events)
-    total_emitted_by_AD, true_bins_spectrum = total_emitted(database, slice(None))
+    total_emitted_by_AD, true_bins_spectrum = total_emitted(
+            database, slice(ad_period.start_week, ad_period.end_week+1)
+    )
+
+    # Parse num coincidences: Nominal, 0, hard-coded, or alternate database
+    coincs_source = config.num_coincs_source
+    if config.num_coincs is True:
+        num_coincidences, reco_bins = num_coincidences_per_AD(database, coincs_source)
+    elif config.num_coincs is False:
+        num_coincidences = ad_dict(0)
+        reco_bins = config.reco_bins
+    elif isinstance(config.num_coincs, list):
+        coinc_arrays = [np.array(coincs) for coincs in config.num_coincs]
+        num_coincidences = dict(zip(all_ads, coinc_arrays))
+        reco_bins = config.reco_bins
+    elif isinstance(config.num_coincs, str):
+        num_coincidences, reco_bins = num_coincidences_per_AD(
+                config.num_coincs, coincs_source
+        )
+    else:
+        raise ValueError(
+                f"Invalid num coincidences specification: {config.num_coincs}"
+        )
 
     # Parse backgrounds: Nominal, 0, hard-coded, or alternate database
+    backgrounds_source = config.backgrounds_source
     if config.backgrounds is True:
-        nominal_bgs, reco_bins = backgrounds_per_AD(database, source_events)
+        nominal_bgs, reco_bins = backgrounds_per_AD(database, backgrounds_source)
     elif config.backgrounds is False:
         nominal_bgs = ad_dict(0)
     elif isinstance(config.backgrounds, list):
         bg_arrays = [np.array(bg) for bg in config.backgrounds]
         nominal_bgs = dict(zip(all_ads, bg_arrays))
     elif isinstance(config.backgrounds, str):
-        nominal_bgs, reco_bins = backgrounds_per_AD(config.backgrounds, source_events)
+        nominal_bgs, reco_bins = backgrounds_per_AD(config.backgrounds,
+                backgrounds_source)
     else:
         raise ValueError(f"Invalid backgrounds specification: {config.backgrounds}")
 

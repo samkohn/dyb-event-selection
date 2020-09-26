@@ -38,14 +38,14 @@ def ad_dict(initial_value, halls='all'):
 
 @dataclass
 class FitConstants:
-    detector_response : dict
-    true_bins_response : np.array
-    reco_bins_response : np.array
-    observed_candidates : dict
-    nominal_bgs : dict
-    reco_bins : np.array
-    total_emitted_by_AD : dict
-    true_bins_spectrum : np.array
+    detector_response: dict
+    true_bins_response: np.array
+    reco_bins_response: np.array
+    observed_candidates: dict
+    nominal_bgs: dict
+    reco_bins: np.array
+    total_emitted_by_AD: dict
+    true_bins_spectrum: np.array
     input_osc_params: InputOscParams
     muon_eff: dict
     multiplicity_eff: dict
@@ -54,8 +54,8 @@ class FitConstants:
 class FitParams:
     theta13: float
     m2_ee: float
-    pull_bg : dict
-    pull_near_stat : dict
+    pull_bg: dict
+    pull_near_stat: dict
     @classmethod
     def from_list(cls, in_list):
         theta13 = in_list[0]

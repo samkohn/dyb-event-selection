@@ -544,10 +544,10 @@ def fixed_efficiency_weighted_counts(constants, fit_params):
         mult_eff = mult_effs[halldet]
         muon_eff = muon_effs[halldet]
         # Account for near hall statistics pull parameter
-        #if halldet in pull_near_stat:
-            #pulled_coincidences = (1 + pull_near_stat[halldet]) * coincidences
-        #else:
-        pulled_coincidences = coincidences
+        if halldet in pull_near_stat:
+            pulled_coincidences = (1 + pull_near_stat[halldet]) * coincidences
+        else:
+            pulled_coincidences = coincidences
         to_return[halldet] = pulled_coincidences / (mult_eff * muon_eff)
     return to_return
 

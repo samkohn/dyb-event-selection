@@ -18,9 +18,10 @@ import numpy as np
 class InputOscParams:
     theta12: float
     m2_21: float
+    m2_ee: float
 
-default_osc_params = InputOscParams(33.44*np.pi/180, 7.42e-5)
-no_osc_params = InputOscParams(0, 0)
+default_osc_params = InputOscParams(33.6469*np.pi/180, 7.53e-5, 2.48e-3)
+no_osc_params = InputOscParams(0, 0, 0)
 near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
@@ -53,25 +54,25 @@ class FitConstants:
 @dataclass
 class FitParams:
     theta13: float
-    m2_ee: float
+    # m2_ee: float
     pull_bg: dict
     pull_near_stat: dict
     @classmethod
     def from_list(cls, in_list):
         theta13 = in_list[0]
-        m2_ee = in_list[1]
+        # m2_ee = in_list[1]
         # Background pull parameters
         pull_bg = {}
-        for pull, halldet in zip(in_list[2:10], all_ads):
+        for pull, halldet in zip(in_list[1:9], all_ads):
             pull_bg[halldet] = pull
         # Near statistics pull parameters
         pull_near_stat = {}
-        for pull, halldet in zip(in_list[10:13], near_ads):
+        for pull, halldet in zip(in_list[9:13], near_ads):
             pull_near_stat[halldet] = pull
-        return cls(theta13, m2_ee, pull_bg, pull_near_stat)
+        return cls(theta13, pull_bg, pull_near_stat)
     def to_list(self):
         return (
-            [self.theta13, self.m2_ee]
+            [self.theta13]
             + [self.pull_bg[halldet] for halldet in all_ads]
             + [self.pull_near_stat[halldet] for halldet in near_ads]
         )
@@ -443,7 +444,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
                     distance_m,
                     constants.true_bins_spectrum,
                     fit_params.theta13,
-                    fit_params.m2_ee,
+                    constants.input_osc_params.m2_ee,
                     input_osc_params=constants.input_osc_params
             )
             numerators[:, core-1] = spec * p_osc / distance_m**2
@@ -475,7 +476,7 @@ def extrapolation_factor(constants, fit_params):
                     distance_m,
                     constants.true_bins_spectrum,
                     fit_params.theta13,
-                    fit_params.m2_ee,
+                    constants.input_osc_params.m2_ee,
                     input_osc_params=constants.input_osc_params
             )
             denominators[:, core-1] = spec * p_osc / distance_m**2
@@ -491,7 +492,7 @@ def extrapolation_factor(constants, fit_params):
                         distance_m,
                         constants.true_bins_spectrum,
                         fit_params.theta13,
-                        fit_params.m2_ee,
+                        constants.input_osc_params.m2_ee,
                         input_osc_params=constants.input_osc_params
                 )
                 numerators[:, core-1] = spec * p_osc / distance_m**2

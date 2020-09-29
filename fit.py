@@ -61,7 +61,7 @@ if __name__ == "__main__":
     constants = pred.default_constants(args.database)
     starting_params = pred.FitParams(
             0.15,
-            2.5e-3,
+            # 2.48e-3,
             pred.ad_dict(0),
             pred.ad_dict(0, halls='near')
     )

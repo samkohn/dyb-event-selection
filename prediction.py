@@ -50,6 +50,7 @@ class FitConstants:
     input_osc_params: InputOscParams
     muon_eff: dict
     multiplicity_eff: dict
+    masses: dict
 
 @dataclass
 class FitParams:
@@ -85,6 +86,7 @@ class Config:
     backgrounds_source: str
     mult_eff: Any
     muon_eff: Any
+    masses: Any
     num_coincs: Any
     num_coincs_source: str
     reco_bins: Any
@@ -212,6 +214,8 @@ def load_constants(config_file):
     else:
         raise ValueError(f"Invalid mult_eff specification: {config.mult_eff}")
 
+    masses = dict(zip(all_ads, config.masses))
+
     return FitConstants(
             matrix,
             true_bins_response,
@@ -223,7 +227,8 @@ def load_constants(config_file):
             true_bins_spectrum,
             default_osc_params,
             muon_eff,
-            multiplicity_eff
+            multiplicity_eff,
+            masses,
     )
 
 
@@ -715,15 +720,20 @@ def predict_ad_to_ad_obs(constants, fit_params):
     predicted_bg = constants.nominal_bgs
     muon_effs = constants.muon_eff
     mult_effs = constants.multiplicity_eff
+    masses = constants.masses
     results = f_ki.copy()
-    for (far_hall, far_det), near_halldet in f_ki:
+    for (far_hall, far_det), near_halldet in f_ki.keys():
         bg_for_far = predicted_bg[far_hall, far_det]
         pull = fit_params.pull_bg[far_hall, far_det]
         results[(far_hall, far_det), near_halldet] += bg_for_far * (1 + pull)
     for (far_halldet, near_halldet), result in results.items():
         muon_eff = muon_effs[far_halldet]
         mult_eff = mult_effs[far_halldet]
-        results[far_halldet, near_halldet] = result * muon_eff * mult_eff
+        mass_far = masses[far_halldet]
+        mass_near = masses[near_halldet]
+        results[far_halldet, near_halldet] = (
+                result * muon_eff * mult_eff * mass_far/mass_near
+        )
     return results, constants.reco_bins
 
 

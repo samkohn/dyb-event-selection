@@ -37,6 +37,9 @@ def ad_dict(initial_value, halls='all'):
         raise ValueError(f'Invalid halls: {halls} (must be "all", "near", or "far")')
     return dict(zip(ads, [initial_value]*len(ads)))
 
+def core_dict(initial_value):
+    return dict(zip(range(1, 7), [initial_value] * 6))
+
 @dataclass
 class FitConstants:
     detector_response: dict
@@ -58,6 +61,8 @@ class FitParams:
     # m2_ee: float
     pull_bg: dict
     pull_near_stat: dict
+    pull_reactor: dict
+    pull_efficiency: dict
     @classmethod
     def from_list(cls, in_list):
         theta13 = in_list[0]
@@ -70,12 +75,22 @@ class FitParams:
         pull_near_stat = {}
         for pull, halldet in zip(in_list[9:13], near_ads):
             pull_near_stat[halldet] = pull
-        return cls(theta13, pull_bg, pull_near_stat)
+        # Reactor pull parameters
+        pull_reactor = {}
+        for i, pull in enumerate(in_list[13:19]):
+            pull_reactor[i + 1] = pull
+        # Detection efficiency pull parameters
+        pull_efficiency = {}
+        for pull, halldet in zip(in_list[19:27], all_ads):
+            pull_efficiency[halldet] = pull
+        return cls(theta13, pull_bg, pull_near_stat, pull_reactor, pull_efficiency)
     def to_list(self):
         return (
             [self.theta13]
             + [self.pull_bg[halldet] for halldet in all_ads]
             + [self.pull_near_stat[halldet] for halldet in near_ads]
+            + [self.pull_reactor[core] for core in range(1, 7)]
+            + [self.pull_efficiency[halldet] for halldet in all_ads]
         )
 
 @dataclass
@@ -326,7 +341,7 @@ def reactor_spectrum(database, core):
     weekly_power_frac = power_fissionfrac_history[:, 2]
     weekly_fissionfracs = power_fissionfrac_history[:, 3:7]
     MEV_PER_GIGAJOULE = 6.24150907e21
-    NOMINAL_POWER_GW = 2.9
+    NOMINAL_POWER_GW = 2.95
     NOMINAL_POWER_MEV_PER_S = NOMINAL_POWER_GW * MEV_PER_GIGAJOULE
     weekly_num_fissions = NOMINAL_POWER_MEV_PER_S * weekly_power_frac / np.sum(weekly_fissionfracs *
             energy_per_fission, axis=1)
@@ -440,6 +455,9 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
         numerators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
             spec = constants.total_emitted_by_AD[(hall, det), core]
+            # Apply the reactor pull parameter
+            pull = fit_params.pull_reactor[core]
+            spec = (1 + pull) * spec
             # Split the label "D1", "L2", etc.
             # into D or L (core_group) and the core index within the group.
             core_group = distance_conversion[core][0]
@@ -472,6 +490,9 @@ def extrapolation_factor(constants, fit_params):
         denominators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
             spec = constants.total_emitted_by_AD[(near_hall, near_det), core]
+            # Apply the reactor pull parameter
+            pull = fit_params.pull_reactor[core]
+            spec = (1 + pull) * spec
             # Split the label "D1", "L2", etc.
             # into D or L (core_group) and the core index within the group.
             core_group = distance_conversion[core][0]
@@ -488,6 +509,9 @@ def extrapolation_factor(constants, fit_params):
             numerators = np.zeros_like(denominators)
             for (far_hall, far_det) in far_ads:
                 spec = constants.total_emitted_by_AD[(far_hall, far_det), core]
+                # Apply the reactor pull parameter
+                pull = fit_params.pull_reactor[core]
+                spec = (1 + pull) * spec
                 # Split the label "D1", "L2", etc.
                 # into D or L (core_group) and the core index within the group.
                 core_group = distance_conversion[core][0]
@@ -530,8 +554,12 @@ def num_coincidences_per_AD(database, source):
     bins /= 1000
     return results, bins
 
-def fixed_efficiency_weighted_counts(constants, fit_params):
-    """Adjust the observed counts by dividing by muon & multiplicity efficiencies.
+def efficiency_weighted_counts(constants, fit_params):
+    """Adjust the observed counts by dividing by efficiencies.
+
+    This includes the muon and multiplicity efficiencies as well as
+    the detection efficiency pull parameter.
+    The actual detection efficiency is not included since it is common to all ADs.
 
     Returns a dict mapping (hall, det) to a 1D array of N_coincidences.
     """
@@ -543,12 +571,13 @@ def fixed_efficiency_weighted_counts(constants, fit_params):
     for halldet, coincidences in num_coincidences.items():
         mult_eff = mult_effs[halldet]
         muon_eff = muon_effs[halldet]
+        pull_eff = fit_params.pull_efficiency[halldet]
         # Account for near hall statistics pull parameter
         if halldet in pull_near_stat:
             pulled_coincidences = (1 + pull_near_stat[halldet]) * coincidences
         else:
             pulled_coincidences = coincidences
-        to_return[halldet] = pulled_coincidences / (mult_eff * muon_eff)
+        to_return[halldet] = pulled_coincidences / (mult_eff * muon_eff * (1+pull_eff))
     return to_return
 
 def backgrounds_per_AD(database, source):
@@ -585,7 +614,7 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
 
     Returns the same style values as num_coincidences_per_AD.
     """
-    num_candidates = fixed_efficiency_weighted_counts(constants, fit_params)
+    num_candidates = efficiency_weighted_counts(constants, fit_params)
     predicted_bg = constants.nominal_bgs
     results = {}
     for (hall, det), bg_spec in predicted_bg.items():
@@ -729,10 +758,11 @@ def predict_ad_to_ad_obs(constants, fit_params):
     for (far_halldet, near_halldet), result in results.items():
         muon_eff = muon_effs[far_halldet]
         mult_eff = mult_effs[far_halldet]
+        pull_eff = fit_params.pull_efficiency[far_halldet]
         mass_far = masses[far_halldet]
         mass_near = masses[near_halldet]
         results[far_halldet, near_halldet] = (
-                result * muon_eff * mult_eff * mass_far/mass_near
+                result * muon_eff * mult_eff * mass_far/mass_near * (1 + pull_eff)
         )
     return results, constants.reco_bins
 
@@ -864,5 +894,11 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
     constants = load_constants(args.config)
-    fit_params = FitParams(0.15, 2.5e-3, ad_dict(0), ad_dict(0))
-    print(predict_halls(constants, fit_params))
+    fit_params = FitParams(
+            0.15,
+            ad_dict(0),
+            ad_dict(0, halls='near'),
+            core_dict(0),
+            ad_dict(0),
+    )
+    print(predict_ad_to_ad_obs(constants, fit_params))

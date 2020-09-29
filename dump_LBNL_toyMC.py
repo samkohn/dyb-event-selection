@@ -6,7 +6,7 @@ import sqlite3
 
 from prediction import all_ads
 
-def main(infilename, entry_number, update_db, source):
+def main(infilename, entry_number, update_db, source, rate_only):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     host_ttree = infile.Get('tr')
@@ -30,6 +30,20 @@ def main(infilename, entry_number, update_db, source):
         bins_halldet.append(int(hist.GetBinLowEdge(nbins + 1) * 1000))  # last bin upper edge
         num_ibds[halldet] = num_ibds_halldet
         bins[halldet] = bins_halldet
+    # Create rate-only binning
+    num_ibds_rateonly = {}
+    bins_rateonly = {}
+    for halldet, num_ibds_binned in num_ibds.items():
+        num = 0
+        split_bin = num_ibds_binned[3]  # 1.4, 1.6 MeV
+        num += split_bin/2
+        for val in num_ibds_binned[4:]:
+            num += val
+        num_ibds_rateonly[halldet] = [num]
+        bins_rateonly[halldet] = [1500, 12000]
+    if rate_only:
+        num_ibds = num_ibds_rateonly
+        bins = bins_rateonly
     if update_db is None:
         print('Not updating the db')
     else:
@@ -48,7 +62,8 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--entry-number', type=int, default=0)
     parser.add_argument('--update-db')
     parser.add_argument('--source', default='LBNL toymc')
+    parser.add_argument('--rate-only', action='store_true')
     args = parser.parse_args()
 
-    main(args.toy_output, args.entry_number, args.update_db, args.source)
+    main(args.toy_output, args.entry_number, args.update_db, args.source, args.rate_only)
 

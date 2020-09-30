@@ -36,7 +36,13 @@ def main(infilename, entry_number, update_db, source, rate_only):
     for halldet, num_ibds_binned in num_ibds.items():
         num = 0
         split_bin = num_ibds_binned[3]  # 1.4, 1.6 MeV
-        num += split_bin/2
+        next_bin = num_ibds_binned[4]  # 1.6, 1.8 MeV
+        # Linear interpolation: need # from 1.5 to 1.6 MeV
+        val_at_1_5 = split_bin
+        val_at_1_6 = (split_bin + next_bin)/2
+        # Trapezoid volume: 1/2 (b1 + b2) * width
+        trap_volume = 0.5 * (val_at_1_5 + val_at_1_6) * 0.5
+        num += trap_volume
         for val in num_ibds_binned[4:]:
             num += val
         num_ibds_rateonly[halldet] = [num]

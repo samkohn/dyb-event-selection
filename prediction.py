@@ -337,6 +337,11 @@ def reactor_spectrum(database, core):
         nuebar_spectrum_with_bins = np.array(cursor.fetchall())
         energy_bins = nuebar_spectrum_with_bins[:, 0]
         nuebar_spectrum = nuebar_spectrum_with_bins[:, 1:5]
+        cursor.execute('''SELECT U235, U238, Pu239, Pu241 FROM nonequilibrium
+            WHERE Source = "DybBerkFit make_combined_spectra_P17B_unblinded.C"
+            ORDER BY Energy''')
+        nonequilibrium = np.array(cursor.fetchall())
+    nuebar_spectrum = nuebar_spectrum * nonequilibrium
     weekly_time_bins = power_fissionfrac_history[:, 0:2]
     weekly_power_frac = power_fissionfrac_history[:, 2]
     weekly_fissionfracs = power_fissionfrac_history[:, 3:7]

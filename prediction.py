@@ -398,6 +398,17 @@ def livetime_by_week(database, weekly_time_bins):
                 weekly_livetimes_s[time_index] += in_next_week
 
         by_week[(hall, det)] = weekly_livetimes_s
+    mc_corrections = {(1, 1): 4.445342402310752e-06,
+ (1, 2): 4.5343298147423175e-06,
+ (2, 1): 1.0546587931834448e-05,
+ (2, 2): 1.0523020263115215e-05,
+ (3, 1): 5.837502639759078e-05,
+ (3, 2): 5.8327610278713265e-05,
+ (3, 3): 6.88640992131794e-05,
+ (3, 4): 5.8191618278611e-05}
+    for halldet in by_week:
+        by_week[halldet] = by_week[halldet] * (1 + mc_corrections[halldet])
+
     return by_week
 
 def total_emitted(database, week_range):

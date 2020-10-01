@@ -1,5 +1,6 @@
 import argparse
 from pprint import pprint
+import sqlite3
 import sys
 
 import numpy as np
@@ -133,12 +134,26 @@ def chi_square_grid(starting_params, constants, theta13_values):
     starting_params.theta13 = best_theta13  # restore original value
     return result
 
+def save_result(database, source, index, theta13_best, theta13_low_err, theta13_up_err, chi_square):
+    """Save the specified results to the database.
+    """
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        sin2_best, sin2_low, sin2_up = np.power(np.sin(2*np.array(
+            [theta13_best, theta13_low_err, theta13_up_err]
+        )), 2)
+        cursor.execute('''INSERT OR REPLACE INTO toymc_tests
+        VALUES (?, ?, ?, ?, ?, ?, ?)''',
+        (source, index, sin2_best, chi_square, 3, sin2_up, sin2_low))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
     parser.add_argument("--no-fit", action='store_true')
     parser.add_argument("--scan", action='store_true')
+    parser.add_argument("--source")
+    parser.add_argument("--source-index", type=int)
+    parser.add_argument("--update-db")
     args = parser.parse_args()
     constants = pred.load_constants(args.config)
     starting_params = pred.FitParams(
@@ -152,19 +167,21 @@ if __name__ == "__main__":
     print(chi_square(constants, starting_params))
     print(chi_square(constants, starting_params, return_array=True))
     if not args.no_fit:
-        result = fit_lsq_frozen(starting_params, constants, {})
+        result = fit_lsq_frozen(starting_params, constants, range(1, 9))
         print(repr(result.x))
         print('sin22theta13 =', np.power(np.sin(2*result.x[0]), 2))
         print(result.success)
         print(result.message)
         if not result.success:
             sys.exit(0)
-        fit_params = pred.FitParams.from_list(result.x)
+        fit_params = pred.FitParams.from_list(
+                [result.x[0]] + [0] * 8 + result.x[1:].tolist()
+        )
         print(chi_square(constants, fit_params, return_array=False))
         print(chi_square(constants, fit_params, return_array=True))
         print(fit_params)
         print("Observed & Predicted & Avg Predicted")
-        chi_square(constants, fit_params, debug=True)
+        min_chi2 = chi_square(constants, fit_params, debug=True)
         if args.scan:
             print("Chi-square scan")
             theta13 = fit_params.theta13
@@ -173,4 +190,19 @@ if __name__ == "__main__":
             values = np.linspace(low_value, up_value, 15)
             grid = (chi_square_grid(fit_params, constants, values))
             pprint(dict(zip(values, grid)))
-            pprint(dict(zip(np.power(np.sin(2*values), 2), np.sqrt(grid - np.min(grid)))))
+            pprint(dict(zip(np.power(np.sin(2*values), 2), np.sqrt(grid - min_chi2 + 1e-6))))
+            delta_chi2 = np.sqrt(grid - min_chi2 + 1e-6)
+            first_inside_1_index = None
+            last_inside_1_index = None
+            for i, d in enumerate(delta_chi2):
+                if d < 1 and first_inside_1_index is None:
+                    first_inside_1_index = i
+                if d > 1 and first_inside_1_index is not None:
+                    last_inside_1_index = i - 1
+                    break
+            theta13_low = values[first_inside_1_index]
+            theta13_up = values[last_inside_1_index]
+            if args.update_db is not None:
+                save_result(args.update_db, args.source, args.source_index,
+                        theta13, theta13_low, theta13_up, min_chi2)
+

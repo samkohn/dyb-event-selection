@@ -821,42 +821,46 @@ def average_bins(values_fine, bins_fine, bins_coarse):
     - and that all inputs are 1D arrays.
     """
     # Test assumptions
-    #test_bins = len(values_fine) + 1 == len(bins_fine)
-    #test_start_bin = np.isclose(bins_fine[0], bins_coarse[0])
-    #test_end_bin = np.isclose(bins_fine[-1], bins_coarse[-1])
-    #test_fine_really_fine = len(bins_coarse) < len(bins_fine)
-    #test_no_crossings = True  # Trust the user!
     bin_weights = np.diff(bins_fine)
-    #test_increasing = np.all(bin_weights > 0)
-    #test_1D = True  # Trust the user!
-    #if not np.all([
-        #test_bins, test_start_bin, test_end_bin,
-        #test_fine_really_fine, test_no_crossings,
-        #test_increasing, test_1D
-    #]):
-        #print(bins_fine[0], bins_coarse[0])
-        #print(bins_fine[-1], bins_coarse[-1])
-        #raise ValueError("Invalid inputs. Check assumptions!")
     values_coarse = np.empty((len(bins_coarse)-1,))
     fine_index = 0
     fine_up_edge = bins_fine[0]  # initial value only for first comparison in while loop
-    for coarse_index, coarse_up_edge in enumerate(bins_coarse[1:]):
-        next_coarse_value = 0
-        next_coarse_weights_sum = 0
-        #while not np.isclose(fine_up_edge, coarse_up_edge):
-        while fine_up_edge != coarse_up_edge:
-            #if fine_up_edge > coarse_up_edge:
-                #print(fine_up_edge, coarse_up_edge)
-                #return
-            fine_up_edge = bins_fine[fine_index + 1]
-            fine_value = values_fine[fine_index]
-            fine_weight = bin_weights[fine_index]
-            next_coarse_value += fine_value * fine_weight
-            next_coarse_weights_sum += fine_weight
-            fine_index += 1
-        # Then we can finalize the bin
-        next_coarse_value /= next_coarse_weights_sum
-        values_coarse[coarse_index] = next_coarse_value
+    try:
+        for coarse_index, coarse_up_edge in enumerate(bins_coarse[1:]):
+            next_coarse_value = 0
+            next_coarse_weights_sum = 0
+            #while not np.isclose(fine_up_edge, coarse_up_edge):
+            while fine_up_edge != coarse_up_edge:
+                if fine_up_edge > coarse_up_edge:
+                    print(fine_up_edge, coarse_up_edge)
+                    raise ValueError('Bin edge mismatch')
+                fine_up_edge = bins_fine[fine_index + 1]
+                fine_value = values_fine[fine_index]
+                fine_weight = bin_weights[fine_index]
+                next_coarse_value += fine_value * fine_weight
+                next_coarse_weights_sum += fine_weight
+                fine_index += 1
+            # Then we can finalize the bin
+            next_coarse_value /= next_coarse_weights_sum
+            values_coarse[coarse_index] = next_coarse_value
+    except:
+        test_bins = len(values_fine) + 1 == len(bins_fine)
+        test_start_bin = np.isclose(bins_fine[0], bins_coarse[0])
+        test_end_bin = np.isclose(bins_fine[-1], bins_coarse[-1])
+        test_fine_really_fine = len(bins_coarse) < len(bins_fine)
+        test_no_crossings = True  # Trust the user!
+        test_increasing = np.all(bin_weights > 0)
+        test_1D = True  # Trust the user!
+        print(bins_fine[0], bins_coarse[0])
+        print(bins_fine[-1], bins_coarse[-1])
+        print(f'''correct fine binning: {test_bins}
+        start bins match: {test_start_bin}
+        end bins match: {test_end_bin}
+        fine finer than coarse: {test_fine_really_fine}
+        not sure about no bin crossings?
+        bins strictly increasing: {test_increasing}
+        not sure about accurate 1D arrays''')
+        raise
     return values_coarse
 
 

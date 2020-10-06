@@ -8,7 +8,7 @@ from scipy.optimize import least_squares
 
 import prediction as pred
 
-def chi_square(constants, fit_params, return_array=False, debug=False):
+def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=None):
     """Compute the chi-square value for a single set of parameters.
 
     Set return_array=True to return an array of terms rather than the sum.
@@ -23,9 +23,15 @@ def chi_square(constants, fit_params, return_array=False, debug=False):
     term_index = 0
 
     # Average the near-hall predictions
+    if near_ads is None:
+        denominator = 4
+        near_ads = pred.near_ads
+    else:
+        denominator = len(near_ads)
     predicted_avg = pred.ad_dict(0, halls='far')
     for (far_halldet, near_halldet), n_predicted in predicted.items():
-        predicted_avg[far_halldet] += n_predicted/4
+        if near_halldet in near_ads:
+            predicted_avg[far_halldet] += n_predicted/denominator
     if debug:
         pprint(predicted_avg)
 
@@ -70,16 +76,17 @@ def chi_square(constants, fit_params, return_array=False, debug=False):
     else:
         return sum(chi_square)
 
-def residual_fn(x, constants):
+def residual_fn(x, constants, near_ads=None):
     """Convert arguments from scipy to desired format and return the residuals.
     """
     fit_params = pred.FitParams.from_list(x)
     # Take the square root because the fitter wants the linear residuals
     # and squares them on its own...
-    residuals = np.sqrt(chi_square(constants, fit_params, return_array=True))
+    residuals = np.sqrt(chi_square(constants, fit_params, return_array=True,
+        near_ads=near_ads))
     return residuals
 
-def residual_frozen_param(frozen_dict):
+def residual_frozen_param(frozen_dict, near_ads):
     """Return a residuals function but with certain parameters frozen.
 
     Frozen parameters should be expressed as ``index: value`` pairs,
@@ -105,10 +112,10 @@ def residual_frozen_param(frozen_dict):
             else:
                 param_list.append(x[x_index])
                 x_index += 1
-        return residual_fn(param_list, constants)
+        return residual_fn(param_list, constants, near_ads=near_ads)
     return residual
 
-def fit_lsq_frozen(starting_params, constants, frozen_params):
+def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads):
     """Perform the fit with certain parameters frozen."""
     frozen_params_dict = {}
     all_params = starting_params.to_list()
@@ -118,7 +125,7 @@ def fit_lsq_frozen(starting_params, constants, frozen_params):
             frozen_params_dict[i] = param
         else:
             x0.append(param)
-    residual = residual_frozen_param(frozen_params_dict)
+    residual = residual_frozen_param(frozen_params_dict, near_ads)
     result = least_squares(residual, x0, args=(constants,), method='trf')
     return result
 
@@ -129,7 +136,7 @@ def chi_square_grid(starting_params, constants, theta13_values):
     result = np.zeros((len(theta13_values)))
     for i, theta13 in enumerate(theta13_values):
         starting_params.theta13 = theta13
-        fit_result = fit_lsq_frozen(starting_params, constants, [0])
+        fit_result = fit_lsq_frozen(starting_params, constants, [0], None)
         result[i] = np.power(fit_result.fun, 2).sum()
     starting_params.theta13 = best_theta13  # restore original value
     return result
@@ -167,7 +174,9 @@ if __name__ == "__main__":
     print(chi_square(constants, starting_params))
     print(chi_square(constants, starting_params, return_array=True))
     if not args.no_fit:
-        result = fit_lsq_frozen(starting_params, constants, range(1, 9))
+        near_ads = None
+        result = fit_lsq_frozen(starting_params, constants, range(1, 9),
+                near_ads=near_ads)
         print(repr(result.x))
         print('sin22theta13 =', np.power(np.sin(2*result.x[0]), 2))
         print(result.success)
@@ -177,11 +186,11 @@ if __name__ == "__main__":
         fit_params = pred.FitParams.from_list(
                 [result.x[0]] + [0] * 8 + result.x[1:].tolist()
         )
-        print(chi_square(constants, fit_params, return_array=False))
-        print(chi_square(constants, fit_params, return_array=True))
+        print(chi_square(constants, fit_params, return_array=False, near_ads=near_ads))
+        print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads))
         print(fit_params)
         print("Observed & Predicted & Avg Predicted")
-        min_chi2 = chi_square(constants, fit_params, debug=True)
+        min_chi2 = chi_square(constants, fit_params, debug=True, near_ads=near_ads)
         if args.scan:
             print("Chi-square scan")
             theta13 = fit_params.theta13

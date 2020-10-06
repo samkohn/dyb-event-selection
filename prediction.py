@@ -341,7 +341,12 @@ def reactor_spectrum(database, core):
             WHERE Source = "DybBerkFit make_combined_spectra_P17B_unblinded.C"
             ORDER BY Energy''')
         nonequilibrium = np.array(cursor.fetchall())
-    nuebar_spectrum = nuebar_spectrum * nonequilibrium
+        cursor.execute('''SELECT CorrectionFactor FROM snf_correction
+            WHERE Source = "DybBerkFit make_combined_spectra_P17B_unblinded.C"
+            AND Core = ?
+            ORDER BY Energy''', (core,))
+        snf_correction = np.array(cursor.fetchall())
+    nuebar_spectrum = nuebar_spectrum * nonequilibrium * snf_correction
     weekly_time_bins = power_fissionfrac_history[:, 0:2]
     weekly_power_frac = power_fissionfrac_history[:, 2]
     weekly_fissionfracs = power_fissionfrac_history[:, 3:7]

@@ -133,6 +133,59 @@ def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads):
     result = least_squares(residual, x0, args=(constants,), method='trf')
     return result
 
+def sigma_searcher(fit_params, constants, side='both'):
+    """Find the +/- 1-sigma values given the best fit parameters.
+
+    ``side`` could be 'upper', 'lower', or 'both'
+
+    Returns the value(s) of theta13 at the error boundary/ies in a list
+    of length 1 or 2.
+
+    If side is 'both', the 2 entries are always returned [upper, lower]
+    """
+    best_theta13 = fit_params.theta13
+    best_sin2 = np.power(np.sin(2 * best_theta13), 2)
+    guess_1sigma_sin2 = 0.0045
+    guess_upper_sin2 = best_sin2 + guess_1sigma_sin2
+    guess_lower_sin2 = best_sin2 - guess_1sigma_sin2
+    guess_upper = 0.5 * np.arcsin(np.sqrt(guess_upper_sin2))
+    guess_lower = 0.5 * np.arcsin(np.sqrt(guess_lower_sin2))
+    near_ads = None
+    min_chi2 = chi_square(constants, fit_params, near_ads=near_ads)
+    to_return = []
+    if side in ('upper', 'both'):
+        result = least_squares(sigma_search_resid, guess_upper,
+                args=(constants, min_chi2), method='trf', xtol=1e-3)
+        upper_limit = result.x[0]
+        upper_sin2 = np.power(np.sin(2 * upper_limit), 2)
+        to_return.append(upper_limit)
+    if side in ('lower', 'both'):
+        result = least_squares(sigma_search_resid, guess_lower,
+                args=(constants, min_chi2), method='trf', xtol=1e-3)
+        lower_limit = result.x[0]
+        lower_sin2 = np.power(np.sin(2 * lower_limit), 2)
+        to_return.append(lower_limit)
+    return to_return
+
+def sigma_search_resid(x, constants, min_chi2):
+    """Return the difference between the delta chi-square and 1.
+
+    x is just [theta13_search]
+    """
+    print('Running fit')
+    starting_params = pred.FitParams(
+            x[0],
+            pred.ad_dict(0),
+            pred.ad_dict(0, halls='near'),
+            pred.core_dict(0),
+            pred.ad_dict(0),
+    )
+    fit_result = fit_lsq_frozen(starting_params, constants, range(9), None)
+    chi2 = np.power(fit_result.fun, 2).sum()
+    print(f'Trial chi2 = {chi2:.5f}')
+    return chi2 - min_chi2 - 1
+
+
 def chi_square_grid(starting_params, constants, theta13_values):
     """Return a grid of optimal chi-square values for the given parameter grid.
     """
@@ -140,7 +193,7 @@ def chi_square_grid(starting_params, constants, theta13_values):
     result = np.zeros((len(theta13_values)))
     for i, theta13 in enumerate(theta13_values):
         starting_params.theta13 = theta13
-        fit_result = fit_lsq_frozen(starting_params, constants, [0], None)
+        fit_result = fit_lsq_frozen(starting_params, constants, range(9), None)
         result[i] = np.power(fit_result.fun, 2).sum()
     starting_params.theta13 = best_theta13  # restore original value
     return result
@@ -197,25 +250,4 @@ if __name__ == "__main__":
         min_chi2 = chi_square(constants, fit_params, debug=True, near_ads=near_ads)
         if args.scan:
             print("Chi-square scan")
-            theta13 = fit_params.theta13
-            low_value = theta13 - 0.005
-            up_value = theta13 + 0.005
-            values = np.linspace(low_value, up_value, 15)
-            grid = (chi_square_grid(fit_params, constants, values))
-            pprint(dict(zip(values, grid)))
-            pprint(dict(zip(np.power(np.sin(2*values), 2), np.sqrt(grid - min_chi2 + 1e-6))))
-            delta_chi2 = np.sqrt(grid - min_chi2 + 1e-6)
-            first_inside_1_index = None
-            last_inside_1_index = None
-            for i, d in enumerate(delta_chi2):
-                if d < 1 and first_inside_1_index is None:
-                    first_inside_1_index = i
-                if d > 1 and first_inside_1_index is not None:
-                    last_inside_1_index = i - 1
-                    break
-            theta13_low = values[first_inside_1_index]
-            theta13_up = values[last_inside_1_index]
-            if args.update_db is not None:
-                save_result(args.update_db, args.source, args.source_index,
-                        theta13, theta13_low, theta13_up, min_chi2)
-
+            print(sigma_searcher(fit_params, constants))

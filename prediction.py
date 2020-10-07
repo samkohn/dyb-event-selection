@@ -403,6 +403,7 @@ def livetime_by_week(database, weekly_time_bins):
                 weekly_livetimes_s[time_index] += in_next_week
 
         by_week[(hall, det)] = weekly_livetimes_s
+        # TODO mc_corrections
     mc_corrections = {(1, 1): 4.445342402310752e-06,
  (1, 2): 4.5343298147423175e-06,
  (2, 1): 1.0546587931834448e-05,

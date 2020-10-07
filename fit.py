@@ -157,13 +157,11 @@ def sigma_searcher(fit_params, constants, side='both'):
         result = least_squares(sigma_search_resid, guess_upper,
                 args=(constants, min_chi2), method='trf', xtol=1e-3)
         upper_limit = result.x[0]
-        upper_sin2 = np.power(np.sin(2 * upper_limit), 2)
         to_return.append(upper_limit)
     if side in ('lower', 'both'):
         result = least_squares(sigma_search_resid, guess_lower,
                 args=(constants, min_chi2), method='trf', xtol=1e-3)
         lower_limit = result.x[0]
-        lower_sin2 = np.power(np.sin(2 * lower_limit), 2)
         to_return.append(lower_limit)
     return to_return
 

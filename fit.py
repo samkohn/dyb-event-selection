@@ -14,8 +14,11 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     Set return_array=True to return an array of terms rather than the sum.
     """
     chi_square = 0
-    observed = {ad: constants.observed_candidates[ad] for ad in pred.far_ads}
+    # TODO figure out how to handle selecting rate_only
+    observed = {ad: np.sum(constants.observed_candidates[ad], keepdims=True) for ad in pred.far_ads}
     predicted, reco_bins = pred.predict_ad_to_ad_obs(constants, fit_params)
+    for key, val in predicted.items():
+        predicted[key] = np.sum(val, keepdims=True)
     if debug:
         pprint(observed)
         pprint(predicted)
@@ -54,7 +57,8 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         term_index += 1
     for halldet, pull in fit_params.pull_near_stat.items():
         numerator = pull * pull
-        denominator = np.power(constants.observed_candidates[halldet], -1)
+        denominator = np.power(np.sum(constants.observed_candidates[halldet],
+            keepdims=True), -1)
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1

@@ -17,11 +17,11 @@ def main(toymc_infile, update_db, image_outfile, binning):
     infile = ROOT.TFile(toymc_infile, 'READ')
     toy_data = infile.Get('toy')
     keV = 1000
-    # Bins: 0.25MeV from 1.5 to 8MeV, then 8-12MeV as 1 bin
     hardcoded_true_bins = np.concatenate((np.linspace(1.8*keV, 9.95*keV, 164), [12*keV]))
     if binning == 'nominal' or binning is None:
-        hardcoded_reco_bins = np.concatenate((np.linspace(1.5*keV, 8*keV, 27), [12*keV]))
-        nbins = (164, 1.8*keV, 12*keV, 27, 1*keV, 12*keV)
+        # Bins: 1.5, 1.6, 0.2MeV from 1.6 to 8MeV, then 8-12MeV as 1 bin
+        hardcoded_reco_bins = np.concatenate(([1.5*keV], np.linspace(1.6*keV, 8*keV, 33), [12*keV]))
+        nbins = (164, 1.8*keV, 12*keV, 34, 1.5*keV, 12*keV)
     elif binning == 'rate-only':
         hardcoded_reco_bins = np.array([1.5*keV, 12*keV])
         nbins = (164, 1.8*keV, 12*keV, 1, 1.5*keV, 12*keV)

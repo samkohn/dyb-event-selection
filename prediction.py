@@ -323,8 +323,10 @@ def reactor_spectrum(database, core):
     """
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
+        # cursor.execute('''SELECT U235, U238, Pu239, Pu241 FROM thermal_energy_per_fission
+            # WHERE Source = "Phys. Rev. C 88, 014605 (2013)"''')
         cursor.execute('''SELECT U235, U238, Pu239, Pu241 FROM thermal_energy_per_fission
-            WHERE Source = "Phys. Rev. C 88, 014605 (2013)"''')
+            WHERE Source = "DybBerkFit / DocDB-7580"''')
         energy_per_fission = np.array(cursor.fetchone())
         cursor.execute('''SELECT StartTime_s, EndTime_s, FractionalPower, FracU235, FracU238, FracPu239,
             FracPu241 FROM reactor_power_fissionfrac

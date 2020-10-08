@@ -482,11 +482,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
             # Apply the reactor pull parameter
             pull = fit_params.pull_reactor[core]
             spec = (1 + pull) * spec
-            # Split the label "D1", "L2", etc.
-            # into D or L (core_group) and the core index within the group.
-            core_group = distance_conversion[core][0]
-            core_index = int(distance_conversion[core][1])-1
-            distance_m = distances[core_group][core_index][f'EH{hall}'][det-1]
+            distance_m = distances[core][f'EH{hall}'][det-1]
             p_osc = survival_probability(
                     distance_m,
                     constants.true_bins_spectrum,
@@ -517,11 +513,7 @@ def extrapolation_factor(constants, fit_params):
             # Apply the reactor pull parameter
             pull = fit_params.pull_reactor[core]
             spec = (1 + pull) * spec
-            # Split the label "D1", "L2", etc.
-            # into D or L (core_group) and the core index within the group.
-            core_group = distance_conversion[core][0]
-            core_index = int(distance_conversion[core][1])-1
-            distance_m = distances[core_group][core_index][f'EH{near_hall}'][near_det-1]
+            distance_m = distances[core][f'EH{near_hall}'][near_det-1]
             p_osc = survival_probability(
                     distance_m,
                     constants.true_bins_spectrum,
@@ -536,11 +528,7 @@ def extrapolation_factor(constants, fit_params):
                 # Apply the reactor pull parameter
                 pull = fit_params.pull_reactor[core]
                 spec = (1 + pull) * spec
-                # Split the label "D1", "L2", etc.
-                # into D or L (core_group) and the core index within the group.
-                core_group = distance_conversion[core][0]
-                core_index = int(distance_conversion[core][1])-1
-                distance_m = distances[core_group][core_index][f'EH{far_hall}'][far_det-1]
+                distance_m = distances[core][f'EH{far_hall}'][far_det-1]
                 p_osc = survival_probability(
                         distance_m,
                         constants.true_bins_spectrum,
@@ -887,32 +875,36 @@ distance_conversion = {
 
 
 distances = {
-        'D': [{
-            'EH1': [362.38, 357.94],
-            'EH2': [1332.48, 1337.43],
-            'EH3': [1919.63, 1917.52, 1925.26, 1923.15]
-            }, {
-            'EH1': [371.76, 368.41],
-            'EH2': [1358.15, 1362.88],
-            'EH3': [1894.34, 1891.98, 1899.86, 1897.51]
-            }],
-        'L': [{
-            'EH1': [903.47, 903.35],
-            'EH2': [467.57, 472.97],
-            'EH3': [1533.18, 1534.92, 1538.93, 1540.67]
-            }, {
-            'EH1': [817.16, 816.90],
-            'EH2': [489.58, 495.35],
-            'EH3': [1533.63, 1535.03, 1539.47, 1540.87]
-            }, {
-            'EH1': [1353.62, 1354.23],
-            'EH2': [557.58, 558.71],
-            'EH3': [1551.38, 1554.77, 1556.34, 1559.72]
-            }, {
-            'EH1': [1265.32, 1265.89],
-            'EH2': [499.21, 501.07],
-            'EH3': [1524.94, 1528.05, 1530.08, 1533.18]
-            }]
+        1: {
+            'EH1': [362.3804, 357.9404],
+            'EH2': [1332.4793, 1337.493],
+            'EH3': [1919.6319, 1917.5188, 1925.2550, 1923.1489]
+            },
+        2: {
+            'EH1': [371.7626, 368.4142],
+            'EH2': [1358.1482, 1362.8763],
+            'EH3': [1894.3376, 1891.9765, 1899.8607, 1897.5072]
+            },
+        3: {
+            'EH1': [903.4664, 903.3467],
+            'EH2': [467.5740, 472.9709],
+            'EH3': [1533.1804, 1534.9194, 1538.9301, 1540.6667]
+            },
+        4: {
+            'EH1': [817.1578, 816.8962],
+            'EH2': [489.5774, 495.3458],
+            'EH3': [1533.6275, 1535.0322, 1539.4683, 1540.8715]
+            },
+        5: {
+            'EH1': [1353.6177, 1354.2293],
+            'EH2': [557.5792, 558.7073],
+            'EH3': [1551.3843, 1554.7671, 1556.3439, 1559.7210]
+            },
+        6: {
+            'EH1': [1265.3153, 1265.8861],
+            'EH2': [499.2072, 501.0714],
+            'EH3': [1524.9400, 1528.0460, 1530.0787, 1533.1791]
+            },
         }
 
 

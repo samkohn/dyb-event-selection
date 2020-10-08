@@ -216,8 +216,11 @@ if __name__ == "__main__":
     parser.add_argument("--source")
     parser.add_argument("--source-index", type=int)
     parser.add_argument("--update-db")
+    parser.add_argument("--dm2ee", type=float)
     args = parser.parse_args()
     constants = pred.load_constants(args.config)
+    if args.dm2ee is not None:
+        constants.input_osc_params.m2_ee = args.dm2ee
     starting_params = pred.FitParams(
             0.15,
             pred.ad_dict(0),

@@ -56,6 +56,7 @@ class FitConstants:
     multiplicity_eff: dict
     masses: dict
     cross_section: np.array
+    rebin_matrix: np.array
 
 @dataclass
 class FitParams:
@@ -171,6 +172,10 @@ def load_constants(config_file):
     total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
             database, slice(ad_period.start_week, ad_period.end_week+1)
     )
+    rebin_matrix = generate_bin_averaging_matrix(
+            np.concatenate((true_bins_spectrum, [12])),
+            true_bins_response
+    )
 
     # Parse num coincidences: Nominal, 0, hard-coded, or alternate database
     coincs_source = config.num_coincs_source
@@ -250,6 +255,7 @@ def load_constants(config_file):
             multiplicity_eff,
             masses,
             cross_sec,
+            rebin_matrix,
     )
 
 
@@ -713,7 +719,8 @@ def num_IBDs_from_core(constants, fit_params):
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     n_ij = {}
     for (halldet, core), flux_frac in flux_fractions.items():
-        rebinned_fluxfrac = average_bins(flux_frac, true_bins_spec, true_bins_resp)
+        # rebinned_fluxfrac = average_bins(flux_frac, true_bins_spec, true_bins_resp)
+        rebinned_fluxfrac = np.matmul(constants.rebin_matrix, flux_frac)
         # Must expand dims so that the shape of the arrays is
         # (N_true, 1) * (N_true, N_reco)
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_energies[halldet]
@@ -733,7 +740,8 @@ def predict_IBD_true_energy(constants, fit_params):
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     f_kji = {}
     for (far_halldet, core, near_halldet), extrap_fact in extrap_factor.items():
-        rebinned_extrap_fact = average_bins(extrap_fact, true_bins_spec, true_bins)
+        # rebinned_extrap_fact = average_bins(extrap_fact, true_bins_spec, true_bins)
+        rebinned_extrap_fact = np.matmul(constants.rebin_matrix, extrap_fact)
         n_ij = num_from_core[near_halldet, core]
         f_kji[far_halldet, core, near_halldet] = (
                 np.expand_dims(rebinned_extrap_fact, axis=1) * n_ij
@@ -815,10 +823,34 @@ def predict_halls(constants, fit_params):
     return prediction, reco_bins
 
 
-def average_bins(values_fine, bins_fine, bins_coarse):
-    """Average the values from the fine bins into a coarser binning.
+def generate_bin_averaging_matrix(bins_fine, bins_coarse):
+    """Create a matrix that converts from fine binning to coarse binning.
 
-    Weighted average with weight = bin width.
+    Weighted average with weight = fine bin width.
+
+    If n = len(bins_coarse) and m = len(bins_fine), returns a matrix
+    with dimensions (n-1) x (m-1), since the bin arrays have one extra
+    element compared to the number of elements in the histograms they
+    describe. Note that the rows of the matrix each sum to unity.
+
+    To convert an array of fine-binned values to the coarser binning,
+    multiply by the conversion matrix: ``coarse = np.matmul(M, fine)``.
+    The ``matmul`` function will automatically convert 1-D arrays and
+    lists to column vectors, as intended.
+
+    Works on the basis of matrix multiplication::
+
+        [ [ 0.5, 0.5, 0.0, 0.0 ],      [ [ 1 ],        [ [ 1.5 ],
+          [ 0.0, 0.0, 0.5, 0.5 ] ]  x    [ 2 ],    =     [ 3.5 ] ]
+                                         [ 3 ],
+                                         [ 4 ] ]
+
+    >>> np.matmul(
+    ...     generate_bin_averaging_matrix([0, 1, 2, 3, 4], [0, 2, 4]),
+    ...     [1, -1, 3, 4]
+    ... )
+    array([0, 3.5])
+
 
     Assumptions:
 
@@ -830,14 +862,15 @@ def average_bins(values_fine, bins_fine, bins_coarse):
     - bins_coarse and bins_fine are strictly increasing
     - and that all inputs are 1D arrays.
     """
-    # Test assumptions
     bin_weights = np.diff(bins_fine)
-    values_coarse = np.empty((len(bins_coarse)-1,))
+    # values_coarse = np.empty((len(bins_coarse)-1,))
+    out_matrix = np.zeros((len(bins_coarse) - 1, len(bins_fine) - 1))
     fine_index = 0
     fine_up_edge = bins_fine[0]  # initial value only for first comparison in while loop
     try:
         for coarse_index, coarse_up_edge in enumerate(bins_coarse[1:]):
-            next_coarse_value = 0
+            row_weights = [0] * fine_index  # pre-fill already-visited fine bins with 0
+            # next_coarse_value = 0
             next_coarse_weights_sum = 0
             #while not np.isclose(fine_up_edge, coarse_up_edge):
             while fine_up_edge != coarse_up_edge:
@@ -845,16 +878,20 @@ def average_bins(values_fine, bins_fine, bins_coarse):
                     print(fine_up_edge, coarse_up_edge)
                     raise ValueError('Bin edge mismatch')
                 fine_up_edge = bins_fine[fine_index + 1]
-                fine_value = values_fine[fine_index]
+                # fine_value = values_fine[fine_index]
                 fine_weight = bin_weights[fine_index]
-                next_coarse_value += fine_value * fine_weight
+                # next_coarse_value += fine_value * fine_weight
                 next_coarse_weights_sum += fine_weight
+                row_weights.append(fine_weight)
                 fine_index += 1
             # Then we can finalize the bin
-            next_coarse_value /= next_coarse_weights_sum
-            values_coarse[coarse_index] = next_coarse_value
+            # next_coarse_value /= next_coarse_weights_sum
+            row_weights = np.array(row_weights, dtype=float) / next_coarse_weights_sum
+            out_matrix[coarse_index, :len(row_weights)] = row_weights
+            # values_coarse[coarse_index] = next_coarse_value
     except:
-        test_bins = len(values_fine) + 1 == len(bins_fine)
+        # Test assumptions
+        # test_bins = len(values_fine) + 1 == len(bins_fine)
         test_start_bin = np.isclose(bins_fine[0], bins_coarse[0])
         test_end_bin = np.isclose(bins_fine[-1], bins_coarse[-1])
         test_fine_really_fine = len(bins_coarse) < len(bins_fine)
@@ -863,15 +900,14 @@ def average_bins(values_fine, bins_fine, bins_coarse):
         test_1D = True  # Trust the user!
         print(bins_fine[0], bins_coarse[0])
         print(bins_fine[-1], bins_coarse[-1])
-        print(f'''correct fine binning: {test_bins}
-        start bins match: {test_start_bin}
+        print(f'''start bins match: {test_start_bin}
         end bins match: {test_end_bin}
         fine finer than coarse: {test_fine_really_fine}
         not sure about no bin crossings?
         bins strictly increasing: {test_increasing}
         not sure about accurate 1D arrays''')
         raise
-    return values_coarse
+    return out_matrix
 
 
 

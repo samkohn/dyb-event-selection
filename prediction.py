@@ -55,6 +55,7 @@ class FitConstants:
     muon_eff: dict
     multiplicity_eff: dict
     masses: dict
+    cross_section: np.array
 
 @dataclass
 class FitParams:
@@ -232,6 +233,8 @@ def load_constants(config_file):
 
     masses = dict(zip(all_ads, config.masses))
 
+    cross_sec = cross_section(database)
+
     return FitConstants(
             matrix,
             true_bins_response,
@@ -246,6 +249,7 @@ def load_constants(config_file):
             muon_eff,
             multiplicity_eff,
             masses,
+            cross_sec,
     )
 
 

@@ -49,6 +49,7 @@ class FitConstants:
     nominal_bgs: dict
     reco_bins: np.array
     total_emitted_by_AD: dict
+    total_emitted_by_week_AD: dict
     true_bins_spectrum: np.array
     input_osc_params: InputOscParams
     muon_eff: dict
@@ -166,7 +167,7 @@ def load_constants(config_file):
     matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(
             database, source_det_resp
     )
-    total_emitted_by_AD, true_bins_spectrum = total_emitted(
+    total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
             database, slice(ad_period.start_week, ad_period.end_week+1)
     )
 
@@ -239,6 +240,7 @@ def load_constants(config_file):
             nominal_bgs,
             reco_bins,
             total_emitted_by_AD,
+            total_emitted_by_week_AD,
             true_bins_spectrum,
             default_osc_params,
             muon_eff,
@@ -432,13 +434,17 @@ def total_emitted(database, week_range):
     I believe that phi_j should also be adjusted in that way.
     """
     total_spectrum_by_AD = {}
+    spectrum_by_week_AD = {}
     for core in range(1, 7):
         spectrum, time_bins, energies = reactor_spectrum(database, core)
         by_week = livetime_by_week(database, time_bins)
         for (hall, det), AD_livetime_by_week in by_week.items():
-            spectrum_by_week_AD = spectrum * AD_livetime_by_week
-            total_spectrum_by_AD[(hall, det), core] = np.sum(spectrum_by_week_AD[:, week_range], axis=1)
-    return total_spectrum_by_AD, energies
+            spectrum_by_week_this_AD = spectrum * AD_livetime_by_week
+            spectrum_by_week_AD[(hall, det), core] = spectrum_by_week_this_AD
+            total_spectrum_by_AD[(hall, det), core] = np.sum(
+                    spectrum_by_week_this_AD[:, week_range], axis=1
+            )
+    return total_spectrum_by_AD, energies, spectrum_by_week_AD
 
 def cross_section(database):
     """Return (xsec, energy) in units of cm^2, MeV."""
@@ -461,7 +467,7 @@ def xsec_weighted_spec(database):
     It needs to be converted to IBDs/MeV by being multiplied by P_sur(L/E)/L^2.
     """
     to_return = {}
-    total_spectrum, energy_bins_spec = total_emitted(database, core)
+    total_spectrum, energy_bins_spec, _ = total_emitted(database, core)
     for ((hall, det), core), spec in total_spectrum.items():
             xsec, energy_bins_xsec = cross_section(database)
             if not np.array_equal(energy_bins_spec, energy_bins_xsec):
@@ -478,7 +484,11 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
     for (hall, det) in all_ads:
         numerators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
-            spec = constants.total_emitted_by_AD[(hall, det), core]
+            if week_range == slice(None):
+                spec = constants.total_emitted_by_AD[(hall, det), core]
+            else:
+                spec = np.sum(constants.total_emitted_by_week_AD[(hall, det), core][
+                        :, week_range], axis=1)
             # Apply the reactor pull parameter
             pull = fit_params.pull_reactor[core]
             spec = (1 + pull) * spec

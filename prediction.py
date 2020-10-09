@@ -267,8 +267,10 @@ def survival_probability(L, E, theta13, m2_ee, input_osc_params=default_osc_para
     sin2_2theta13 = np.power(np.sin(2*theta13), 2)
     delta_21 = delta_ij(L, E, m2_21)
     delta_ee = delta_ij(L, E, m2_ee)
-    sin2_delta_21 = np.power(np.sin(delta_21), 2)
-    sin2_delta_ee = np.power(np.sin(delta_ee), 2)
+    sin_delta_21 = np.sin(delta_21)
+    sin2_delta_21 = sin_delta_21 * sin_delta_21
+    sin_delta_ee = np.sin(delta_ee)
+    sin2_delta_ee = sin_delta_ee * sin_delta_ee
 
     return (
         1 - cos4theta13 * sin2_2theta12 * sin2_delta_21 - sin2_2theta13 * sin2_delta_ee
@@ -526,6 +528,7 @@ def extrapolation_factor(constants, fit_params):
     with core indexed from 1.
     """
     to_return = {}
+    far_osc_probs = {}
     for (near_hall, near_det) in near_ads:
         denominators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
@@ -549,13 +552,17 @@ def extrapolation_factor(constants, fit_params):
                 pull = fit_params.pull_reactor[core]
                 spec = (1 + pull) * spec
                 distance_m = distances[core][f'EH{far_hall}'][far_det-1]
-                p_osc = survival_probability(
-                        distance_m,
-                        constants.true_bins_spectrum + 0.005,
-                        fit_params.theta13,
-                        constants.input_osc_params.m2_ee,
-                        input_osc_params=constants.input_osc_params
-                )
+                if ((far_hall, far_det), core) in far_osc_probs:
+                    p_osc = far_osc_probs[(far_hall, far_det), core]
+                else:
+                    p_osc = survival_probability(
+                            distance_m,
+                            constants.true_bins_spectrum + 0.005,
+                            fit_params.theta13,
+                            constants.input_osc_params.m2_ee,
+                            input_osc_params=constants.input_osc_params
+                    )
+                    far_osc_probs[(far_hall, far_det), core] = p_osc
                 numerators[:, core-1] = spec * p_osc / distance_m**2
                 to_return[(far_hall, far_det), core, (near_hall, near_det)] = (
                         numerators[:, core-1]/denominators[:, core-1]

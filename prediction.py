@@ -499,7 +499,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
             distance_m = distances[core][f'EH{hall}'][det-1]
             p_osc = survival_probability(
                     distance_m,
-                    constants.true_bins_spectrum,
+                    constants.true_bins_spectrum + 0.005,
                     fit_params.theta13,
                     constants.input_osc_params.m2_ee,
                     input_osc_params=constants.input_osc_params
@@ -530,7 +530,7 @@ def extrapolation_factor(constants, fit_params):
             distance_m = distances[core][f'EH{near_hall}'][near_det-1]
             p_osc = survival_probability(
                     distance_m,
-                    constants.true_bins_spectrum,
+                    constants.true_bins_spectrum + 0.005,
                     fit_params.theta13,
                     constants.input_osc_params.m2_ee,
                     input_osc_params=constants.input_osc_params
@@ -545,7 +545,7 @@ def extrapolation_factor(constants, fit_params):
                 distance_m = distances[core][f'EH{far_hall}'][far_det-1]
                 p_osc = survival_probability(
                         distance_m,
-                        constants.true_bins_spectrum,
+                        constants.true_bins_spectrum + 0.005,
                         fit_params.theta13,
                         constants.input_osc_params.m2_ee,
                         input_osc_params=constants.input_osc_params

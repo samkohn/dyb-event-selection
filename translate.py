@@ -51,9 +51,9 @@ def main(filenames, nevents):
     outfile.Write()
     outfile.Close()
 
-def initialize_indata_onefile(tfile_object):
+def initialize_indata_onefile(tfile_object, rec_name):
     calibStats = tfile_object.Get('/Event/Data/CalibStats')
-    adSimple = tfile_object.Get('/Event/Rec/AdSimpleNL')
+    adSimple = tfile_object.Get(f'/Event/Rec/{rec_name}')
 
     activeBranches = {
             calibStats: [

@@ -278,7 +278,7 @@ def main(events, infile, out_location, run_and_file, debug):
     logging.debug(debug)
     run, fileno = run_and_file
     infile = TFile(infile, 'READ')
-    calibStats, adSimple = initialize(infile)
+    calibStats, adSimple = initialize(infile, 'AdSimpleNL')
     calibStats.AddFriend(adSimple)
     indata = RawFileAdapter(calibStats, run, fileno)
     ads = dets_for(indata.site, run)

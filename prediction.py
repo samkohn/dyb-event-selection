@@ -169,8 +169,11 @@ def load_constants(config_file):
     matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(
             database, source_det_resp
     )
-    total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
-            database, slice(ad_period.start_week, ad_period.end_week+1)
+    # total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
+            # database, slice(ad_period.start_week, ad_period.end_week+1)
+    # )
+    total_emitted_by_AD, true_bins_spectrum, empty = total_emitted_shortcut(
+            database, config.period
     )
     rebin_matrix = generate_bin_averaging_matrix(
             np.concatenate((true_bins_spectrum, [12])),
@@ -248,7 +251,8 @@ def load_constants(config_file):
             nominal_bgs,
             reco_bins,
             total_emitted_by_AD,
-            total_emitted_by_week_AD,
+            #total_emitted_by_week_AD,
+            empty,
             true_bins_spectrum,
             default_osc_params,
             muon_eff,
@@ -432,6 +436,41 @@ def livetime_by_week(database, weekly_time_bins):
         by_week[halldet] = by_week[halldet] * (1 + mc_corrections[halldet])
 
     return by_week
+
+def total_emitted_shortcut(database, data_period):
+    """Same as total_emitted but use saved database values
+    and don't break down by week."""
+
+    total_spectrum_by_AD = {}
+    _, time_bins, _ = reactor_spectrum(database, 1)
+    livetime_by_week_by_AD = livetime_by_week(database, time_bins)
+    livetime_by_AD_for_periods = {
+            (halldet, period.name):
+            sum(livetime_by_week_by_AD[halldet][period.start_week:period.end_week+1])
+            for period in [period_6ad, period_8ad, period_7ad]
+            for halldet in all_ads
+    }
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        for core in range(1, 7):
+            cursor.execute('''SELECT Energy, NuPerMeVPerSec
+            FROM reactor_emitted_spectrum
+            WHERE Core = ? AND DataPeriod = ?
+                AND Source = "DybBerkFit/ReactorPowerCalculator/isotope_spectra_by_Beda"
+                AND Energy < 10
+            ORDER BY Energy''',
+            (core, data_period))
+            result = np.array(cursor.fetchall())
+            for halldet in all_ads:
+                total_spectrum_by_AD[halldet, core] = (
+                    result[:, 1] * livetime_by_AD_for_periods[halldet, data_period]
+                    #TODO potentially add ToyMC livetime corrections
+                )
+            energies = result[:, 0]
+    return total_spectrum_by_AD, energies, None
+
+
+
 
 def total_emitted(database, week_range):
     """Return a dict of ((hall, det), core) -> spectrum[i] with energy bin i,

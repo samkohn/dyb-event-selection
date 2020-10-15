@@ -533,6 +533,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
     The dict has keys ((hall, det), core) with core indexed from 1.
     """
     to_return = {}
+    get_to_bin_centers_hack = np.diff(constants.true_bins_spectrum)[0]/2
     for (hall, det) in all_ads:
         numerators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
@@ -547,7 +548,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
             distance_m = distances[core][f'EH{hall}'][det-1]
             p_osc = survival_probability(
                     distance_m,
-                    constants.true_bins_spectrum + 0.005,
+                    constants.true_bins_spectrum + get_to_bin_centers_hack,
                     fit_params.theta13,
                     constants.input_osc_params.m2_ee,
                     input_osc_params=constants.input_osc_params
@@ -569,6 +570,7 @@ def extrapolation_factor(constants, fit_params):
     """
     to_return = {}
     far_osc_probs = {}
+    get_to_bin_centers_hack = np.diff(constants.true_bins_spectrum)[0]/2
     for (near_hall, near_det) in near_ads:
         denominators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
@@ -579,7 +581,7 @@ def extrapolation_factor(constants, fit_params):
             distance_m = distances[core][f'EH{near_hall}'][near_det-1]
             p_osc = survival_probability(
                     distance_m,
-                    constants.true_bins_spectrum + 0.005,
+                    constants.true_bins_spectrum + get_to_bin_centers_hack,
                     fit_params.theta13,
                     constants.input_osc_params.m2_ee,
                     input_osc_params=constants.input_osc_params
@@ -597,7 +599,7 @@ def extrapolation_factor(constants, fit_params):
                 else:
                     p_osc = survival_probability(
                             distance_m,
-                            constants.true_bins_spectrum + 0.005,
+                            constants.true_bins_spectrum + get_to_bin_centers_hack,
                             fit_params.theta13,
                             constants.input_osc_params.m2_ee,
                             input_osc_params=constants.input_osc_params

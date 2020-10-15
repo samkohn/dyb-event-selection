@@ -463,8 +463,9 @@ def total_emitted_shortcut(database, data_period):
             result = np.array(cursor.fetchall())
             for halldet in all_ads:
                 total_spectrum_by_AD[halldet, core] = (
-                    result[:, 1] * livetime_by_AD_for_periods[halldet, data_period]
+                    # result[:, 1] * livetime_by_AD_for_periods[halldet, data_period]
                     #TODO potentially add ToyMC livetime corrections
+                    result[:, 1]
                 )
             energies = result[:, 0]
     return total_spectrum_by_AD, energies, None

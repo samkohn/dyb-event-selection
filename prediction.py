@@ -527,7 +527,8 @@ def xsec_weighted_spec(database):
             to_return[(hall, det), core] = total_spectrum * xsec
     return to_return, energy_bins_xsec
 
-def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
+def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
+        include_osc=True):
     """Return a tuple (dict of flux fractions, energy bins).
 
     The dict has keys ((hall, det), core) with core indexed from 1.
@@ -546,13 +547,16 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None)):
             pull = fit_params.pull_reactor[core]
             spec = (1 + pull) * spec
             distance_m = distances[core][f'EH{hall}'][det-1]
-            p_osc = survival_probability(
-                    distance_m,
-                    constants.true_bins_spectrum + get_to_bin_centers_hack,
-                    fit_params.theta13,
-                    constants.input_osc_params.m2_ee,
-                    input_osc_params=constants.input_osc_params
-            )
+            if include_osc:
+                p_osc = survival_probability(
+                        distance_m,
+                        constants.true_bins_spectrum + get_to_bin_centers_hack,
+                        fit_params.theta13,
+                        constants.input_osc_params.m2_ee,
+                        input_osc_params=constants.input_osc_params
+                )
+            else:
+                p_osc = 1
             numerators[:, core-1] = spec * p_osc / distance_m**2
         denominators = np.sum(numerators, axis=1)
         for core in range(1, 7):
@@ -737,12 +741,53 @@ def reco_to_true_energy(constants, fit_params):
     Returns a tuple of (true_spectrum_dict, true_bins, reco_bins).
     The units of the spectrum are IBDs per MeV.
     The dict maps (hall, det) to a 2D array with indexes [true_index, reco_index].
+
+    For a given bin of reconstructed energy,
+    oscillations are applied by splitting into the
+    approximate reactor contributions using the flux fraction
+    (assuming no oscillation)
+    and then multiplying by the survival probability for that baseline.
+    The decomposed oscillated spectra are then added back together
+    and normalized so that the total integral of the reconstructed energy bin
+    is unity.
+
+    The original implementation of this procedure is in the LBNL fitter
+    Prediction.cc file, MakePrediction() first few dozen lines.
     """
+    true_bin_fluxfrac_centers = (
+        constants.true_bins_spectrum[:-1]
+        + 0.5 * np.diff(constants.true_bins_spectrum)
+    )
+    #TODO hardcoded last bin...standardize that bins should include upper edge!
+    true_bin_fluxfrac_centers = np.concatenate((
+        true_bin_fluxfrac_centers,
+        [9.975]
+    ))
+    flux_fractions_no_osc, _ = flux_fraction(constants, fit_params, include_osc=False)
+    decomposed_response = {}
+    un_normalized_response = {halldet: 0 for halldet in all_ads}
+    for ((hall, det), core), flux_frac_no_osc in flux_fractions_no_osc.items():
+        distance_m = distances[core][f'EH{hall}'][det-1]
+        p_sur = survival_probability(
+            distance_m,
+            true_bin_fluxfrac_centers,
+            fit_params.theta13,
+            constants.input_osc_params.m2_ee,
+            input_osc_params=constants.input_osc_params
+        )
+        weighted_fluxfrac = flux_frac_no_osc * p_sur
+        rebinned_fluxfrac = np.matmul(constants.rebin_matrix, weighted_fluxfrac)
+        decomposed_response[(hall, det), core] = (
+            constants.detector_response * np.expand_dims(rebinned_fluxfrac, axis=1)
+        )
+        un_normalized_response[hall, det] += decomposed_response[(hall, det), core]
     # Normalize the matrix so that each column sums to 1.
     # (Thus each reco event will be spread among true energy bins
     # in a unitary manner).
-    weights_per_reco_bin = constants.detector_response.sum(axis=0, keepdims=True)
-    normalized_response = constants.detector_response/weights_per_reco_bin
+    response_pdfs = {}
+    for halldet, un_normalized in un_normalized_response.items():
+        weights_per_reco_bin = un_normalized.sum(axis=0, keepdims=True)
+        response_pdfs[halldet] = un_normalized/weights_per_reco_bin
     if not np.array_equal(constants.reco_bins_response, constants.reco_bins):
         print(constants.reco_bins_response)
         print(constants.reco_bins)
@@ -750,7 +795,9 @@ def reco_to_true_energy(constants, fit_params):
     true_energies = {}
     bg_subtracted, bins = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
     for (hall, det), num_IBDs in bg_subtracted.items():
-        true_energies[hall, det] = normalized_response * np.expand_dims(num_IBDs, axis=0)
+        true_energies[hall, det] = (
+            response_pdfs[hall, det] * np.expand_dims(num_IBDs, axis=0)
+        )
     return true_energies, constants.true_bins_response, constants.reco_bins_response
 
 def num_IBDs_from_core(constants, fit_params):

@@ -52,6 +52,16 @@ def main(infilename, entry_number, update_db, source, binning_type):
                 num_ibds_halldet.append(val)
             num_ibds[halldet] = num_ibds_halldet
             bins[halldet] = bins_halldet
+    elif binning_type == 'nH modified 1':
+        num_ibds = {}
+        bins_halldet = list(range(1600, 8001, 200)) + [12000]  # keV
+        bins = {}
+        for halldet, num_ibds_binned in num_ibds_default.items():
+            num_ibds_halldet = []
+            for val in num_ibds_binned[4:]:
+                num_ibds_halldet.append(val)
+            num_ibds[halldet] = num_ibds_halldet
+            bins[halldet] = bins_halldet
     elif binning_type == 'rate-only':
         # Create rate-only binning
         num_ibds_rateonly = {}
@@ -91,7 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('--update-db')
     parser.add_argument('--source', default='LBNL toymc')
     parser.add_argument('--binning', default='default', choices=('default',
-        'nH nominal', 'rate-only'))
+        'nH nominal', 'rate-only', 'nH modified 1'))
     args = parser.parse_args()
 
     main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning)

@@ -18,7 +18,7 @@ def generate_toy(outfilename, toy_code_dir, toy_config, sin2, dm2ee):
     os.chdir(toy_code_dir)
     with open('toymc_config_tmp.txt', 'w') as f:
         f.write(toy_config)
-    outfile_full = os.path.join(outfilename, f'toy_01_{sin2}_{dm2ee}.root')
+    outfile_full = os.path.join(outfilename, f'toy_02_{sin2}_{dm2ee}.root')
     if os.path.isfile(outfile_full):
         return outfile_full
     command = [
@@ -31,9 +31,10 @@ def generate_toy(outfilename, toy_code_dir, toy_config, sin2, dm2ee):
 
 
 def main(database, label, toy_out_location, toy_code_dir, config_template):
-    sin2_values = np.linspace(0.065, 0.09, 11)
-    dm2ee_values = np.linspace(2.3e-3, 2.7e-3, 11)
-    source_template = "LBNL ToyMC no fluctuations sin2={sin2} dm2ee={dm2ee}"
+    # sin2_values = np.linspace(0.065, 0.09, 11)
+    sin2_values = np.array([0.065])
+    dm2ee_values = np.linspace(2.3e-3, 2.7e-3, 6)
+    source_template = "LBNL ToyMC 02 no fluctuations modified 1 binning sin2={sin2} dm2ee={dm2ee}"
     fit_config = {
         "database": "/home/skohn/parameters_new.db",
         "period": "8ad",
@@ -45,7 +46,7 @@ def main(database, label, toy_out_location, toy_code_dir, config_template):
         "num_coincs": True,
         "num_coincs_source": None, # This is what we'll replace in the loop
         "reco_bins": None,
-        "det_response_source": "THU ToyMC res_p:Ev No Cuts nominal binning",
+        "det_response_source": "THU ToyMC res_p:Ev No Cuts nH modified 1 binning",
     }
     fit_file_name = 'fit_config_validation_tmp.json'
     # Read in the config file and modify it to include placeholders for
@@ -67,7 +68,7 @@ def main(database, label, toy_out_location, toy_code_dir, config_template):
             0,
             database,
             source_template.format(sin2=sin2, dm2ee=dm2ee),
-            "nH nominal",
+            "nH modified 1",
         )
         fit_config['num_coincs_source'] = source_template.format(sin2=sin2, dm2ee=dm2ee)
         with open(fit_file_name, 'w') as f:

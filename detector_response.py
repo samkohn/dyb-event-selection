@@ -25,6 +25,10 @@ def main(toymc_infile, update_db, image_outfile, binning):
     elif binning == 'rate-only':
         hardcoded_reco_bins = np.array([1.5*keV, 12*keV])
         nbins = (164, 1.8*keV, 12*keV, 1, 1.5*keV, 12*keV)
+    elif binning == 'nH modified 1':
+        # Bins: 1.6MeV, 0.2MeV till 8MeV, then 8-12MeV as 1 bin
+        hardcoded_reco_bins = np.concatenate((np.linspace(1.6*keV, 8*keV, 33), [12*keV]))
+        nbins = (164, 1.8*keV, 12*keV, 33, 1.6*keV, 12*keV)
     #hardcoded_reco_bins = array('f', [1.5 + 0.25 * i for i in range(27)] + [12])
     #hardcoded_true_bins = array('f', [1.8 + 0.05 * i for i in range(164)] + [12])
     detector_response_hist = ROOT.TH2F('det_response', 'det_response', *nbins)

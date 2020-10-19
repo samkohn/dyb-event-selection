@@ -1,0 +1,29 @@
+All:
+clone DybBerkFit
+cd scripts
+source /init.sh
+cd ..
+cp -R example/LBNL input
+
+ToyMC configuration files in toySpectra/data_file:
+no fluctuations: dyb_data_v1_nominal.txt
+full experiment with fluctuations: dyb_data_v1_allsys_and_stat.txt
+in between: other files
+
+Copy the desired template file before making edits.
+This file is where you change the "true" oscillation parameters,
+and tweak which systematics & statistics are fluctuated.
+
+Data set configuration files in input (Theta13-inputs_*.txt):
+ToyMC spectra are scaled to match the given total bg counts.
+Signal counts are determined by the above-supplied oscillation parameters.
+To turn off bg, set the appropriate row(s) to 0.
+Note that just setting row 9 to 0 will not work. Each source of bg must be disabled.
+Also note that there's a row for Delta M^2_{32} which is ignored.
+
+cd toySpectra
+export OMP_NUM_THREADS=10
+root -b -q LoadClasses.C 'genToySpectraTree.C+("<path_to_ToyMC_config.txt>", "<output_filename>")'
+
+To generate fewer ToyMC samples:
+edit toySpectra/genToySpectraTree.C line 22, e.g. nToys = 1;

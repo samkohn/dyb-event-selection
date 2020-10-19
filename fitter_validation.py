@@ -25,16 +25,16 @@ def generate_toy(outfilename, toy_code_dir, toy_config, sin2, dm2ee):
         'root', '-b', '-q', 'LoadClasses.C',
         f'genToySpectraTree.C+("toymc_config_tmp.txt", "{outfile_full}")'
     ]
-    subprocess.run(command, check=True)
+    subprocess.run(command, check=True, capture_output=True)
     os.chdir(current_dir)
     return outfile_full
 
 
 def main(database, label, toy_out_location, toy_code_dir, config_template):
-    # sin2_values = np.linspace(0.065, 0.09, 11)
-    sin2_values = np.array([0.065])
+    sin2_values = np.linspace(0.065, 0.09, 6)
+    # sin2_values = np.array([0.065])
     dm2ee_values = np.linspace(2.3e-3, 2.7e-3, 6)
-    source_template = "LBNL ToyMC 02 no fluctuations modified 1 binning sin2={sin2} dm2ee={dm2ee}"
+    source_template = "LBNL ToyMC 02 no fluctuations default nGd binning sin2={sin2} dm2ee={dm2ee}"
     fit_config = {
         "database": "/home/skohn/parameters_new.db",
         "period": "8ad",
@@ -46,7 +46,7 @@ def main(database, label, toy_out_location, toy_code_dir, config_template):
         "num_coincs": True,
         "num_coincs_source": None, # This is what we'll replace in the loop
         "reco_bins": None,
-        "det_response_source": "THU ToyMC res_p:Ev No Cuts nH modified 1 binning",
+        "det_response_source": "LBNL ToyMC directly from Matt nominal reco binning, adapted true binning",
     }
     fit_file_name = 'fit_config_validation_tmp.json'
     # Read in the config file and modify it to include placeholders for
@@ -68,7 +68,7 @@ def main(database, label, toy_out_location, toy_code_dir, config_template):
             0,
             database,
             source_template.format(sin2=sin2, dm2ee=dm2ee),
-            "nH modified 1",
+            "default",
         )
         fit_config['num_coincs_source'] = source_template.format(sin2=sin2, dm2ee=dm2ee)
         with open(fit_file_name, 'w') as f:

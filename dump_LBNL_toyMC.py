@@ -33,6 +33,16 @@ def main(infilename, entry_number, update_db, source, binning_type):
     if binning_type == 'default':
         num_ibds = num_ibds_default
         bins = bins_default
+    elif binning_type == 'default minus lowest':
+        num_ibds = {}
+        bins = bins_default
+        for halldet, ibds_halldet in num_ibds_default.items():
+            new_ibds_halldet = ibds_halldet.copy()
+            new_ibds_halldet[0] = 0
+            new_ibds_halldet[1] = 0
+            new_ibds_halldet[2] = 0
+            new_ibds_halldet[3] = 0
+            num_ibds[halldet] = new_ibds_halldet
     elif binning_type == 'nH nominal':
         num_ibds = {}
         # 1.5, 1.6, 1.8, 2.0, 2.2, ..., 7.8, 8.0, 12 MeV
@@ -101,6 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--update-db')
     parser.add_argument('--source', default='LBNL toymc')
     parser.add_argument('--binning', default='default', choices=('default',
+        'default minus lowest',
         'nH nominal', 'rate-only', 'nH modified 1'))
     args = parser.parse_args()
 

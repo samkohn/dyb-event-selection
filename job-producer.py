@@ -31,8 +31,11 @@ def generate_worker_command(line, command_template, run_only, per_ad):
         args = {'run': run, 'site': site}
     else:
         run, fileno, site = get_run_info(line)
-        infile = get_file_location(run, fileno)
-        args = {'run': run, 'fileno': fileno, 'site': site, 'filepath': infile}
+        if 'filepath' in command_template:
+            infile = get_file_location(run, fileno)
+            args = {'run': run, 'fileno': fileno, 'site': site, 'filepath': infile}
+        else:
+            args = {'run': run, 'fileno': fileno, 'site': site}
     if per_ad:
         ads = dets_for(site, run)
         commands = []

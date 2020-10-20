@@ -30,11 +30,11 @@ def generate_toy(outfilename, toy_code_dir, toy_config, sin2, dm2ee):
     return outfile_full
 
 
-def main(database, label, toy_out_location, toy_code_dir, config_template):
     sin2_values = np.linspace(0.065, 0.09, 6)
     # sin2_values = np.array([0.065])
     dm2ee_values = np.linspace(2.3e-3, 2.7e-3, 6)
     source_template = "LBNL ToyMC 02 no fluctuations default nGd binning sin2={sin2} dm2ee={dm2ee}"
+def main(database, label, toy_out_location, toy_code_dir, config_template, find_errors):
     fit_config = {
         "database": "/home/skohn/parameters_new.db",
         "period": "8ad",
@@ -89,15 +89,19 @@ def main(database, label, toy_out_location, toy_code_dir, config_template):
                 [result.x[0]] + [0] * 8 + result.x[1:].tolist()
         )
         chi2_min = fit.chi_square(constants, fit_params)
-        upper, lower = fit.sigma_searcher(fit_params, constants)
         best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
-        upper_sin2 = np.power(np.sin(2*upper), 2)
-        lower_sin2 = np.power(np.sin(2*lower), 2)
-        upper_error = upper_sin2 - best_sin2
-        lower_error = best_sin2 - lower_sin2
-        sin2_error = max(upper_error, lower_error)
         dm2ee_best = None
-        dm2ee_error = None
+        if find_errors:
+            upper, lower = fit.sigma_searcher(fit_params, constants)
+            upper_sin2 = np.power(np.sin(2*upper), 2)
+            lower_sin2 = np.power(np.sin(2*lower), 2)
+            upper_error = upper_sin2 - best_sin2
+            lower_error = best_sin2 - lower_sin2
+            sin2_error = max(upper_error, lower_error)
+            dm2ee_error = None
+        else:
+            sin2_error = None
+            dm2ee_error = None
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO fitter_validation_results
@@ -117,5 +121,7 @@ if __name__ == "__main__":
     parser.add_argument('--toy-output')
     parser.add_argument('--toy-scripts')
     parser.add_argument('--toy-config')
+    parser.add_argument('--find-errors', action='store_true')
     args = parser.parse_args()
-    main(args.database, args.label, args.toy_output, args.toy_scripts, args.toy_config)
+    main(args.database, args.label, args.toy_output, args.toy_scripts, args.toy_config,
+            args.find_errors)

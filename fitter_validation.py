@@ -18,7 +18,7 @@ def generate_toy(outfilename, toy_code_dir, toy_config, sin2, dm2ee):
     os.chdir(toy_code_dir)
     with open('toymc_config_tmp.txt', 'w') as f:
         f.write(toy_config)
-    outfile_full = os.path.join(outfilename, f'toy_02_{sin2}_{dm2ee}.root')
+    outfile_full = os.path.join(outfilename, f'toy_05_{sin2}_{dm2ee}.root')
     if os.path.isfile(outfile_full):
         return outfile_full
     command = [
@@ -30,11 +30,12 @@ def generate_toy(outfilename, toy_code_dir, toy_config, sin2, dm2ee):
     return outfile_full
 
 
-    sin2_values = np.linspace(0.065, 0.09, 6)
-    # sin2_values = np.array([0.065])
-    dm2ee_values = np.linspace(2.3e-3, 2.7e-3, 6)
-    source_template = "LBNL ToyMC 02 no fluctuations default nGd binning sin2={sin2} dm2ee={dm2ee}"
 def main(database, label, toy_out_location, toy_code_dir, config_template, find_errors):
+    # sin2_values = np.linspace(0.065, 0.09, 6)
+    sin2_values = np.array([0.065])
+    dm2ee_values = np.array([0.0027])
+    # dm2ee_values = np.linspace(2.3e-3, 2.7e-3, 6)
+    source_template = "LBNL ToyMC 05 w/ full fluctuations default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}"
     fit_config = {
         "database": "/home/skohn/parameters_new.db",
         "period": "8ad",
@@ -59,18 +60,21 @@ def main(database, label, toy_out_location, toy_code_dir, config_template, find_
         'deltaMSqee       2.48e-3', 'deltaMSqee       {dm2ee}'
     )
 
-    for i, (sin2, dm2ee) in enumerate(itertools.product(sin2_values, dm2ee_values)):
+    for i, (sin2, dm2ee, entry) in enumerate(itertools.product(sin2_values, dm2ee_values,
+        range(0, 1000, 4))):  # ToyMC fluctuations change every 4?
+        print(i, sin2, dm2ee, entry)
         toy_config = toy_config_template.format(sin2=sin2, dm2ee=dm2ee)
         toyfilename = generate_toy(toy_out_location, toy_code_dir, toy_config,
                 sin2, dm2ee)
         dump_LBNL_toyMC.main(
             toyfilename,
-            0,
+            entry,
             database,
-            source_template.format(sin2=sin2, dm2ee=dm2ee),
+            source_template.format(sin2=sin2, dm2ee=dm2ee, entry=entry),
             "default",
         )
-        fit_config['num_coincs_source'] = source_template.format(sin2=sin2, dm2ee=dm2ee)
+        fit_config['num_coincs_source'] = source_template.format(sin2=sin2,
+                dm2ee=dm2ee, entry=entry)
         with open(fit_file_name, 'w') as f:
             json.dump(fit_config, f)
         constants = pred.load_constants(fit_file_name)

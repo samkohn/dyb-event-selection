@@ -46,7 +46,7 @@ if __name__ == '__main__':
         results = np.array(cursor.fetchall())
 
     param_pairs = np.unique(results[:, [0, 2]], axis=0)
-    fig, axs = plt.subplots(6, 3, figsize=(12, 14))
+    fig, axs = plt.subplots(6, 6, figsize=(18, 12), sharey=True)
     axs_flat = axs.flatten()
     ax_index = 0
     for sin2, dm2 in param_pairs:

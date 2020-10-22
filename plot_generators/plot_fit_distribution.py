@@ -35,51 +35,105 @@ def gaus_resid(params, xvals, yvals):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('database')
+    parser.add_argument('--sin2', action='store_true')
+    parser.add_argument('--dm2', action='store_true')
+    parser.add_argument('--filter')
     args = parser.parse_args()
 
     with sqlite3.Connection(args.database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee, ChiSquare
+        cursor.execute('''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee, FitDM2ee, ChiSquare
         FROM fitter_validation_results
-        WHERE Category LIKE "%Cori%"
-        ORDER BY TrueSinSqT13, TrueDm2ee''')
+        WHERE Category LIKE ?
+        ORDER BY TrueSinSqT13, TrueDm2ee''', (args.filter,))
         results = np.array(cursor.fetchall())
 
     param_pairs = np.unique(results[:, [0, 2]], axis=0)
-    fig, axs = plt.subplots(6, 6, figsize=(18, 12), sharey=True)
-    axs_flat = axs.flatten()
+    fig_index = 1
+    if args.sin2:
+        fig, axs = plt.subplots(6, 6, figsize=(18, 12), sharey=True)
+        axs_flat = axs.flatten()
+        sin2_fig_index = fig_index
+        fig_index += 1
+    if args.dm2:
+        fig_m2, axs_m2 = plt.subplots(6, 6, figsize=(18, 12), sharey=True)
+        axs_m2_flat = axs_m2.flatten()
+        m2_fig_index = fig_index
+        fig_index += 1
     ax_index = 0
     for sin2, dm2 in param_pairs:
-        ax = axs_flat[ax_index]
         data = select_config(results, sin2, dm2)
-        values, bins, _ = ax.hist(data[:, 1], range=(0.055, 0.105), bins=20)
-        xvals = np.diff(bins)/2 + bins[:-1]  # midpoints
-        guess_height = max(values)
-        guess_stdev = 0.01
-        guess_loc = np.mean(data[:, 1])
-        guess_params = (guess_height, guess_loc, guess_stdev)
-        fitresults = least_squares(gaus_resid, guess_params, args=(xvals, values))
-        fitparams = FitParams(*fitresults.x)
-        curve_points = np.linspace(bins[0], bins[-1], 100)
-        fit_curve = gaus_model(curve_points, fitparams)
-        ax.plot(curve_points, fit_curve)
-        if sin2 < 0.08:
-            horiz_pos = 0.95
-            horiz_align = 'right'
-        else:
-            horiz_pos = 0.05
-            horiz_align = 'left'
-        ax.text(horiz_pos, 0.95, rf'''Mean: {fitparams.mean:.6f}
+        if args.sin2:
+            ax = axs_flat[ax_index]
+            values, bins, _ = ax.hist(data[:, 1], range=(0.055, 0.105), bins=20)
+            xvals = np.diff(bins)/2 + bins[:-1]  # midpoints
+            guess_height = max(values)
+            guess_stdev = 0.01
+            guess_loc = np.mean(data[:, 1])
+            guess_params = (guess_height, guess_loc, guess_stdev)
+            fitresults = least_squares(gaus_resid, guess_params, args=(xvals, values))
+            fitparams = FitParams(*fitresults.x)
+            curve_points = np.linspace(bins[0], bins[-1], 100)
+            fit_curve = gaus_model(curve_points, fitparams)
+            ax.plot(curve_points, fit_curve)
+            if sin2 < 0.08:
+                horiz_pos = 0.95
+                horiz_align = 'right'
+            else:
+                horiz_pos = 0.05
+                horiz_align = 'left'
+            ax.text(horiz_pos, 0.95, rf'''Mean: {fitparams.mean:.6f}
 True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
 True $\Delta m^{{2}}_{{ee}}$: {dm2}
 Sigma: {fitparams.stdev:.6f}
 ''',
-        fontsize=10,
-        transform=ax.transAxes,
-        horizontalalignment=horiz_align,
-        verticalalignment='top')
+            fontsize=10,
+            transform=ax.transAxes,
+            horizontalalignment=horiz_align,
+            verticalalignment='top')
+
+        if args.dm2:
+            ax_m2 = axs_m2_flat[ax_index]
+            scaled_data = data[:, 3] * 1000  # units of 1e-3 ev^2
+            values_m2, bins_m2, _ = ax_m2.hist(scaled_data, range=(2, 3), bins=20)
+            xvals_m2 = np.diff(bins_m2)/2 + bins_m2[:-1]  # midpoints
+            guess_height_m2 = max(values_m2)
+            guess_stdev_m2 = 0.1
+            guess_loc_m2 = np.mean(scaled_data)
+            guess_params_m2 = (guess_height_m2, guess_loc_m2, guess_stdev_m2)
+            fitresults_m2 = least_squares(gaus_resid, guess_params_m2, args=(xvals_m2,
+                values_m2))
+            fitparams_m2 = FitParams(*fitresults_m2.x)
+            curve_points_m2 = np.linspace(bins_m2[0], bins_m2[-1], 100)
+            fit_curve_m2 = gaus_model(curve_points_m2, fitparams_m2)
+            ax_m2.plot(curve_points_m2, fit_curve_m2)
+            if dm2 < 2.5e-3:
+                horiz_pos = 0.95
+                horiz_align = 'right'
+            else:
+                horiz_pos = 0.05
+                horiz_align = 'left'
+            ax_m2.text(horiz_pos, 0.95,
+rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
+True $\Delta m^{{2}}_{{ee}}$: {dm2:.3e} eV${{}}^2$
+$\mu$: {fitparams_m2.mean*1e-3:.3e} eV${{}}^2$
+$\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
+''',
+            fontsize=10,
+            transform=ax_m2.transAxes,
+            horizontalalignment=horiz_align,
+            verticalalignment='top')
+            ax_m2.ticklabel_format(axis='x', scilimits=(0, 0), useMathText=True)
         ax_index += 1
-    axs[-1, 1].set_xlabel(r'Fit $\sin^{2}2\theta_{13}$', fontsize=12)
-    axs[2, 0].set_ylabel('Number of fake experiments', fontsize=12)
-    plt.tight_layout()
+    if args.sin2:
+        axs[-1, 1].set_xlabel(r'Fit $\sin^{2}2\theta_{13}$', fontsize=12)
+        plt.figure(sin2_fig_index)
+        plt.tight_layout()
+        axs[2, 0].set_ylabel('Number of fake experiments', fontsize=12)
+    if args.dm2:
+        axs_m2[-1, 1].set_xlabel(r'Fit $\Delta m^{2}_{ee}$ [$10^{-3}$ eV${}^2$]', fontsize=12)
+        plt.figure(m2_fig_index)
+        plt.tight_layout()
+        axs_m2[2, 0].set_ylabel('Number of fake experiments', fontsize=12)
+    #plt.subplots_adjust(hspace=0.1, wspace=0.05)
     plt.show()

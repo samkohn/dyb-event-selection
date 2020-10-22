@@ -15,11 +15,13 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     Set return_array=True to return an array of terms rather than the sum.
     """
     chi_square = 0
+    far_ads = pred.far_ads
+    #far_ads = [(3, 1)]
     # TODO figure out how to handle selecting rate_only
     if rate_only:
-        observed = {ad: np.sum(constants.observed_candidates[ad], keepdims=True) for ad in pred.far_ads}
+        observed = {ad: np.sum(constants.observed_candidates[ad], keepdims=True) for ad in far_ads}
     else:
-        observed = {ad: constants.observed_candidates[ad] for ad in pred.far_ads}
+        observed = {ad: constants.observed_candidates[ad] for ad in far_ads}
     predicted, reco_bins = pred.predict_ad_to_ad_obs(constants, fit_params)
     if rate_only:
         for key, val in predicted.items():
@@ -32,7 +34,7 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     if debug:
         pprint(observed)
         pprint(predicted)
-    return_array_values = np.zeros((4 * num_bins + num_pulls,))
+    return_array_values = np.zeros((len(far_ads) * num_bins + num_pulls,))
     term_index = 0
 
     # Average the near-hall predictions
@@ -41,9 +43,9 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         near_ads = pred.near_ads
     else:
         denominator = len(near_ads)
-    predicted_avg = pred.ad_dict(0, halls='far')
+    predicted_avg = {halldet: 0 for halldet in far_ads}
     for (far_halldet, near_halldet), n_predicted in predicted.items():
-        if near_halldet in near_ads:
+        if near_halldet in near_ads and far_halldet in far_ads:
             predicted_avg[far_halldet] += n_predicted/denominator
     if debug:
         pprint(predicted_avg)

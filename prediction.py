@@ -18,10 +18,9 @@ import numpy as np
 class InputOscParams:
     theta12: float
     m2_21: float
-    m2_ee: float
 
-default_osc_params = InputOscParams(33.6469*np.pi/180, 7.53e-5, 2.48e-3)
-no_osc_params = InputOscParams(0, 0, 0)
+default_osc_params = InputOscParams(33.6469*np.pi/180, 7.53e-5)
+no_osc_params = InputOscParams(0, 0)
 near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
@@ -61,7 +60,7 @@ class FitConstants:
 @dataclass
 class FitParams:
     theta13: float
-    # m2_ee: float
+    m2_ee: float
     pull_bg: dict
     pull_near_stat: dict
     pull_reactor: dict
@@ -69,27 +68,27 @@ class FitParams:
     @classmethod
     def from_list(cls, in_list):
         theta13 = in_list[0]
-        # m2_ee = in_list[1]
+        m2_ee = in_list[1]
         # Background pull parameters
         pull_bg = {}
-        for pull, halldet in zip(in_list[1:9], all_ads):
+        for pull, halldet in zip(in_list[2:10], all_ads):
             pull_bg[halldet] = pull
         # Near statistics pull parameters
         pull_near_stat = {}
-        for pull, halldet in zip(in_list[9:13], near_ads):
+        for pull, halldet in zip(in_list[10:14], near_ads):
             pull_near_stat[halldet] = pull
         # Reactor pull parameters
         pull_reactor = {}
-        for i, pull in enumerate(in_list[13:19]):
+        for i, pull in enumerate(in_list[14:20]):
             pull_reactor[i + 1] = pull
         # Detection efficiency pull parameters
         pull_efficiency = {}
-        for pull, halldet in zip(in_list[19:27], all_ads):
+        for pull, halldet in zip(in_list[20:28], all_ads):
             pull_efficiency[halldet] = pull
-        return cls(theta13, pull_bg, pull_near_stat, pull_reactor, pull_efficiency)
+        return cls(theta13, m2_ee, pull_bg, pull_near_stat, pull_reactor, pull_efficiency)
     def to_list(self):
         return (
-            [self.theta13]
+            [self.theta13, self.m2_ee]
             + [self.pull_bg[halldet] for halldet in all_ads]
             + [self.pull_near_stat[halldet] for halldet in near_ads]
             + [self.pull_reactor[core] for core in range(1, 7)]
@@ -552,7 +551,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
                         distance_m,
                         constants.true_bins_spectrum + get_to_bin_centers_hack,
                         fit_params.theta13,
-                        constants.input_osc_params.m2_ee,
+                        fit_params.m2_ee,
                         input_osc_params=constants.input_osc_params
                 )
             else:
@@ -587,7 +586,7 @@ def extrapolation_factor(constants, fit_params):
                     distance_m,
                     constants.true_bins_spectrum + get_to_bin_centers_hack,
                     fit_params.theta13,
-                    constants.input_osc_params.m2_ee,
+                    fit_params.m2_ee,
                     input_osc_params=constants.input_osc_params
             )
             denominators[:, core-1] = spec * p_osc / distance_m**2
@@ -605,7 +604,7 @@ def extrapolation_factor(constants, fit_params):
                             distance_m,
                             constants.true_bins_spectrum + get_to_bin_centers_hack,
                             fit_params.theta13,
-                            constants.input_osc_params.m2_ee,
+                            fit_params.m2_ee,
                             input_osc_params=constants.input_osc_params
                     )
                     far_osc_probs[(far_hall, far_det), core] = p_osc
@@ -772,7 +771,7 @@ def reco_to_true_energy(constants, fit_params):
             distance_m,
             true_bin_fluxfrac_centers,
             fit_params.theta13,
-            constants.input_osc_params.m2_ee,
+            fit_params.m2_ee,
             input_osc_params=constants.input_osc_params
         )
         weighted_fluxfrac = flux_frac_no_osc * p_sur

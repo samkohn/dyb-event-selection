@@ -102,20 +102,22 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     constants.input_osc_params.m2_ee = dm2ee
     starting_params = pred.FitParams(
             0.15,
+            2.48e-3,
             pred.ad_dict(0),
             pred.ad_dict(0, halls='near'),
             pred.core_dict(0),
             pred.ad_dict(0),
     )
     near_ads = None
-    result = fit.fit_lsq_frozen(starting_params, constants, range(1, 9),
-            near_ads=near_ads)
+    frozen_params = range(2, 10)
+    result = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
+            near_ads=near_ads, rate_only=False)
     fit_params = pred.FitParams.from_list(
-            [result.x[0]] + [0] * 8 + result.x[1:].tolist()
+            [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
     )
-    chi2_min = fit.chi_square(constants, fit_params)
+    chi2_min = fit.chi_square(constants, fit_params, rate_only=False)
     best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
-    dm2ee_best = None
+    dm2ee_best = fit_params.m2_ee
     if find_errors:
         upper, lower = fit.sigma_searcher(fit_params, constants)
         upper_sin2 = np.power(np.sin(2*upper), 2)

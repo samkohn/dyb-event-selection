@@ -232,15 +232,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
     rate_only = not args.shape
     constants = pred.load_constants(args.config)
-    if args.dm2ee is not None:
-        constants.input_osc_params.m2_ee = args.dm2ee
     starting_params = pred.FitParams(
             0.15,
+            2.48e-3,
             pred.ad_dict(0),
             pred.ad_dict(0, halls='near'),
             pred.core_dict(0),
             pred.ad_dict(0),
     )
+    frozen_params = list(range(2, 10))
+    if args.dm2ee is not None:
+        starting_params.m2_ee = args.dm2ee
+        frozen_params = [1] + frozen_params  # Don't modify m2_ee in fit
+    if args.dm2ee is None and rate_only:
+        raise ValueError("Can't fit dm2_ee in rate-only")
     print(starting_params)
     print(chi_square(constants, starting_params, rate_only=rate_only))
     print(chi_square(constants, starting_params, return_array=True,
@@ -255,9 +260,14 @@ if __name__ == "__main__":
         print(result.message)
         if not result.success:
             sys.exit(0)
-        fit_params = pred.FitParams.from_list(
-                [result.x[0]] + [0] * 8 + result.x[1:].tolist()
-        )
+        if 1 in frozen_params:
+            fit_params = pred.FitParams.from_list(
+                [result.x[0], starting_params.m2_ee] + [0] * 8 + result.x[1:].tolist()
+            )
+        else:
+            fit_params = pred.FitParams.from_list(
+                [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
+            )
         print(chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
             rate_only=rate_only))
         print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,

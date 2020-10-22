@@ -231,6 +231,7 @@ if __name__ == "__main__":
     parser.add_argument("--update-db")
     parser.add_argument("--shape", action='store_true')
     parser.add_argument("--dm2ee", type=float)
+    parser.add_argument("--debug", action='store_true')
     args = parser.parse_args()
     rate_only = not args.shape
     constants = pred.load_constants(args.config)
@@ -249,7 +250,7 @@ if __name__ == "__main__":
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
     print(starting_params)
-    print(chi_square(constants, starting_params, rate_only=rate_only))
+    print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug))
     print(chi_square(constants, starting_params, return_array=True,
         rate_only=rate_only))
     if not args.no_fit:

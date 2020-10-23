@@ -240,8 +240,9 @@ if __name__ == "__main__":
         raise ValueError("Can't fit dm2_ee in rate-only")
     print(starting_params)
     print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug))
-    print(chi_square(constants, starting_params, return_array=True,
-        rate_only=rate_only))
+    if args.debug:
+        print(chi_square(constants, starting_params, return_array=True,
+            rate_only=rate_only))
     if not args.no_fit:
         near_ads = None
         result = fit_lsq_frozen(starting_params, constants, frozen_params,
@@ -262,11 +263,16 @@ if __name__ == "__main__":
             )
         print(chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
             rate_only=rate_only))
-        print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
-            rate_only=rate_only))
+        if args.debug:
+            print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
+                rate_only=rate_only))
+        else:
+            print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
+                rate_only=rate_only)[-26:])
         print(fit_params)
-        print("Observed & Predicted & Avg Predicted")
-        min_chi2 = chi_square(constants, fit_params, debug=True, near_ads=near_ads,
+        if args.debug:
+            print("Observed & Predicted & Avg Predicted")
+        min_chi2 = chi_square(constants, fit_params, debug=args.debug, near_ads=near_ads,
                 rate_only=rate_only)
         if args.scan:
             print("Chi-square scan")

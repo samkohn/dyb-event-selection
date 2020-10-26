@@ -122,6 +122,7 @@ def main(database, label, toy_out_location, toy_code_dir, config_template, find_
 def run_validation_on_experiment(label, toyfilename, entry, index, database,
         source_template, fit_config, fit_file_name, sin2, dm2ee, find_errors, rate_only):
     print(index)
+    avg_near = False
     fit_config['num_coincs_source'] = source_template.format(sin2=sin2,
             dm2ee=dm2ee, entry=entry)
     fit_file_name = f'{fit_file_name}_{random.randint(0, 1000000000)}'
@@ -142,17 +143,36 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     )
     near_ads = None
     if rate_only:
-        frozen_params = range(1, 10)
+        # frozen_params = range(1, 10)
+        frozen_params = list(range(1, 29))  # 28 pull params
     else:
-        frozen_params = range(2, 10)
+        # frozen_params = range(2, 10)
+        frozen_params = range(2, 29)
     result = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
-            near_ads=near_ads, rate_only=rate_only)
+            near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
+    starting_param_list = starting_params.to_list()
+    param_list = [result.x[0]]  # We know we can start with theta13
     if rate_only:
-        param_list = [result.x[0], dm2ee] + [0] * 8 + result.x[1:].tolist()  # rate-only
+        param_list.append(dm2ee)
+        first_pull_index = 1
     else:
-        param_list = [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
+        param_list.append(result.x[1])
+        first_pull_index = 2
+    for i, starting_param in enumerate(starting_param_list):
+        if i < 2:
+            continue
+        if i in frozen_params:
+            param_list.append(starting_param)
+        else:
+            # print(frozen_params)
+            param_list.append(result.x[i+first_pull_index])
+    # if rate_only:
+        # param_list = [result.x[0], dm2ee] + [0] * 8 + result.x[1:].tolist()  # rate-only
+    # else:
+        # param_list = [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
     fit_params = pred.FitParams.from_list(param_list)
-    chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only)
+    chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only,
+            avg_near=avg_near)
     best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
     dm2ee_best = fit_params.m2_ee
     if find_errors:
@@ -175,7 +195,7 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
         cursor.execute('''INSERT OR REPLACE INTO fitter_validation_results
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (label, index, sin2, best_sin2, sin2_error, dm2ee, dm2ee_best, dm2ee_error,
-            chi2_min, True))
+            chi2_min, int(rate_only)))
 
 
 

@@ -9,7 +9,7 @@ from scipy.optimize import least_squares
 import prediction as pred
 
 def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=None,
-        rate_only=False):
+        rate_only=False, avg_near=False):
     """Compute the chi-square value for a single set of parameters.
 
     Set return_array=True to return an array of terms rather than the sum.
@@ -34,8 +34,23 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     if debug:
         pprint(observed)
         pprint(predicted)
-    return_array_values = np.zeros((len(far_ads) * len(near_ads) * num_bins + num_pulls,))
+    if avg_near:
+        return_array_values = np.zeros((len(far_ads) * num_bins + num_pulls,))
+    else:
+        return_array_values = np.zeros((len(far_ads) * len(near_ads) * num_bins + num_pulls,))
     term_index = 0
+
+    if avg_near:
+        # Average the near-hall predictions
+        denominator = len(near_ads)
+        #  Near AD in the pairing doesn't matter but should be a member of near_ads
+        predicted_avg = {(halldet, near_ads[0]): 0 for halldet in far_ads}
+        for (far_halldet, near_halldet), n_predicted in predicted.items():
+            if near_halldet in near_ads and far_halldet in far_ads:
+                predicted_avg[far_halldet, near_ads[0]] += n_predicted/denominator
+        if debug:
+            pprint(predicted_avg)
+        predicted = predicted_avg
 
     #Main part
     for (far_halldet, near_halldet), n_predicted in predicted.items():
@@ -82,17 +97,17 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     else:
         return sum(chi_square)
 
-def residual_fn(x, constants, near_ads=None, rate_only=False):
+def residual_fn(x, constants, near_ads=None, rate_only=False, avg_near=False):
     """Convert arguments from scipy to desired format and return the residuals.
     """
     fit_params = pred.FitParams.from_list(x)
     # Take the square root because the fitter wants the linear residuals
     # and squares them on its own...
     residuals = np.sqrt(chi_square(constants, fit_params, return_array=True,
-        near_ads=near_ads, rate_only=rate_only))
+        near_ads=near_ads, rate_only=rate_only, avg_near=avg_near))
     return residuals
 
-def residual_frozen_param(frozen_dict, near_ads, rate_only):
+def residual_frozen_param(frozen_dict, near_ads, rate_only, avg_near):
     """Return a residuals function but with certain parameters frozen.
 
     Frozen parameters should be expressed as ``index: value`` pairs,
@@ -118,10 +133,14 @@ def residual_frozen_param(frozen_dict, near_ads, rate_only):
             else:
                 param_list.append(x[x_index])
                 x_index += 1
-        return residual_fn(param_list, constants, near_ads=near_ads, rate_only=rate_only)
+        return residual_fn(
+            param_list, constants, near_ads=near_ads, rate_only=rate_only,
+            avg_near=avg_near
+        )
     return residual
 
-def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_only):
+def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_only,
+        avg_near):
     """Perform the fit with certain parameters frozen."""
     frozen_params_dict = {}
     all_params = starting_params.to_list()
@@ -131,7 +150,7 @@ def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_onl
             frozen_params_dict[i] = param
         else:
             x0.append(param)
-    residual = residual_frozen_param(frozen_params_dict, near_ads, rate_only)
+    residual = residual_frozen_param(frozen_params_dict, near_ads, rate_only, avg_near)
     result = least_squares(residual, x0, args=(constants,), method='trf')
     return result
 
@@ -221,6 +240,7 @@ if __name__ == "__main__":
     parser.add_argument("--shape", action='store_true')
     parser.add_argument("--dm2ee", type=float)
     parser.add_argument("--debug", action='store_true')
+    parser.add_argument("--avg-near", action='store_true')
     args = parser.parse_args()
     rate_only = not args.shape
     constants = pred.load_constants(args.config)
@@ -239,14 +259,15 @@ if __name__ == "__main__":
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
     print(starting_params)
-    print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug))
+    print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug,
+        avg_near=args.avg_near))
     if args.debug:
         print(chi_square(constants, starting_params, return_array=True,
-            rate_only=rate_only))
+            rate_only=rate_only, avg_near=args.avg_near))
     if not args.no_fit:
         near_ads = None
         result = fit_lsq_frozen(starting_params, constants, frozen_params,
-                near_ads=near_ads, rate_only=rate_only)
+                near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near)
         print(repr(result.x))
         print('sin22theta13 =', np.power(np.sin(2*result.x[0]), 2))
         print(result.success)
@@ -262,18 +283,18 @@ if __name__ == "__main__":
                 [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
             )
         print(chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
-            rate_only=rate_only))
+            rate_only=rate_only, avg_near=args.avg_near))
         if args.debug:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
-                rate_only=rate_only))
+                rate_only=rate_only, avg_near=args.avg_near))
         else:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
-                rate_only=rate_only)[-26:])
+                rate_only=rate_only, avg_near=args.avg_near)[-26:])
         print(fit_params)
         if args.debug:
             print("Observed & Predicted & Avg Predicted")
         min_chi2 = chi_square(constants, fit_params, debug=args.debug, near_ads=near_ads,
-                rate_only=rate_only)
+                rate_only=rate_only, avg_near=args.avg_near)
         if args.scan:
             print("Chi-square scan")
             print(sigma_searcher(fit_params, constants))

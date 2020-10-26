@@ -42,10 +42,15 @@ if __name__ == '__main__':
 
     with sqlite3.Connection(args.database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee, FitDM2ee, ChiSquare
+        if args.dm2:
+            fit_dm2_query = 'FitDM2ee, '
+        else:
+            fit_dm2_query = ''
+        sql_query_str = f'''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee, {fit_dm2_query}ChiSquare
         FROM fitter_validation_results
         WHERE Category LIKE ?
-        ORDER BY TrueSinSqT13, TrueDm2ee''', (args.filter,))
+        ORDER BY TrueSinSqT13, TrueDm2ee'''
+        cursor.execute(sql_query_str, (args.filter,))
         results = np.array(cursor.fetchall())
 
     param_pairs = np.unique(results[:, [0, 2]], axis=0)
@@ -65,7 +70,7 @@ if __name__ == '__main__':
         data = select_config(results, sin2, dm2)
         if args.sin2:
             ax = axs_flat[ax_index]
-            values, bins, _ = ax.hist(data[:, 1], range=(0.055, 0.105), bins=20)
+            values, bins, _ = ax.hist(data[:, 1], range=(0.055, 0.105), bins=30)
             xvals = np.diff(bins)/2 + bins[:-1]  # midpoints
             guess_height = max(values)
             guess_stdev = 0.01
@@ -77,15 +82,15 @@ if __name__ == '__main__':
             fit_curve = gaus_model(curve_points, fitparams)
             ax.plot(curve_points, fit_curve)
             if sin2 < 0.08:
-                horiz_pos = 0.95
+                horiz_pos = 0.98
                 horiz_align = 'right'
             else:
-                horiz_pos = 0.05
+                horiz_pos = 0.02
                 horiz_align = 'left'
-            ax.text(horiz_pos, 0.95, rf'''Mean: {fitparams.mean:.6f}
-True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
-True $\Delta m^{{2}}_{{ee}}$: {dm2}
-Sigma: {fitparams.stdev:.6f}
+            ax.text(horiz_pos, 0.98, rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
+Peak: {fitparams.mean:.4f}
+Width: {fitparams.stdev:.4f}
+$\Delta m^{{2}}_{{ee}}$: {dm2:.2e} eV${{}}^2$
 ''',
             fontsize=10,
             transform=ax.transAxes,
@@ -108,12 +113,12 @@ Sigma: {fitparams.stdev:.6f}
             fit_curve_m2 = gaus_model(curve_points_m2, fitparams_m2)
             ax_m2.plot(curve_points_m2, fit_curve_m2)
             if dm2 < 2.5e-3:
-                horiz_pos = 0.95
+                horiz_pos = 0.98
                 horiz_align = 'right'
             else:
-                horiz_pos = 0.05
+                horiz_pos = 0.02
                 horiz_align = 'left'
-            ax_m2.text(horiz_pos, 0.95,
+            ax_m2.text(horiz_pos, 0.98,
 rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
 True $\Delta m^{{2}}_{{ee}}$: {dm2:.3e} eV${{}}^2$
 $\mu$: {fitparams_m2.mean*1e-3:.3e} eV${{}}^2$
@@ -125,15 +130,18 @@ $\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
             verticalalignment='top')
             ax_m2.ticklabel_format(axis='x', scilimits=(0, 0), useMathText=True)
         ax_index += 1
+    hack_label_coords = (-0.09, 0)
     if args.sin2:
         axs[-1, 1].set_xlabel(r'Fit $\sin^{2}2\theta_{13}$', fontsize=12)
         plt.figure(sin2_fig_index)
         plt.tight_layout()
         axs[2, 0].set_ylabel('Number of fake experiments', fontsize=12)
+        axs[2, 0].yaxis.set_label_coords(*hack_label_coords)
     if args.dm2:
         axs_m2[-1, 1].set_xlabel(r'Fit $\Delta m^{2}_{ee}$ [$10^{-3}$ eV${}^2$]', fontsize=12)
         plt.figure(m2_fig_index)
         plt.tight_layout()
         axs_m2[2, 0].set_ylabel('Number of fake experiments', fontsize=12)
+        axs_m2[2, 0].yaxis.set_label_coords(*hack_label_coords)
     #plt.subplots_adjust(hspace=0.1, wspace=0.05)
     plt.show()

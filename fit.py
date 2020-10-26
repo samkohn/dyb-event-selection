@@ -241,6 +241,7 @@ if __name__ == "__main__":
     parser.add_argument("--dm2ee", type=float)
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
+    parser.add_argument("--no-pulls", action='store_true')
     args = parser.parse_args()
     rate_only = not args.shape
     constants = pred.load_constants(args.config)
@@ -252,7 +253,10 @@ if __name__ == "__main__":
             pred.core_dict(0),
             pred.ad_dict(0),
     )
-    frozen_params = list(range(2, 10))
+    if args.no_pulls:
+        frozen_params = list(range(2, 29))  # 28 pull params
+    else:
+        frozen_params = list(range(2, 10))
     if args.dm2ee is not None:
         starting_params.m2_ee = args.dm2ee
         frozen_params = [1] + frozen_params  # Don't modify m2_ee in fit
@@ -274,14 +278,32 @@ if __name__ == "__main__":
         print(result.message)
         if not result.success:
             sys.exit(0)
-        if 1 in frozen_params:
-            fit_params = pred.FitParams.from_list(
-                [result.x[0], starting_params.m2_ee] + [0] * 8 + result.x[1:].tolist()
-            )
+        starting_param_list = starting_params.to_list()
+        param_list = [result.x[0]]  # We know we can start with theta13
+        if args.dm2ee is not None:
+            param_list.append(args.dm2ee)
+            first_pull_index = 1
         else:
-            fit_params = pred.FitParams.from_list(
-                [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
-            )
+            param_list.append(result.x[1])
+            first_pull_index = 2
+        for i, starting_param in enumerate(starting_param_list):
+            if i < 2:
+                continue
+            if i in frozen_params:
+                param_list.append(starting_param)
+            else:
+                # print(frozen_params)
+                param_list.append(result.x[i+first_pull_index])
+        fit_params = pred.FitParams.from_list(param_list)
+
+        # if 1 in frozen_params:
+            # fit_params = pred.FitParams.from_list(
+                # [result.x[0], starting_params.m2_ee] + [0] * 8 + result.x[1:].tolist()
+            # )
+        # else:
+            # fit_params = pred.FitParams.from_list(
+                # [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
+            # )
         print(chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
             rate_only=rate_only, avg_near=args.avg_near))
         if args.debug:

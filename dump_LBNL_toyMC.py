@@ -4,9 +4,9 @@ import argparse
 import json
 import sqlite3
 
-from prediction import all_ads
+from prediction import all_ads, near_ads, far_ads
 
-def main(infilename, entry_number, update_db, source, binning_type):
+def main(infilename, entry_number, update_db, source, binning_type, nominal_near):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     host_ttree = infile.Get('tr')
@@ -14,8 +14,13 @@ def main(infilename, entry_number, update_db, source, binning_type):
     all_hists = {}
     for i, halldet in enumerate(all_ads):
         for stage in (2,):
-            name = f'h_stage{stage}_ad{i+1}'
-            all_hists[halldet] = getattr(host_ttree, name)
+            if nominal_near and halldet in near_ads:
+                name = f'h_nominal_stage{stage}_ad{i+1}'
+                all_hists[halldet] = infile.Get(name)
+            else:
+                name = f'h_stage{stage}_ad{i+1}'
+                all_hists[halldet] = getattr(host_ttree, name)
+
     num_ibds_default = {}
     bins_default = {}
     for halldet, hist in all_hists.items():
@@ -113,6 +118,8 @@ if __name__ == '__main__':
     parser.add_argument('--binning', default='default', choices=('default',
         'default minus lowest',
         'nH nominal', 'rate-only', 'nH modified 1'))
+    parser.add_argument('--nominal-near', action='store_true')
     args = parser.parse_args()
 
-    main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning)
+    main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning,
+            args.nominal_near)

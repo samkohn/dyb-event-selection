@@ -18,9 +18,11 @@ import numpy as np
 class InputOscParams:
     theta12: float
     m2_21: float
+    hierarchy: bool = True  # True for normal, False for inverted
+    m2_ee_conversion: float = 5.17e-5  # Conversion from m2_ee to m2_32
 
-default_osc_params = InputOscParams(33.6469*np.pi/180, 7.53e-5)
-no_osc_params = InputOscParams(0, 0)
+default_osc_params = InputOscParams(33.6469*np.pi/180, 7.53e-5, True, 5.17e-5)
+no_osc_params = InputOscParams(0, 0, True, 0)
 near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
@@ -265,23 +267,32 @@ def load_constants(config_file):
 def survival_probability(L, E, theta13, m2_ee, input_osc_params=default_osc_params):
     theta12 = input_osc_params.theta12
     m2_21 = input_osc_params.m2_21
+    # Hierarchy factor = 2 * int(hierarchy) - 1 (+1 if True, else -1)
+    hierarchy = 2 * int(input_osc_params.hierarchy) - 1
+    m2_32 = m2_ee - hierarchy * input_osc_params.m2_ee_conversion
+    m2_31 = m2_32 + hierarchy * m2_21
+
     cos4theta13 = np.power(np.cos(theta13), 4)
+    cos2theta12 = np.power(np.cos(theta12), 2)
+    sin2theta12 = np.power(np.sin(theta12), 2)
     sin2_2theta12 = np.power(np.sin(2*theta12), 2)
     sin2_2theta13 = np.power(np.sin(2*theta13), 2)
     delta_21 = delta_ij(L, E, m2_21)
-    delta_ee = delta_ij(L, E, m2_ee)
-    sin_delta_21 = np.sin(delta_21)
-    sin2_delta_21 = sin_delta_21 * sin_delta_21
-    sin_delta_ee = np.sin(delta_ee)
-    sin2_delta_ee = sin_delta_ee * sin_delta_ee
+    delta_31 = delta_ij(L, E, m2_31)
+    delta_32 = delta_ij(L, E, m2_32)
 
     return (
-        1 - cos4theta13 * sin2_2theta12 * sin2_delta_21 - sin2_2theta13 * sin2_delta_ee
+        1
+        - cos4theta13 * sin2_2theta12 * delta_21
+        - cos2theta12 * sin2_2theta13 * delta_31
+        - sin2theta12 * sin2_2theta13 * delta_32
     )
 
 
 def delta_ij(L, E, m2_ij):
-    return 1.267 * m2_ij * L / E
+    phase_arg = 1.267 * m2_ij * L / E
+    sin_val = np.sin(phase_arg)
+    return sin_val * sin_val
 
 def muon_veto_efficiency(database):
     """Compute the DAQ-livetime-weighted muon livetime efficiency by AD.

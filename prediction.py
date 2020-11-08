@@ -467,17 +467,21 @@ def total_emitted_shortcut(database, data_period):
             FROM reactor_emitted_spectrum
             WHERE Core = ? AND DataPeriod = ?
                 AND Source = "DybBerkFit/ReactorPowerCalculator/isotope_spectra_by_Beda"
-                AND Energy < 10
+                AND Energy <= 10
             ORDER BY Energy''',
             (core, data_period))
             result = np.array(cursor.fetchall())
+            spectrum = result[:, 1]
+            spectrum_mid_bins = spectrum[:-1] + 0.5 * np.diff(spectrum)
             for halldet in all_ads:
                 total_spectrum_by_AD[halldet, core] = (
                     # result[:, 1] * livetime_by_AD_for_periods[halldet, data_period]
                     #TODO potentially add ToyMC livetime corrections
-                    result[:, 1]
+                    # result[:, 1]
+                    spectrum_mid_bins
                 )
-            energies = result[:, 0]
+
+            energies = result[:-1, 0]  # Last entry is upper bin boundary
     return total_spectrum_by_AD, energies, None
 
 
@@ -722,8 +726,9 @@ def true_to_reco_energy_matrix(database, source):
 
     Returns a tuple of (conversion, true_bins, reco_bins).
     The conversion is a 2D array indexed by [true_bin, reco_bin].
-    The true and reco bins give the low bin edge value
-    for the corresponding axis.
+    The true and reco bin arrays give the bin edge values
+    for the corresponding axis, and are of length nbins+1
+    (where nbins is the number of bins for the given axis).
     Note that the true bins are generally taken to be much finer
     than the reco bins.
 

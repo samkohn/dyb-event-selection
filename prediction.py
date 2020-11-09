@@ -56,6 +56,7 @@ class FitConstants:
     muon_eff: dict
     multiplicity_eff: dict
     masses: dict
+    standard_mass: float
     cross_section: np.array
     rebin_matrix: np.array
 
@@ -259,6 +260,7 @@ def load_constants(config_file):
             muon_eff,
             multiplicity_eff,
             masses,
+            masses[1, 1],
             cross_sec,
             rebin_matrix,
     )
@@ -665,18 +667,21 @@ def efficiency_weighted_counts(constants, fit_params):
     num_coincidences = constants.observed_candidates
     mult_effs = constants.multiplicity_eff
     muon_effs = constants.muon_eff
+    mass_effs = constants.masses
     pull_near_stat = fit_params.pull_near_stat
     to_return = {}
     for halldet, coincidences in num_coincidences.items():
         mult_eff = mult_effs[halldet]
         muon_eff = muon_effs[halldet]
+        mass_eff = mass_effs[halldet] / constants.standard_mass
         pull_eff = fit_params.pull_efficiency[halldet]
+        combined_eff = mult_eff * muon_eff * mass_eff * (1 + pull_eff)
         # Account for near hall statistics pull parameter
         if halldet in pull_near_stat:
             pulled_coincidences = (1 + pull_near_stat[halldet]) * coincidences
         else:
             pulled_coincidences = coincidences
-        to_return[halldet] = pulled_coincidences / (mult_eff * muon_eff * (1+pull_eff))
+        to_return[halldet] = pulled_coincidences / combined_eff
     return to_return
 
 def backgrounds_per_AD(database, source):
@@ -905,9 +910,10 @@ def predict_ad_to_ad_obs(constants, fit_params):
         mult_eff = mult_effs[far_halldet]
         pull_eff = fit_params.pull_efficiency[far_halldet]
         mass_far = masses[far_halldet]
-        mass_near = masses[near_halldet]
+        mass_eff = mass_far / constants.standard_mass
+        combined_eff = muon_eff * mult_eff * mass_eff * (1 + pull_eff)
         results[far_halldet, near_halldet] = (
-                result * muon_eff * mult_eff * mass_far/mass_near * (1 + pull_eff)
+                result * combined_eff
         )
     return results, constants.reco_bins
 

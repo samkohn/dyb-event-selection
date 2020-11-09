@@ -51,6 +51,7 @@ class FitConstants:
     reco_bins: np.array
     total_emitted_by_AD: dict
     total_emitted_by_week_AD: dict
+    livetime_by_week_AD: dict
     true_bins_spectrum: np.array
     input_osc_params: InputOscParams
     muon_eff: dict
@@ -177,6 +178,9 @@ def load_constants(config_file):
     total_emitted_by_AD, true_bins_spectrum, empty = total_emitted_shortcut(
             database, config.period
     )
+
+    _, time_bins, _ = reactor_spectrum(database, 1)
+    livetimes = livetime_by_week(database, time_bins)
     rebin_matrix = generate_bin_averaging_matrix(
             np.concatenate((true_bins_spectrum, [12])),
             true_bins_response
@@ -255,6 +259,7 @@ def load_constants(config_file):
             total_emitted_by_AD,
             #total_emitted_by_week_AD,
             empty,
+            livetimes,
             true_bins_spectrum,
             default_osc_params,
             muon_eff,
@@ -394,6 +399,16 @@ def reactor_spectrum(database, core):
     spectrum = weekly_num_fissions * spectrum_per_fission.T
     return spectrum, weekly_time_bins, energy_bins
 
+def livetime_for_period(weekly_livetimes, period):
+    """Sum the appropriate weeks' livetimes for the given data period.
+
+    weekly_livetimes should be a 1D array of livetime for each week
+    for the desired AD.
+
+    period should be an ADPeriod object.
+    """
+    return sum(weekly_livetimes[period.start_week : period.end_week+1])
+
 def livetime_by_week(database, weekly_time_bins):
     """Retrieve a 1D array of # seconds livetime for each week."""
     ordered = {}
@@ -477,9 +492,7 @@ def total_emitted_shortcut(database, data_period):
             spectrum_mid_bins = spectrum[:-1] + 0.5 * np.diff(spectrum)
             for halldet in all_ads:
                 total_spectrum_by_AD[halldet, core] = (
-                    # result[:, 1] * livetime_by_AD_for_periods[halldet, data_period]
-                    #TODO potentially add ToyMC livetime corrections
-                    # result[:, 1]
+                    # spectrum_mid_bins * livetime_by_AD_for_periods[halldet, data_period]
                     spectrum_mid_bins
                 )
 
@@ -879,6 +892,15 @@ def predict_ad_to_ad_IBDs(constants, fit_params):
             f_ki[far_halldet, near_halldet] += n.sum(axis=0)
         else:
             f_ki[far_halldet, near_halldet] = n.sum(axis=0)
+    period = period_8ad
+    for (far_halldet, near_halldet), n in f_ki.items():
+        far_livetimes = constants.livetime_by_week_AD[far_halldet]
+        near_livetimes = constants.livetime_by_week_AD[near_halldet]
+        correction = (
+            livetime_for_period(far_livetimes, period)
+            / livetime_for_period(near_livetimes, period)
+        )
+        f_ki[far_halldet, near_halldet] *= correction
     return f_ki, reco_bins
 
 def predict_ad_to_ad_obs(constants, fit_params):

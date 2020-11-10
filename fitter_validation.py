@@ -82,12 +82,14 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
         with multiprocessing.Pool(3) as pool:
             toyfilenames = pool.starmap(generate_toymc_files, [(
-                toy_config_template,
-                sin2,
-                dm2ee,
-                toymc_out_numbers[source_category],
-                toy_code_dir,
-            ) for sin2, dm2ee in grid_values()]
+                    toy_config_template,
+                    toy_out_location,
+                    sin2,
+                    dm2ee,
+                    toymc_out_numbers[source_category],
+                    toy_code_dir,
+                ) for sin2, dm2ee in grid_values()]
+            )
         if dump_mc:
             # Not using multiprocessing so as not to overload db
             for toyfilename, (sin2, dm2ee) in zip(toyfilenames, grid_values()):
@@ -115,22 +117,22 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     find_errors,
                     rate_only
                     ) for i, (toyfilename, (sin2, dm2ee)) in enumerate(
-                        zip(toyfilenames, grid_values)
+                        zip(toyfilenames, grid_values())
                     )
                 ])
             load_to_database(database, results)
     elif toymc_out_numbers[source_category] in WITH_FLUCTUATIONS:
         with multiprocessing.Pool(3) as pool:
             toyfilenames = pool.starmap(generate_toymc_files, [(
-                toy_config_template,
-                sin2,
-                dm2ee,
-                toymc_out_numbers[source_category],
-                toy_code_dir,
-            ) for sin2, dm2ee in grid_values()]
-        for i, (sin2, dm2ee) in enumerate(
-                itertools.product(sin2_values, dm2ee_values)
-        ):
+                    toy_config_template,
+                    toy_out_location,
+                    sin2,
+                    dm2ee,
+                    toymc_out_numbers[source_category],
+                    toy_code_dir,
+                ) for sin2, dm2ee in grid_values()]
+            )
+        for i, (sin2, dm2ee) in enumerate(grid_values()):
             entries = range(0, 1000, 4)
             if dump_mc:
                 for entry in entries:
@@ -159,7 +161,7 @@ def load_to_database(database, results):
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', results)
     return
 
-def generate_toymc_files(toy_config_template, sin2, dm2ee, toy_out_number, toy_code_dir):
+def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy_out_number, toy_code_dir):
     toy_config = toy_config_template.format(sin2=sin2, dm2ee=dm2ee)
     toy_outfile = os.path.join(
         toy_out_location,
@@ -170,7 +172,7 @@ def generate_toymc_files(toy_config_template, sin2, dm2ee, toy_out_number, toy_c
         toy_code_dir,
         toy_config,
     )
-    return
+    return toyfilename
 
 
 def run_validation_on_experiment(label, toyfilename, entry, index, database,
@@ -271,6 +273,8 @@ if __name__ == "__main__":
         3: 'far only fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
+    if 'OMP_NUM_THREADS' not in os.environ:
+        os.environ['OMP_NUM_THREADS'] = str(10)
     main(
         args.database,
         args.label,

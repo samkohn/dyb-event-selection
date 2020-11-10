@@ -262,14 +262,14 @@ if __name__ == "__main__":
         frozen_params = [1] + frozen_params  # Don't modify m2_ee in fit
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
+    near_ads = None
     print(starting_params)
     print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug,
-        avg_near=args.avg_near))
+        avg_near=args.avg_near, near_ads=near_ads))
     if args.debug:
         print(chi_square(constants, starting_params, return_array=True,
-            rate_only=rate_only, avg_near=args.avg_near))
+            rate_only=rate_only, avg_near=args.avg_near, near_ads=near_ads))
     if not args.no_fit:
-        near_ads = None
         result = fit_lsq_frozen(starting_params, constants, frozen_params,
                 near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near)
         print(repr(result.x))
@@ -304,7 +304,7 @@ if __name__ == "__main__":
             # fit_params = pred.FitParams.from_list(
                 # [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
             # )
-        print(chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
+        print('Min chi-square:', chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
             rate_only=rate_only, avg_near=args.avg_near))
         if args.debug:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,

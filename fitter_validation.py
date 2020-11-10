@@ -146,15 +146,19 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         ):
             entries = range(0, 1000)
             if dump_mc:
+                sources = []
                 for entry in entries:
-                    dump_LBNL_toyMC.main(
-                        toyfilename,
-                        entry,
-                        database,
-                        source_template.format(sin2=sin2, dm2ee=dm2ee, entry=entry),
-                        "default",
-                        nominal_near,
+                    sources.append(
+                        source_template.format(sin2=sin2, dm2ee=dm2ee, entry=entry)
                     )
+                dump_LBNL_toyMC.multiple(
+                    toyfilename,
+                    entries,
+                    database,
+                    sources,
+                    "default",
+                    nominal_near,
+                )
             print(sin2, dm2ee)
             if gen_mc_only:
                 continue

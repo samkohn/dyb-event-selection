@@ -6,7 +6,28 @@ import sqlite3
 
 from prediction import all_ads, near_ads, far_ads
 
-def main(infilename, entry_number, update_db, source, binning_type, nominal_near):
+def dump_to_db(database, rows):
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.executemany('''INSERT OR REPLACE INTO num_coincidences
+            VALUES (?, ?, ?, ?, ?)''', rows)
+            #(hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source))
+
+def multiple(infilename, entries, update_db, sources, binning_type, nominal_near):
+    rows = []
+    for entry_number, source in zip(entries, sources):
+        entry_rows = single(
+            infilename, entry_number, None, source, binning_type, nominal_near
+        )
+        rows.extend(entry_rows)
+    if update_db is None:
+        return rows
+    else:
+        dump_to_db(update_db, rows)
+        return rows
+
+
+def single(infilename, entry_number, update_db, source, binning_type, nominal_near):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     host_ttree = infile.Get('tr')
@@ -97,17 +118,26 @@ def main(infilename, entry_number, update_db, source, binning_type, nominal_near
             bins_rateonly[halldet] = [1500, 12000]
             num_ibds = num_ibds_rateonly
             bins = bins_rateonly
+    rows = []
+    for (hall, det), num_ibds_binned in num_ibds.items():
+        binning = bins[halldet]
+        row = (hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source)
+        rows.append(row)
     if update_db is None:
-        print('Not updating the db')
+        #print('Not updating the db')
+        return rows
     else:
-        with sqlite3.Connection(update_db) as conn:
-            cursor = conn.cursor()
-            for (hall, det), num_ibds_binned in num_ibds.items():
-                binning = bins[halldet]
-                cursor.execute('''INSERT OR REPLACE INTO num_coincidences
-                    VALUES (?, ?, ?, ?, ?)''',
-                    (hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source))
+        dump_to_db(update_db, rows)
+        return rows
+        #with sqlite3.Connection(update_db) as conn:
+            #cursor = conn.cursor()
+            #for (hall, det), num_ibds_binned in num_ibds.items():
+                #binning = bins[halldet]
+                #cursor.execute('''INSERT OR REPLACE INTO num_coincidences
+                    #VALUES (?, ?, ?, ?, ?)''',
+                    #(hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source))
 
+main = single
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

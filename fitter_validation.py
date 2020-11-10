@@ -39,6 +39,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         gen_mc_only, dump_mc, nominal_near
 ):
     rate_only = True
+    num_multiprocessing = 63
     toy_out_location = os.path.abspath(toy_out_location)
     if test_mode:
         sin2_values = np.array([0.065])
@@ -80,7 +81,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
     # Get a fresh generator when needed
     grid_values = lambda: itertools.product(sin2_values, dm2ee_values)
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
-        with multiprocessing.Pool(3) as pool:
+        with multiprocessing.Pool(num_multiprocessing) as pool:
             toyfilenames = pool.starmap(generate_toymc_files, [(
                     toy_config_template,
                     toy_out_location,
@@ -102,7 +103,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     nominal_near,
                 )
         if not gen_mc_only:
-            with multiprocessing.Pool(3) as pool:
+            with multiprocessing.Pool(num_multiprocessing) as pool:
                 results = pool.starmap(run_validation_on_experiment, [(
                     label,
                     toyfilename,
@@ -122,7 +123,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                 ])
             load_to_database(database, results)
     elif toymc_out_numbers[source_category] in WITH_FLUCTUATIONS:
-        with multiprocessing.Pool(3) as pool:
+        with multiprocessing.Pool(num_multiprocessing) as pool:
             toyfilenames = pool.starmap(generate_toymc_files, [(
                     toy_config_template,
                     toy_out_location,
@@ -147,7 +148,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
             print(sin2, dm2ee)
             if gen_mc_only:
                 continue
-            with multiprocessing.Pool(3) as pool:
+            with multiprocessing.Pool(num_multiprocessing) as pool:
                 results = pool.starmap(run_validation_on_experiment, [(
                     label, toyfilename, entry, i*len(entries) + j, database,
                     source_template, fit_config, fit_file_name, sin2,

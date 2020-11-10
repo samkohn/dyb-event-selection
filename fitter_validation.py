@@ -29,7 +29,15 @@ def generate_toy(outfile_full, toy_code_dir, toy_config):
         'root', '-b', '-q', 'LoadClasses.C',
         f'genToySpectraTree.C+("toymc_config_tmp.txt", "{outfile_full}")'
     ]
-    subprocess.run(command, check=True, capture_output=True)
+    try:
+        output = subprocess.run(command, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(output.args)
+        print('-------STDOUT-------')
+        print(output.stdout[-2000:])
+        print('-------STDERR-------')
+        print(output.stderr[-2000:])
+        raise
     os.chdir(current_dir)
     return outfile_full
 
@@ -133,8 +141,10 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     toy_code_dir,
                 ) for sin2, dm2ee in grid_values()]
             )
-        for i, (sin2, dm2ee) in enumerate(grid_values()):
-            entries = range(0, 1000, 4)
+        for i, (toyfilename, (sin2, dm2ee)) in enumerate(
+            zip(toyfilenames, grid_values())
+        ):
+            entries = range(0, 1000)
             if dump_mc:
                 for entry in entries:
                     dump_LBNL_toyMC.main(
@@ -274,8 +284,6 @@ if __name__ == "__main__":
         3: 'far only fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
-    if 'OMP_NUM_THREADS' not in os.environ:
-        os.environ['OMP_NUM_THREADS'] = str(10)
     main(
         args.database,
         args.label,

@@ -60,6 +60,7 @@ class FitConstants:
     standard_mass: float
     cross_section: np.array
     rebin_matrix: np.array
+    lbnl_comparison: bool
 
 @dataclass
 class FitParams:
@@ -112,6 +113,7 @@ class Config:
     num_coincs_source: str
     reco_bins: Any
     det_response_source: str
+    lbnl_comparison: bool = False
 
 @dataclass
 class ADPeriod:
@@ -178,6 +180,21 @@ def load_constants(config_file):
     total_emitted_by_AD, true_bins_spectrum, empty = total_emitted_shortcut(
             database, config.period
     )
+    # LBNL comparison removes the AD-to-AD livetime dependence from the reactor flux
+    if config.lbnl_comparison:
+        _, time_bins, _ = reactor_spectrum(database, 1)
+        livetime_by_week_by_AD = livetime_by_week(database, time_bins)
+        livetime_by_AD_for_periods = {
+                (halldet, period.name):
+                sum(livetime_by_week_by_AD[halldet][
+                    period.start_week:period.end_week+1])
+                for period in [period_6ad, period_8ad, period_7ad]
+                for halldet in all_ads
+        }
+        for key in total_emitted_by_AD:
+            halldet, core = key
+            total_emitted_by_AD[key] /= livetime_by_AD_for_periods[halldet,
+                    ad_period.name]
 
     _, time_bins, _ = reactor_spectrum(database, 1)
     livetimes = livetime_by_week(database, time_bins)
@@ -268,6 +285,7 @@ def load_constants(config_file):
             masses[1, 1],
             cross_sec,
             rebin_matrix,
+            config.lbnl_comparison,
     )
 
 
@@ -492,8 +510,8 @@ def total_emitted_shortcut(database, data_period):
             spectrum_mid_bins = spectrum[:-1] + 0.5 * np.diff(spectrum)
             for halldet in all_ads:
                 total_spectrum_by_AD[halldet, core] = (
-                    # spectrum_mid_bins * livetime_by_AD_for_periods[halldet, data_period]
                     spectrum_mid_bins
+                    * livetime_by_AD_for_periods[halldet, data_period]
                 )
 
             energies = result[:-1, 0]  # Last entry is upper bin boundary
@@ -892,15 +910,18 @@ def predict_ad_to_ad_IBDs(constants, fit_params):
             f_ki[far_halldet, near_halldet] += n.sum(axis=0)
         else:
             f_ki[far_halldet, near_halldet] = n.sum(axis=0)
-    period = period_8ad
-    for (far_halldet, near_halldet), n in f_ki.items():
-        far_livetimes = constants.livetime_by_week_AD[far_halldet]
-        near_livetimes = constants.livetime_by_week_AD[near_halldet]
-        correction = (
-            livetime_for_period(far_livetimes, period)
-            / livetime_for_period(near_livetimes, period)
-        )
-        f_ki[far_halldet, near_halldet] *= correction
+    # LBNL comparison requires that we manually correct the AD-to-AD
+    # differences in livetime.
+    if constants.lbnl_comparison:
+        period = period_8ad  # TODO multiple AD periods together
+        for (far_halldet, near_halldet), n in f_ki.items():
+            far_livetimes = constants.livetime_by_week_AD[far_halldet]
+            near_livetimes = constants.livetime_by_week_AD[near_halldet]
+            correction = (
+                livetime_for_period(far_livetimes, period)
+                / livetime_for_period(near_livetimes, period)
+            )
+            f_ki[far_halldet, near_halldet] *= correction
     return f_ki, reco_bins
 
 def predict_ad_to_ad_obs(constants, fit_params):

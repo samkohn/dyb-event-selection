@@ -16,7 +16,7 @@ import fit
 import prediction as pred
 
 
-def generate_toy(outfile_full, toy_code_dir, toy_config):
+def generate_toy(outfile_full, toy_code_dir, toy_config, sin2, dm2ee):
     current_dir = os.getcwd()
     os.chdir(toy_code_dir)
     with open('toymc_config_tmp.txt', 'w') as f:
@@ -27,7 +27,7 @@ def generate_toy(outfile_full, toy_code_dir, toy_config):
     print(f'Generating toy: {outfile_full}')
     command = [
         'root', '-b', '-q', 'LoadClasses.C',
-        f'genToySpectraTree.C+("toymc_config_tmp.txt", "{outfile_full}")'
+        f'genToySpectraTree.C+("toymc_config_tmp.txt", "{outfile_full}", {sin2}, {dm2ee})'
     ]
     try:
         output = subprocess.run(command, check=True, capture_output=True)
@@ -186,6 +186,8 @@ def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy
         toy_outfile,
         toy_code_dir,
         toy_config,
+        sin2,
+        dm2ee,
     )
     return toyfilename
 
@@ -193,7 +195,7 @@ def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy
 def run_validation_on_experiment(label, toyfilename, entry, index, database,
         source_template, fit_config, fit_file_name, sin2, dm2ee, find_errors, rate_only):
     print(index)
-    avg_near = True
+    avg_near = False
     # Configure fit config file
     fit_config['num_coincs_source'] = source_template.format(sin2=sin2,
             dm2ee=dm2ee, entry=entry)
@@ -277,7 +279,6 @@ if __name__ == "__main__":
     parser.add_argument('--source-category', type=int,
         help='1: no fluctuations, 2: full fluctuations, 3: far stat only')
     parser.add_argument('--fit-config')
-    parser.add_argument('--nominal-near', action='store_true')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
     parser.add_argument('--test-mode', action='store_true')
@@ -288,6 +289,7 @@ if __name__ == "__main__":
         3: 'far only fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
+    nominal_near = args.source_category in (3,)
     main(
         args.database,
         args.label,
@@ -300,5 +302,5 @@ if __name__ == "__main__":
         args.test_mode,
         args.gen_mc_only,
         args.dump_mc,
-        args.nominal_near,
+        nominal_near,
     )

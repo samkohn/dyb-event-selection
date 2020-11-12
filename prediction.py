@@ -670,18 +670,23 @@ def num_coincidences_per_AD(database, source):
     where the dict maps (hall, det) to a 1D array of N_coincidences.
     This method assumes that all ADs have the same binning.
     """
+    binning_id = 0
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, NumCoincidences_binned, BinEdges
+        cursor.execute('''SELECT Hall, DetNo, NumCoincidences_binned
         FROM num_coincidences
-        WHERE Source = ?
-        ORDER BY Hall, DetNo''', (source,))
+        WHERE Source = ? AND BinningId = ?
+        ORDER BY Hall, DetNo''', (source, binning_id))
         full_data = cursor.fetchall()
+        cursor.execute('''SELECT BinEdgeEnergy_keV FROM reco_binnings
+        WHERE Id = ?
+        ORDER BY BinEdgeIndex''', (binning_id,))
+        bins = cursor.fetchall()  #  [(b0,), (b1,), ...]
     results = {}
     # Parse binned records
-    for hall, det, coincidence_str, bins_str in full_data:
+    for hall, det, coincidence_str in full_data:
         results[hall, det] = np.array(json.loads(coincidence_str))
-    bins = np.array(json.loads(bins_str), dtype=float)
+    bins = np.array(bins, dtype=float).reshape(-1)  # flatten bins
     # convert keV to MeV
     bins /= 1000
     return results, bins

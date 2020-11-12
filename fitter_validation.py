@@ -69,6 +69,14 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'full fluctuations default nGd binning': '05',
         'far only fluctuations default nGd binning': '07',
     }
+    mc_configurations = {
+        # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
+        'no fluctuations default nGd binning': (False, False, False),
+        'full fluctuations default nGd binning': (True, True, True),
+        'far only fluctuations default nGd binning': (True, False, False),
+    }
+    mc_configuration = mc_configurations[source_category]
+
 
     source_template = source_templates[source_category]
     with open(fit_config_template, 'r') as fit_template_file:
@@ -129,7 +137,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                         zip(toyfilenames, grid_values())
                     )
                 ])
-            load_to_database(database, results)
+            load_to_database(database, results, mc_configuration)
     elif toymc_out_numbers[source_category] in WITH_FLUCTUATIONS:
         with multiprocessing.Pool(num_multiprocessing) as pool:
             toyfilenames = pool.starmap(generate_toymc_files, [(
@@ -167,13 +175,17 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     label, toyfilename, entry, i*len(entries) + j, database,
                     source_template, fit_config, fit_file_name, sin2,
                     dm2ee, find_errors, rate_only) for j, entry in enumerate(entries)])
-            load_to_database(database, results)
+            load_to_database(database, results, mc_configuration)
 
-def load_to_database(database, results):
+def load_to_database(database, results, mc_configuration):
+    extended_results = []
+    for row in results:
+        new_row = tuple(row) + tuple(mc_configuration)
+        extended_results.append(new_row)
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
         cursor.executemany('''INSERT OR REPLACE INTO fitter_validation_results
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', results)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', extended_results)
     return
 
 def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy_out_number, toy_code_dir):
@@ -248,7 +260,7 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     # Delete the temporary fit config file
     os.remove(fit_file_name)
     return (label, index, sin2, best_sin2, sin2_error, dm2ee, dm2ee_best, dm2ee_error,
-            chi2_min, rate_only)
+            chi2_min, rate_only, avg_near)
 
 
 if __name__ == "__main__":

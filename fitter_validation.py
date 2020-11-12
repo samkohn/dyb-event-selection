@@ -30,13 +30,13 @@ def generate_toy(outfile_full, toy_code_dir, toy_config, sin2, dm2ee):
         f'genToySpectraTree.C+("toymc_config_tmp.txt", "{outfile_full}", {sin2}, {dm2ee})'
     ]
     try:
-        output = subprocess.run(command, check=True, capture_output=True)
+        subprocess.run(command, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        print(output.args)
+        print(e.cmd)
         print('-------STDOUT-------')
-        print(output.stdout[-2000:])
+        print(e.stdout[-2000:])
         print('-------STDERR-------')
-        print(output.stderr[-2000:])
+        print(e.stderr[-2000:])
         raise
     os.chdir(current_dir)
     return outfile_full

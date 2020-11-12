@@ -70,10 +70,10 @@ if __name__ == '__main__':
         data = select_config(results, sin2, dm2)
         if args.sin2:
             ax = axs_flat[ax_index]
-            values, bins, _ = ax.hist(data[:, 1], range=(0.055, 0.105), bins=30)
+            values, bins, _ = ax.hist(data[:, 1], range=(0.055, 0.105), bins=50)
             xvals = np.diff(bins)/2 + bins[:-1]  # midpoints
             guess_height = max(values)
-            guess_stdev = 0.01
+            guess_stdev = 0.003
             guess_loc = np.mean(data[:, 1])
             guess_params = (guess_height, guess_loc, guess_stdev)
             fitresults = least_squares(gaus_resid, guess_params, args=(xvals, values))
@@ -87,9 +87,9 @@ if __name__ == '__main__':
             else:
                 horiz_pos = 0.02
                 horiz_align = 'left'
-            ax.text(horiz_pos, 0.98, rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
-Peak: {fitparams.mean:.4f}
-Width: {fitparams.stdev:.4f}
+            ax.text(horiz_pos, 0.98, rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.5f}
+Peak: {fitparams.mean:.5f}''' ' \u00B1 ' rf'''{fitparams.stdev/np.sqrt(len(data[:, 1])):.5f}
+Width: {fitparams.stdev:.5f}
 $\Delta m^{{2}}_{{ee}}$: {dm2:.2e} eV${{}}^2$
 ''',
             fontsize=10,

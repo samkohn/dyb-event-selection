@@ -140,7 +140,7 @@ def residual_frozen_param(frozen_dict, near_ads, rate_only, avg_near):
     return residual
 
 def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_only,
-        avg_near):
+        avg_near, raw_result=False):
     """Perform the fit with certain parameters frozen."""
     frozen_params_dict = {}
     all_params = starting_params.to_list()
@@ -152,7 +152,30 @@ def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_onl
             x0.append(param)
     residual = residual_frozen_param(frozen_params_dict, near_ads, rate_only, avg_near)
     result = least_squares(residual, x0, args=(constants,), method='trf')
-    return result
+    # Assemble best-fit FitParams object from fitter fitter output
+    starting_param_list = starting_params.to_list()
+    param_list = [result.x[0]]  # We know we can start with theta13
+    if rate_only:
+        param_list.append(starting_params.m2_ee)  # fixed m2_ee for rate-only
+        first_pull_index = 1
+    else:
+        param_list.append(result.x[1])  # fitted m2_ee for rate+shape
+        first_pull_index = 2
+    num_transfered_so_far = 0
+    for i, starting_param in enumerate(starting_param_list):
+        if i < 2:
+            continue
+        if i in frozen_params:
+            param_list.append(starting_param)
+        else:
+            param_list.append(result.x[first_pull_index + num_transfered_so_far])
+            num_transfered_so_far += 1
+    fit_params = pred.FitParams.from_list(param_list)
+    if raw_result:
+        return (fit_params, result)
+    else:
+        return fit_params
+
 
 def sigma_searcher(fit_params, constants, side='both'):
     """Find the +/- 1-sigma values given the best fit parameters.
@@ -270,40 +293,16 @@ if __name__ == "__main__":
         print(chi_square(constants, starting_params, return_array=True,
             rate_only=rate_only, avg_near=args.avg_near, near_ads=near_ads))
     if not args.no_fit:
-        result = fit_lsq_frozen(starting_params, constants, frozen_params,
-                near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near)
+        fit_params, result = fit_lsq_frozen(starting_params, constants, frozen_params,
+                near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near,
+                raw_result=True)
         print(repr(result.x))
         print('sin22theta13 =', np.power(np.sin(2*result.x[0]), 2))
         print(result.success)
         print(result.message)
         if not result.success:
             sys.exit(0)
-        starting_param_list = starting_params.to_list()
-        param_list = [result.x[0]]  # We know we can start with theta13
-        if args.dm2ee is not None:
-            param_list.append(args.dm2ee)
-            first_pull_index = 1
-        else:
-            param_list.append(result.x[1])
-            first_pull_index = 2
-        for i, starting_param in enumerate(starting_param_list):
-            if i < 2:
-                continue
-            if i in frozen_params:
-                param_list.append(starting_param)
-            else:
-                # print(frozen_params)
-                param_list.append(result.x[i+first_pull_index])
-        fit_params = pred.FitParams.from_list(param_list)
 
-        # if 1 in frozen_params:
-            # fit_params = pred.FitParams.from_list(
-                # [result.x[0], starting_params.m2_ee] + [0] * 8 + result.x[1:].tolist()
-            # )
-        # else:
-            # fit_params = pred.FitParams.from_list(
-                # [result.x[0], result.x[1]] + [0] * 8 + result.x[2:].tolist()
-            # )
         print('Min chi-square:', chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
             rate_only=rate_only, avg_near=args.avg_near))
         if args.debug:

@@ -226,25 +226,8 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
         # frozen_params = range(2, 10)
         frozen_params = range(2, 29)
     # Compute fit
-    result = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
+    fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
             near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
-    # Assemble best-fit FitParams object from fitter fitter output
-    starting_param_list = starting_params.to_list()
-    param_list = [result.x[0]]  # We know we can start with theta13
-    if rate_only:
-        param_list.append(dm2ee)
-        first_pull_index = 1
-    else:
-        param_list.append(result.x[1])
-        first_pull_index = 2
-    for i, starting_param in enumerate(starting_param_list):
-        if i < 2:
-            continue
-        if i in frozen_params:
-            param_list.append(starting_param)
-        else:
-            param_list.append(result.x[i+first_pull_index])
-    fit_params = pred.FitParams.from_list(param_list)
     # Compute min chi2 and sin2_2theta13 for posterity
     chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only,
             avg_near=avg_near, near_ads=near_ads)

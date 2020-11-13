@@ -59,6 +59,7 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
     if binning_type == 'default':
         num_ibds = num_ibds_default
         bins = bins_default
+        binning_id = 0
     elif binning_type == 'default minus lowest':
         num_ibds = {}
         bins = bins_default
@@ -121,7 +122,7 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
     rows = []
     for (hall, det), num_ibds_binned in num_ibds.items():
         binning = bins[halldet]
-        row = (hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source)
+        row = (hall, det, binning_id, json.dumps(num_ibds_binned), source)
         rows.append(row)
     if update_db is None:
         #print('Not updating the db')

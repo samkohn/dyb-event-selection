@@ -44,9 +44,8 @@ def generate_toy(outfile_full, toy_code_dir, toy_config, sin2, dm2ee):
 
 def main(database, label, source_category, toy_out_location, toy_code_dir,
         fit_config_template, config_template, find_errors, test_mode,
-        gen_mc_only, dump_mc, nominal_near
+        gen_mc_only, dump_mc, rate_only, avg_near
 ):
-    rate_only = True
     num_multiprocessing = 63
     toy_out_location = os.path.abspath(toy_out_location)
     if test_mode:
@@ -62,20 +61,29 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
             ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
         'far only fluctuations default nGd binning':
             'LBNL ToyMC 07 w/ stat fluctuations far, no fluctuations near (nominal),'
-            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'near+far stat fluctuations default nGd binning':
+            'LBNL ToyMC 08 w/ near+far stat fluctuations, default nGd binning '
+            'sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
     }
     toymc_out_numbers = {
         'no fluctuations default nGd binning': '02',
         'full fluctuations default nGd binning': '05',
         'far only fluctuations default nGd binning': '07',
+        'near+far stat fluctuations default nGd binning': '08',
     }
     mc_configurations = {
         # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
         'no fluctuations default nGd binning': (False, False, False),
         'full fluctuations default nGd binning': (True, True, True),
         'far only fluctuations default nGd binning': (True, False, False),
+        'near+far stat fluctuations default nGd binning': (True, True, False),
     }
     mc_configuration = mc_configurations[source_category]
+    nominal_near = mc_configuration[0] and not mc_configuration[1]
+    if nominal_near and mc_configuration[2]:
+        raise ValueError("Can't figure out how to suppress near fluctuations but add "
+                "systematics")
 
 
     source_template = source_templates[source_category]
@@ -93,7 +101,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
     )
 
     NO_FLUCTUATIONS = ('02',)
-    WITH_FLUCTUATIONS = ('05', '07')
+    WITH_FLUCTUATIONS = ('05', '07', '08')
     # Get a fresh generator when needed
     grid_values = lambda: itertools.product(sin2_values, dm2ee_values)
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
@@ -132,7 +140,8 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     sin2,
                     dm2ee,
                     find_errors,
-                    rate_only
+                    rate_only,
+                    avg_near,
                     ) for i, (toyfilename, (sin2, dm2ee)) in enumerate(
                         zip(toyfilenames, grid_values())
                     )
@@ -174,7 +183,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                 results = pool.starmap(run_validation_on_experiment, [(
                     label, toyfilename, entry, i*len(entries) + j, database,
                     source_template, fit_config, fit_file_name, sin2,
-                    dm2ee, find_errors, rate_only) for j, entry in enumerate(entries)])
+                    dm2ee, find_errors, rate_only, avg_near) for j, entry in enumerate(entries)])
             load_to_database(database, results, mc_configuration)
 
 def load_to_database(database, results, mc_configuration):
@@ -205,9 +214,9 @@ def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy
 
 
 def run_validation_on_experiment(label, toyfilename, entry, index, database,
-        source_template, fit_config, fit_file_name, sin2, dm2ee, find_errors, rate_only):
+        source_template, fit_config, fit_file_name, sin2, dm2ee, find_errors,
+        rate_only, avg_near):
     print(index)
-    avg_near = False
     # Configure fit config file
     fit_config['num_coincs_source'] = source_template.format(sin2=sin2,
             dm2ee=dm2ee, entry=entry)
@@ -232,11 +241,14 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     # decide whether to freeze any of the pull parameters
     # (and, if rate-only, also freeze dm2_ee)
     if rate_only:
-        # frozen_params = range(1, 10)
-        frozen_params = list(range(1, 29))  # 28 pull params
+        frozen_params = range(1, 10)  # freeze bg pull params
+        # allow only near stat pulls
+        frozen_params = np.concatenate((np.arange(1, 10), np.arange(14, 29)))
+        #frozen_params = list(range(1, 29))  # freeze all 28 pull params
     else:
-        # frozen_params = range(2, 10)
-        frozen_params = range(2, 29)
+        frozen_params = range(2, 10)
+        frozen_params = np.concatenate((np.arange(2, 10), np.arange(14, 29)))
+        #frozen_params = range(2, 29)
     # Compute fit
     fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
             near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
@@ -272,19 +284,21 @@ if __name__ == "__main__":
     parser.add_argument('--toy-config')
     parser.add_argument('--find-errors', action='store_true')
     parser.add_argument('--source-category', type=int,
-        help='1: no fluctuations, 2: full fluctuations, 3: far stat only')
+            help='1: no fluctuations, 2: full fluctuations, 3: far stat only, 4: full stat')
     parser.add_argument('--fit-config')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
     parser.add_argument('--test-mode', action='store_true')
+    parser.add_argument('--rate-only', action='store_true')
+    parser.add_argument('--avg-near', action='store_true')
     args = parser.parse_args()
     source_categories = {
         1: 'no fluctuations default nGd binning',
         2: 'full fluctuations default nGd binning',
         3: 'far only fluctuations default nGd binning',
+        4: 'near+far stat fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
-    nominal_near = args.source_category in (3,)
     main(
         args.database,
         args.label,
@@ -297,5 +311,6 @@ if __name__ == "__main__":
         args.test_mode,
         args.gen_mc_only,
         args.dump_mc,
-        nominal_near,
+        args.rate_only,
+        args.avg_near,
     )

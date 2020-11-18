@@ -38,6 +38,9 @@ if __name__ == '__main__':
     parser.add_argument('--sin2', action='store_true')
     parser.add_argument('--dm2', action='store_true')
     parser.add_argument('--filter')
+    parser.add_argument('--rate-only', action='store_true')
+    parser.add_argument('--avg-near', action='store_true')
+    parser.add_argument('--verbose', '-v', action='store_true')
     args = parser.parse_args()
 
     with sqlite3.Connection(args.database) as conn:
@@ -49,8 +52,10 @@ if __name__ == '__main__':
         sql_query_str = f'''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee, {fit_dm2_query}ChiSquare
         FROM fitter_validation_results
         WHERE Category LIKE ?
+        AND IsRateOnly = ?
+        AND IsAvgNear = ?
         ORDER BY TrueSinSqT13, TrueDm2ee'''
-        cursor.execute(sql_query_str, (args.filter,))
+        cursor.execute(sql_query_str, (args.filter, args.rate_only, args.avg_near))
         results = np.array(cursor.fetchall())
 
     param_pairs = np.unique(results[:, [0, 2]], axis=0)
@@ -87,11 +92,15 @@ if __name__ == '__main__':
             else:
                 horiz_pos = 0.02
                 horiz_align = 'left'
-            ax.text(horiz_pos, 0.98, rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.5f}
-Peak: {fitparams.mean:.5f}''' ' \u00B1 ' rf'''{fitparams.stdev/np.sqrt(len(data[:, 1])):.5f}
-Width: {fitparams.stdev:.5f}
+            text =  rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.5f}
+Fit $\mu$: {fitparams.mean:.5f}''' ' \u00B1 ' rf'''{fitparams.stdev/np.sqrt(len(data[:, 1])):.5f}
+Fit $\sigma$: {fitparams.stdev:.5f}
 $\Delta m^{{2}}_{{ee}}$: {dm2:.2e} eV${{}}^2$
-''',
+Sample $\mu$: {data[:, 1].mean():.5f}
+'''
+            if args.verbose:
+                print(text)
+            ax.text(horiz_pos, 0.98, text,
             fontsize=10,
             transform=ax.transAxes,
             horizontalalignment=horiz_align,
@@ -123,6 +132,7 @@ rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.4f}
 True $\Delta m^{{2}}_{{ee}}$: {dm2:.3e} eV${{}}^2$
 $\mu$: {fitparams_m2.mean*1e-3:.3e} eV${{}}^2$
 $\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
+Fit $\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
 ''',
             fontsize=10,
             transform=ax_m2.transAxes,

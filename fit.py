@@ -57,9 +57,9 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         if far_halldet not in far_ads or near_halldet not in near_ads:
             continue
         n_observed = observed[far_halldet]
-        sigma_observed = np.sqrt(n_observed)  # TODO placeholder error
+        sigma_squared = n_predicted
         numerator = np.power(n_observed - n_predicted, 2)
-        denominator = np.power(sigma_observed, 2)
+        denominator = sigma_squared
         ratio = numerator/denominator
         chi_square += np.sum(numerator/denominator)  # sum over energy bins
         return_array_values[term_index : term_index + len(ratio)] = ratio

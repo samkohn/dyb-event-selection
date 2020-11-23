@@ -17,13 +17,12 @@ import prediction as pred
 
 
 def generate_toy(outfile_full, toy_code_dir, toy_config, sin2, dm2ee):
+    if os.path.isfile(outfile_full):
+        return outfile_full
     current_dir = os.getcwd()
     os.chdir(toy_code_dir)
     with open('toymc_config_tmp.txt', 'w') as f:
         f.write(toy_config)
-    if os.path.isfile(outfile_full):
-        os.chdir(current_dir)
-        return outfile_full
     print(f'Generating toy: {outfile_full}')
     command = [
         'root', '-b', '-q', 'LoadClasses.C',
@@ -216,7 +215,6 @@ def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy
 def run_validation_on_experiment(label, toyfilename, entry, index, database,
         source_template, fit_config, fit_file_name, sin2, dm2ee, find_errors,
         rate_only, avg_near):
-    print(index)
     # Configure fit config file
     fit_config['num_coincs_source'] = source_template.format(sin2=sin2,
             dm2ee=dm2ee, entry=entry)
@@ -241,14 +239,14 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     # decide whether to freeze any of the pull parameters
     # (and, if rate-only, also freeze dm2_ee)
     if rate_only:
-        frozen_params = range(1, 10)  # freeze bg pull params
+        #frozen_params = range(1, 10)  # freeze bg pull params
         # allow only near stat pulls
-        frozen_params = np.concatenate((np.arange(1, 10), np.arange(14, 29)))
-        #frozen_params = list(range(1, 29))  # freeze all 28 pull params
+        #frozen_params = np.concatenate((np.arange(1, 10), np.arange(14, 29)))
+        frozen_params = list(range(1, 29))  # freeze all 28 pull params
     else:
-        frozen_params = range(2, 10)
-        frozen_params = np.concatenate((np.arange(2, 10), np.arange(14, 29)))
-        #frozen_params = range(2, 29)
+        #frozen_params = range(2, 10)
+        #frozen_params = np.concatenate((np.arange(2, 10), np.arange(14, 29)))
+        frozen_params = range(2, 29)
     # Compute fit
     fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
             near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)

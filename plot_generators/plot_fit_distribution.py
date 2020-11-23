@@ -60,13 +60,14 @@ if __name__ == '__main__':
 
     param_pairs = np.unique(results[:, [0, 2]], axis=0)
     fig_index = 1
+    figsize=(18, 12)
     if args.sin2:
-        fig, axs = plt.subplots(6, 6, figsize=(18, 12), sharey=True)
+        fig, axs = plt.subplots(6, 6, figsize=figsize, sharey=True)
         axs_flat = axs.flatten()
         sin2_fig_index = fig_index
         fig_index += 1
     if args.dm2:
-        fig_m2, axs_m2 = plt.subplots(6, 6, figsize=(18, 12), sharey=True)
+        fig_m2, axs_m2 = plt.subplots(6, 6, figsize=figsize, sharey=True)
         axs_m2_flat = axs_m2.flatten()
         m2_fig_index = fig_index
         fig_index += 1

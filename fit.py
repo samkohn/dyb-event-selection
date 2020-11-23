@@ -9,10 +9,13 @@ from scipy.optimize import least_squares
 import prediction as pred
 
 def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=None,
-        rate_only=False, avg_near=False):
+        rate_only=False, avg_near=False, variant='poisson'):
     """Compute the chi-square value for a single set of parameters.
 
     Set return_array=True to return an array of terms rather than the sum.
+
+    ``variant`` should be either ``'poisson'`` (for least-biased minimization), ``'pearson'``
+    (for goodness-of-fit test), or ``'neyman'`` (included for completeness).
     """
     chi_square = 0
     if near_ads is None:
@@ -53,17 +56,20 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         predicted = predicted_avg
 
     #Main part
+    stat_lookup = {
+        'poisson': poisson_stat_term,
+        'pearson': pearson_stat_term,
+        'neyman': neyman_stat_term,
+    }
+    stat_term_function = stat_lookup[variant]
     for (far_halldet, near_halldet), n_predicted in predicted.items():
         if far_halldet not in far_ads or near_halldet not in near_ads:
             continue
         n_observed = observed[far_halldet]
-        sigma_squared = n_predicted
-        numerator = np.power(n_observed - n_predicted, 2)
-        denominator = sigma_squared
-        ratio = numerator/denominator
-        chi_square += np.sum(numerator/denominator)  # sum over energy bins
-        return_array_values[term_index : term_index + len(ratio)] = ratio
-        term_index += len(ratio)
+        stat_term = stat_term_function(n_observed, n_predicted)
+        chi_square += np.sum(stat_term)  # sum over energy bins
+        return_array_values[term_index : term_index + len(stat_term)] = stat_term
+        term_index += len(stat_term)
 
     # Pull terms
     for halldet, pull in fit_params.pull_bg.items():
@@ -97,6 +103,59 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     else:
         return sum(chi_square)
 
+def poisson_stat_term(n_observed, n_predicted):
+    """Compute the Poisson maximum-likelihood chi-squared term, elementwise.
+
+    Return a scalar if scalars are given, else return an array of the same
+    shape as the inputs.
+
+    The Poisson maximum-likelihood term is Pred - Obs + Obs * log(Obs / Pred).
+    """
+    diff_term = n_predicted - n_observed
+    log_term = np.nan_to_num(n_observed * np.log(n_observed / n_predicted), nan=0,
+            posinf=0, neginf=0)
+    full_term = 2 * (diff_term + log_term)
+    # Hedge against occasional floating-point errors where an element is
+    # negative at the level of ~1e-13. Just make it 0 in that case.
+    if any(full_term < 0):
+        indices = np.nonzero(full_term < 0)
+        # Print some debug info if desired
+        #with np.printoptions(precision=16):
+            #print(n_predicted[indices])
+            #print(n_observed[indices])
+            #print(diff_term[indices])
+            #print(log_term[indices])
+            #print(full_term[indices])
+            #print(np.transpose(indices))
+        full_term[indices] = 0
+    return full_term
+
+def pearson_stat_term(n_observed, n_predicted):
+    """Compute the Pearson chi-squared term, elementwise.
+
+    Return a scalar if scalars are given, else return an array of the same
+    shape as the inputs.
+
+    The Pearson chi-squared term is (Pred - Obs)**2 / Pred.
+    """
+    numerator = np.power(n_observed - n_predicted, 2)
+    denominator = n_predicted
+    ratio = numerator/denominator
+    return ratio
+
+def neyman_stat_term(n_observed, n_predicted):
+    """Compute the Neyman chi-squared term, elementwise.
+
+    Return a scalar if scalars are given, else return an array of the same
+    shape as the inputs.
+
+    The Neyman chi-squared term is (Pred - Obs)**2 / Obs.
+    """
+    numerator = np.power(n_observed - n_predicted, 2)
+    denominator = n_observed
+    ratio = numerator/denominator
+    return ratio
+
 def residual_fn(x, constants, near_ads=None, rate_only=False, avg_near=False):
     """Convert arguments from scipy to desired format and return the residuals.
     """
@@ -104,7 +163,8 @@ def residual_fn(x, constants, near_ads=None, rate_only=False, avg_near=False):
     # Take the square root because the fitter wants the linear residuals
     # and squares them on its own...
     residuals = np.sqrt(chi_square(constants, fit_params, return_array=True,
-        near_ads=near_ads, rate_only=rate_only, avg_near=avg_near))
+        near_ads=near_ads, rate_only=rate_only, avg_near=avg_near,
+        variant='poisson'))
     return residuals
 
 def residual_frozen_param(frozen_dict, near_ads, rate_only, avg_near):
@@ -288,10 +348,11 @@ if __name__ == "__main__":
     near_ads = None
     print(starting_params)
     print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug,
-        avg_near=args.avg_near, near_ads=near_ads))
+        avg_near=args.avg_near, near_ads=near_ads, variant='poisson'))
     if args.debug:
         print(chi_square(constants, starting_params, return_array=True,
-            rate_only=rate_only, avg_near=args.avg_near, near_ads=near_ads))
+            rate_only=rate_only, avg_near=args.avg_near, near_ads=near_ads,
+            variant='poisson'))
     if not args.no_fit:
         fit_params, result = fit_lsq_frozen(starting_params, constants, frozen_params,
                 near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near,
@@ -304,18 +365,18 @@ if __name__ == "__main__":
             sys.exit(0)
 
         print('Min chi-square:', chi_square(constants, fit_params, return_array=False, near_ads=near_ads,
-            rate_only=rate_only, avg_near=args.avg_near))
+            rate_only=rate_only, avg_near=args.avg_near, variant='poisson'))
         if args.debug:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
-                rate_only=rate_only, avg_near=args.avg_near))
+                rate_only=rate_only, avg_near=args.avg_near, variant='poisson'))
         else:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
-                rate_only=rate_only, avg_near=args.avg_near)[-26:])
+                rate_only=rate_only, avg_near=args.avg_near, variant='poisson')[-26:])
         print(fit_params)
         if args.debug:
             print("Observed & Predicted & Avg Predicted")
         min_chi2 = chi_square(constants, fit_params, debug=args.debug, near_ads=near_ads,
-                rate_only=rate_only, avg_near=args.avg_near)
+                rate_only=rate_only, avg_near=args.avg_near, variant='poisson')
         if args.scan:
             print("Chi-square scan")
             print(sigma_searcher(fit_params, constants))

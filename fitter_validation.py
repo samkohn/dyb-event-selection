@@ -252,7 +252,9 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
             near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
     # Compute min chi2 and sin2_2theta13 for posterity
     chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only,
-            avg_near=avg_near, near_ads=near_ads)
+            avg_near=avg_near, near_ads=near_ads, variant='poisson')
+    chi2_gof = fit.chi_square(constants, fit_params, rate_only=rate_only,
+            avt_near=avg_near, near_ads=near_ads, variant='pearson')
     best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
     dm2ee_best = fit_params.m2_ee
     # Obtain the error on theta13 if desired

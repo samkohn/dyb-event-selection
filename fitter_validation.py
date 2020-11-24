@@ -89,15 +89,18 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
     with open(fit_config_template, 'r') as fit_template_file:
         fit_config = json.load(fit_template_file)
     fit_file_name = 'fit_config_validation_tmp.json'
-    # Read in the config file and modify it to include placeholders for
-    # theta13 and dm2ee
-    with open(config_template, 'r') as f:
-        toy_config_template = f.read()
-    toy_config_template = toy_config_template.replace(
-        'sinSq2Theta13    0.084', 'sinSq2Theta13    {sin2}'
-    ).replace(
-        'deltaMSqee       2.48e-3', 'deltaMSqee       {dm2ee}'
-    )
+    if config_template is not None:
+        # Read in the config file and modify it to include placeholders for
+        # theta13 and dm2ee
+        with open(config_template, 'r') as f:
+            toy_config_template = f.read()
+        toy_config_template = toy_config_template.replace(
+            'sinSq2Theta13    0.084', 'sinSq2Theta13    {sin2}'
+        ).replace(
+            'deltaMSqee       2.48e-3', 'deltaMSqee       {dm2ee}'
+        )
+    else:
+        toy_config_template = ''
 
     NO_FLUCTUATIONS = ('02',)
     WITH_FLUCTUATIONS = ('05', '07', '08')

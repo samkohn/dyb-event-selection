@@ -193,7 +193,7 @@ def load_to_database(database, results, mc_configuration):
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
         cursor.executemany('''INSERT OR REPLACE INTO fitter_validation_results
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', extended_results)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', extended_results)
     return
 
 def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy_out_number, toy_code_dir):
@@ -254,7 +254,7 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only,
             avg_near=avg_near, near_ads=near_ads, variant='poisson')
     chi2_gof = fit.chi_square(constants, fit_params, rate_only=rate_only,
-            avt_near=avg_near, near_ads=near_ads, variant='pearson')
+            avg_near=avg_near, near_ads=near_ads, variant='pearson')
     best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
     dm2ee_best = fit_params.m2_ee
     # Obtain the error on theta13 if desired
@@ -272,7 +272,7 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     # Delete the temporary fit config file
     os.remove(fit_file_name)
     return (label, index, sin2, best_sin2, sin2_error, dm2ee, dm2ee_best, dm2ee_error,
-            chi2_min, rate_only, avg_near)
+            chi2_min, chi2_gof, rate_only, avg_near)
 
 
 if __name__ == "__main__":

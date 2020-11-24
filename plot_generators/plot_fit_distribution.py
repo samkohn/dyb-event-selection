@@ -46,10 +46,10 @@ if __name__ == '__main__':
     with sqlite3.Connection(args.database) as conn:
         cursor = conn.cursor()
         if args.dm2:
-            fit_dm2_query = 'FitDM2ee, '
+            fit_dm2_query = ', FitDM2ee'
         else:
             fit_dm2_query = ''
-        sql_query_str = f'''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee, {fit_dm2_query}ChiSquare
+        sql_query_str = f'''SELECT TrueSinSqT13, FitSinSqT13, TrueDM2ee {fit_dm2_query}
         FROM fitter_validation_results
         WHERE Category LIKE ?
         AND IsRateOnly = ?

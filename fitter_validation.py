@@ -43,7 +43,7 @@ def generate_toy(outfile_full, toy_code_dir, toy_config, sin2, dm2ee):
 
 def main(database, label, source_category, toy_out_location, toy_code_dir,
         fit_config_template, config_template, find_errors, test_mode,
-        gen_mc_only, dump_mc, rate_only, avg_near
+        gen_mc_only, dump_mc, rate_only, avg_near, pulls,
 ):
     num_multiprocessing = 63
     toy_out_location = os.path.abspath(toy_out_location)
@@ -144,6 +144,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     find_errors,
                     rate_only,
                     avg_near,
+                    pulls,
                     ) for i, (toyfilename, (sin2, dm2ee)) in enumerate(
                         zip(toyfilenames, grid_values())
                     )
@@ -185,7 +186,8 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                 results = pool.starmap(run_validation_on_experiment, [(
                     label, toyfilename, entry, i*len(entries) + j, database,
                     source_template, fit_config, fit_file_name, sin2,
-                    dm2ee, find_errors, rate_only, avg_near) for j, entry in enumerate(entries)])
+                    dm2ee, find_errors, rate_only, avg_near,
+                    pulls) for j, entry in enumerate(entries)])
             load_to_database(database, results, mc_configuration)
 
 def load_to_database(database, results, mc_configuration):
@@ -217,7 +219,7 @@ def generate_toymc_files(toy_config_template, toy_out_location, sin2, dm2ee, toy
 
 def run_validation_on_experiment(label, toyfilename, entry, index, database,
         source_template, fit_config, fit_file_name, sin2, dm2ee, find_errors,
-        rate_only, avg_near):
+        rate_only, avg_near, pulls):
     # Configure fit config file
     fit_config['num_coincs_source'] = source_template.format(sin2=sin2,
             dm2ee=dm2ee, entry=entry)
@@ -242,14 +244,23 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     # decide whether to freeze any of the pull parameters
     # (and, if rate-only, also freeze dm2_ee)
     if rate_only:
-        #frozen_params = range(1, 10)  # freeze bg pull params
-        # allow only near stat pulls
-        #frozen_params = np.concatenate((np.arange(1, 10), np.arange(14, 29)))
-        frozen_params = list(range(1, 29))  # freeze all 28 pull params
+        frozen_params = [1]
     else:
-        #frozen_params = range(2, 10)
-        #frozen_params = np.concatenate((np.arange(2, 10), np.arange(14, 29)))
-        frozen_params = range(2, 29)
+        frozen_params = []
+    if 'all' in pulls:
+        pass
+    elif len(pulls) == 0:
+        frozen_params.extend(list(range(2, 29)))
+    else:
+        if 'bg' not in pulls:
+            frozen_params.extend(list(range(2, 10)))
+        if 'near-stat' not in pulls:
+            frozen_params.extend(list(range(10, 14)))
+        if 'reactor' not in pulls:
+            frozen_params.extend(list(range(14, 20)))
+        if 'eff' not in pulls:
+            frozen_params.extend(list(range(20, 28)))
+
     # Compute fit
     fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
             near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
@@ -294,6 +305,8 @@ if __name__ == "__main__":
     parser.add_argument('--test-mode', action='store_true')
     parser.add_argument('--rate-only', action='store_true')
     parser.add_argument('--avg-near', action='store_true')
+    parser.add_argument('--pulls', nargs='+', choices=('bg', 'near-stat', 'reactor',
+        'eff', 'all'), default=[])
     args = parser.parse_args()
     source_categories = {
         1: 'no fluctuations default nGd binning',
@@ -316,4 +329,5 @@ if __name__ == "__main__":
         args.dump_mc,
         args.rate_only,
         args.avg_near,
+        args.pulls,
     )

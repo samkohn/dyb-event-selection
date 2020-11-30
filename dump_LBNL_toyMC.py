@@ -13,11 +13,13 @@ def dump_to_db(database, rows):
             VALUES (?, ?, ?, ?, ?)''', rows)
             #(hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source))
 
-def multiple(infilename, entries, update_db, sources, binning_type, nominal_near):
+def multiple(infilename, entries, update_db, sources, binning_type, nominal_near,
+        nominal_far):
     rows = []
     for entry_number, source in zip(entries, sources):
         entry_rows = single(
-            infilename, entry_number, None, source, binning_type, nominal_near
+            infilename, entry_number, None, source, binning_type, nominal_near,
+            nominal_far
         )
         rows.extend(entry_rows)
     if update_db is None:
@@ -27,7 +29,8 @@ def multiple(infilename, entries, update_db, sources, binning_type, nominal_near
         return rows
 
 
-def single(infilename, entry_number, update_db, source, binning_type, nominal_near):
+def single(infilename, entry_number, update_db, source, binning_type, nominal_near,
+        nominal_far):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     host_ttree = infile.Get('tr')
@@ -35,7 +38,10 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
     all_hists = {}
     for i, halldet in enumerate(all_ads):
         for stage in (2,):
-            if nominal_near and halldet in near_ads:
+            if (
+                (nominal_near and halldet in near_ads)
+                or (nominal_far and halldet in far_ads)
+            ):
                 name = f'h_nominal_stage{stage}_ad{i+1}'
                 all_hists[halldet] = infile.Get(name)
             else:
@@ -61,6 +67,7 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
         bins = bins_default
         binning_id = 0
     elif binning_type == 'default minus lowest':
+        binning_id = 1
         num_ibds = {}
         bins = bins_default
         for halldet, ibds_halldet in num_ibds_default.items():
@@ -71,6 +78,7 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
             new_ibds_halldet[3] = 0
             num_ibds[halldet] = new_ibds_halldet
     elif binning_type == 'nH nominal':
+        binning_id = 2
         num_ibds = {}
         # 1.5, 1.6, 1.8, 2.0, 2.2, ..., 7.8, 8.0, 12 MeV
         bins_halldet = [1500] + list(range(1600, 8001, 200)) + [12000]  # keV
@@ -90,6 +98,7 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
             num_ibds[halldet] = num_ibds_halldet
             bins[halldet] = bins_halldet
     elif binning_type == 'nH modified 1':
+        binning_id = 3
         num_ibds = {}
         bins_halldet = list(range(1600, 8001, 200)) + [12000]  # keV
         bins = {}
@@ -100,6 +109,7 @@ def single(infilename, entry_number, update_db, source, binning_type, nominal_ne
             num_ibds[halldet] = num_ibds_halldet
             bins[halldet] = bins_halldet
     elif binning_type == 'rate-only':
+        binning_id = 4
         # Create rate-only binning
         num_ibds_rateonly = {}
         bins_rateonly = {}
@@ -150,7 +160,10 @@ if __name__ == '__main__':
         'default minus lowest',
         'nH nominal', 'rate-only', 'nH modified 1'))
     parser.add_argument('--nominal-near', action='store_true')
+    parser.add_argument('--nominal-far', action='store_true')
     args = parser.parse_args()
 
-    main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning,
-            args.nominal_near)
+    rows = main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning,
+            args.nominal_near, args.nominal_far)
+    if not args.update_db:
+        print(rows)

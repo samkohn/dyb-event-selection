@@ -324,9 +324,11 @@ if __name__ == "__main__":
     parser.add_argument("--dm2ee", type=float)
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
-    parser.add_argument("--no-pulls", action='store_true')
+    parser.add_argument("--pulls", nargs='+', choices=('bg', 'near-stat', 'reactor',
+        'eff', 'all'), default=[])
     args = parser.parse_args()
     rate_only = not args.shape
+    pulls = args.pulls
     constants = pred.load_constants(args.config)
     starting_params = pred.FitParams(
             0.15,
@@ -336,13 +338,25 @@ if __name__ == "__main__":
             pred.core_dict(0),
             pred.ad_dict(0),
     )
-    if args.no_pulls:
-        frozen_params = list(range(2, 29))  # 28 pull params
+    # decide whether to freeze any of the pull parameters
+    # (and, if rate-only, also freeze dm2_ee)
+    if rate_only or args.dm2ee is not None:
+        frozen_params = [1]
     else:
-        frozen_params = list(range(2, 10))
-    if args.dm2ee is not None:
-        starting_params.m2_ee = args.dm2ee
-        frozen_params = [1] + frozen_params  # Don't modify m2_ee in fit
+        frozen_params = []
+    if 'all' in pulls:
+        pass
+    elif len(pulls) == 0:
+        frozen_params.extend(list(range(2, 29)))
+    else:
+        if 'bg' not in pulls:
+            frozen_params.extend(list(range(2, 10)))
+        if 'near-stat' not in pulls:
+            frozen_params.extend(list(range(10, 14)))
+        if 'reactor' not in pulls:
+            frozen_params.extend(list(range(14, 20)))
+        if 'eff' not in pulls:
+            frozen_params.extend(list(range(20, 28)))
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
     near_ads = None

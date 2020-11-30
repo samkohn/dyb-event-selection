@@ -43,7 +43,7 @@ def generate_toy(outfile_full, toy_code_dir, toy_config, sin2, dm2ee):
 
 def main(database, label, source_category, toy_out_location, toy_code_dir,
         fit_config_template, config_template, find_errors, test_mode,
-        gen_mc_only, dump_mc, rate_only, avg_near, pulls,
+        gen_mc_only, dump_mc, rate_only, avg_near, pulls, stage
 ):
     num_multiprocessing = 63
     toy_out_location = os.path.abspath(toy_out_location)
@@ -132,6 +132,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     "default",
                     nominal_near,
                     nominal_far,
+                    stage,
                 )
         if not gen_mc_only:
             with open(fit_config_template, 'r') as fit_template_file:
@@ -187,6 +188,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     "default",
                     nominal_near,
                     nominal_far,
+                    stage,
                 )
             print(sin2, dm2ee)
             if gen_mc_only:
@@ -320,6 +322,7 @@ if __name__ == "__main__":
     parser.add_argument('--avg-near', action='store_true')
     parser.add_argument('--pulls', nargs='+', choices=('bg', 'near-stat', 'reactor',
         'eff', 'all'), default=[])
+    parser.add_argument('--stage', choices=('6ad', '7ad', '8ad'), default='8ad')
     args = parser.parse_args()
     source_categories = {
         1: 'no fluctuations default nGd binning',
@@ -344,4 +347,5 @@ if __name__ == "__main__":
         args.rate_only,
         args.avg_near,
         args.pulls,
+        args.stage,
     )

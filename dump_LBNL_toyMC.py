@@ -14,12 +14,12 @@ def dump_to_db(database, rows):
             #(hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source))
 
 def multiple(infilename, entries, update_db, sources, binning_type, nominal_near,
-        nominal_far):
+        nominal_far, stage_label):
     rows = []
     for entry_number, source in zip(entries, sources):
         entry_rows = single(
             infilename, entry_number, None, source, binning_type, nominal_near,
-            nominal_far
+            nominal_far, stage_label
         )
         rows.extend(entry_rows)
     if update_db is None:
@@ -30,23 +30,24 @@ def multiple(infilename, entries, update_db, sources, binning_type, nominal_near
 
 
 def single(infilename, entry_number, update_db, source, binning_type, nominal_near,
-        nominal_far):
+        nominal_far, stage_label):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     host_ttree = infile.Get('tr')
     host_ttree.GetEntry(entry_number)
+    stages = {'6ad': 1, '8ad': 2, '7ad': 3}
+    stage = stages[stage_label]
     all_hists = {}
     for i, halldet in enumerate(all_ads):
-        for stage in (2,):
-            if (
-                (nominal_near and halldet in near_ads)
-                or (nominal_far and halldet in far_ads)
-            ):
-                name = f'h_nominal_stage{stage}_ad{i+1}'
-                all_hists[halldet] = infile.Get(name)
-            else:
-                name = f'h_stage{stage}_ad{i+1}'
-                all_hists[halldet] = getattr(host_ttree, name)
+        if (
+            (nominal_near and halldet in near_ads)
+            or (nominal_far and halldet in far_ads)
+        ):
+            name = f'h_nominal_stage{stage}_ad{i+1}'
+            all_hists[halldet] = infile.Get(name)
+        else:
+            name = f'h_stage{stage}_ad{i+1}'
+            all_hists[halldet] = getattr(host_ttree, name)
 
     num_ibds_default = {}
     bins_default = {}
@@ -161,9 +162,10 @@ if __name__ == '__main__':
         'nH nominal', 'rate-only', 'nH modified 1'))
     parser.add_argument('--nominal-near', action='store_true')
     parser.add_argument('--nominal-far', action='store_true')
+    parser.add_argument('--stage', choices=('6ad', '7ad', '8ad'))
     args = parser.parse_args()
 
     rows = main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning,
-            args.nominal_near, args.nominal_far)
+            args.nominal_near, args.nominal_far, args.stage)
     if not args.update_db:
         print(rows)

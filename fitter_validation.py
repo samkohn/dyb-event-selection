@@ -64,12 +64,17 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'near+far stat fluctuations default nGd binning':
             'LBNL ToyMC 08 w/ near+far stat fluctuations, default nGd binning '
             'sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'near only fluctuations default nGd binning':
+            'LBNL ToyMC 07 w/ stat fluctuations near, no fluctuations far (nominal),'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+
     }
     toymc_out_numbers = {
         'no fluctuations default nGd binning': '02',
         'full fluctuations default nGd binning': '05',
         'far only fluctuations default nGd binning': '07',
         'near+far stat fluctuations default nGd binning': '08',
+        'near only fluctuations default nGd binning': '07',
     }
     mc_configurations = {
         # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
@@ -77,18 +82,17 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'full fluctuations default nGd binning': (True, True, True),
         'far only fluctuations default nGd binning': (True, False, False),
         'near+far stat fluctuations default nGd binning': (True, True, False),
+        'near only fluctuations default nGd binning': (False, True, False),
     }
     mc_configuration = mc_configurations[source_category]
-    nominal_near = mc_configuration[0] and not mc_configuration[1]
+    nominal_near = not mc_configuration[1]
+    nominal_far = not mc_configuration[0]
     if nominal_near and mc_configuration[2]:
         raise ValueError("Can't figure out how to suppress near fluctuations but add "
                 "systematics")
 
 
     source_template = source_templates[source_category]
-    with open(fit_config_template, 'r') as fit_template_file:
-        fit_config = json.load(fit_template_file)
-    fit_file_name = 'fit_config_validation_tmp.json'
     if config_template is not None:
         # Read in the config file and modify it to include placeholders for
         # theta13 and dm2ee
@@ -127,8 +131,12 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     source_template.format(sin2=sin2, dm2ee=dm2ee),
                     "default",
                     nominal_near,
+                    nominal_far,
                 )
         if not gen_mc_only:
+            with open(fit_config_template, 'r') as fit_template_file:
+                fit_config = json.load(fit_template_file)
+            fit_file_name = 'fit_config_validation_tmp.json'
             with multiprocessing.Pool(num_multiprocessing) as pool:
                 results = pool.starmap(run_validation_on_experiment, [(
                     label,
@@ -178,10 +186,14 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
                     sources,
                     "default",
                     nominal_near,
+                    nominal_far,
                 )
             print(sin2, dm2ee)
             if gen_mc_only:
                 continue
+            with open(fit_config_template, 'r') as fit_template_file:
+                fit_config = json.load(fit_template_file)
+            fit_file_name = 'fit_config_validation_tmp.json'
             with multiprocessing.Pool(num_multiprocessing) as pool:
                 results = pool.starmap(run_validation_on_experiment, [(
                     label, toyfilename, entry, i*len(entries) + j, database,
@@ -298,7 +310,8 @@ if __name__ == "__main__":
     parser.add_argument('--toy-config')
     parser.add_argument('--find-errors', action='store_true')
     parser.add_argument('--source-category', type=int,
-            help='1: no fluctuations, 2: full fluctuations, 3: far stat only, 4: full stat')
+            help='1: no fluctuations, 2: full fluctuations, 3: far stat only, 4: full stat'
+            ', 5: near stat only')
     parser.add_argument('--fit-config')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
@@ -313,6 +326,7 @@ if __name__ == "__main__":
         2: 'full fluctuations default nGd binning',
         3: 'far only fluctuations default nGd binning',
         4: 'near+far stat fluctuations default nGd binning',
+        5: 'near only fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
     main(

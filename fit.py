@@ -373,7 +373,8 @@ if __name__ == "__main__":
                 raw_result=True)
         print(repr(result.x))
         print('sin22theta13 =', np.power(np.sin(2*result.x[0]), 2))
-        print(result.success)
+        print(f'Num function evals: {result.nfev}')
+        print(f'Num jacobian evals: {result.njev}')
         print(result.message)
         if not result.success:
             sys.exit(0)

@@ -242,17 +242,20 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
         json.dump(fit_config, f)
     # Prepare fitter
     constants = pred.load_constants(fit_file_name)
-    if rate_only:
+    if rate_only or args.dm2ee is not None:
         starting_dm2 = dm2ee
     else:
         starting_dm2 = 2.48e-3
     starting_params = pred.FitParams(
-            0.15,
-            starting_dm2,
-            pred.ad_dict(0),
-            pred.ad_dict(0, halls='near'),
-            pred.core_dict(0),
-            pred.ad_dict(0),
+        0.15,
+        starting_dm2,
+        pred.ad_dict(0),
+        pred.ad_dict(
+            np.zeros_like(constants.observed_candidates[1, 1]),
+            halls='near'
+        ),
+        pred.core_dict(0),
+        pred.ad_dict(0),
     )
     near_ads = None
     # decide whether to freeze any of the pull parameters

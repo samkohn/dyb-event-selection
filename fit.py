@@ -30,10 +30,11 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         for key, val in predicted.items():
             predicted[key] = np.sum(val, keepdims=True)
         num_bins = 1
-        num_pulls = 26
+        num_shape_bins = 37  # TODO
+        num_pulls = 22 + num_shape_bins * 4
     else:
         num_bins = 37
-        num_pulls = 26
+        num_pulls = 22 + num_bins * 4  # n_bins * n_ads = n_near_stat_pulls
     if debug:
         pprint(observed)
         pprint(predicted)
@@ -80,11 +81,12 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         term_index += 1
     for halldet, pull in fit_params.pull_near_stat.items():
         numerator = pull * pull
-        denominator = np.power(np.sum(constants.observed_candidates[halldet],
-            keepdims=True), -1)
-        chi_square += numerator/denominator
-        return_array_values[term_index] = numerator/denominator
-        term_index += 1
+        denominator = 1 / constants.observed_candidates[halldet]
+        pull_array = numerator/denominator
+        chi_square += np.sum(pull_array)
+        for element in pull_array:
+            return_array_values[term_index] = element
+            term_index += 1
     for core in range(1, 7):
         pull = fit_params.pull_reactor[core]
         numerator = pull * pull
@@ -101,7 +103,7 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     if return_array:
         return return_array_values
     else:
-        return sum(chi_square)
+        return chi_square
 
 def poisson_stat_term(n_observed, n_predicted):
     """Compute the Poisson maximum-likelihood chi-squared term, elementwise.
@@ -329,15 +331,24 @@ if __name__ == "__main__":
     args = parser.parse_args()
     rate_only = not args.shape
     pulls = args.pulls
+    near_ads = None
     constants = pred.load_constants(args.config)
+    if rate_only or args.dm2ee is not None:
+        starting_dm2 = args.dm2ee
+    else:
+        starting_dm2 = 2.48e-3
     starting_params = pred.FitParams(
-            0.15,
-            2.48e-3,
-            pred.ad_dict(0),
-            pred.ad_dict(0, halls='near'),
-            pred.core_dict(0),
-            pred.ad_dict(0),
+        0.15,
+        starting_dm2,
+        pred.ad_dict(0),
+        pred.ad_dict(
+            np.zeros_like(constants.observed_candidates[1, 1]),
+            halls='near'
+        ),
+        pred.core_dict(0),
+        pred.ad_dict(0),
     )
+    n_total_params = len(starting_params.to_list())
     # decide whether to freeze any of the pull parameters
     # (and, if rate-only, also freeze dm2_ee)
     if rate_only or args.dm2ee is not None:
@@ -347,20 +358,45 @@ if __name__ == "__main__":
     if 'all' in pulls:
         pass
     elif len(pulls) == 0:
-        frozen_params.extend(list(range(2, 29)))
+        frozen_params.extend(list(range(2, n_total_params)))
     else:
+        index_map = starting_params.index_map()
         if 'bg' not in pulls:
-            frozen_params.extend(list(range(2, 10)))
+            bg_slice = index_map['bg']
+            indices = list(range(bg_slice.start, bg_slice.stop))
+            frozen_params.extend(indices)
         if 'near-stat' not in pulls:
-            frozen_params.extend(list(range(10, 14)))
+            near_slice = index_map['near_stat']
+            indices = list(range(near_slice.start, near_slice.stop))
+            frozen_params.extend(indices)
+        elif near_ads is None or len(near_ads) == 4:
+            pass
+        else:
+            # Ensure that ADs not being counted are frozen out.
+            # Normally I don't care but there are so many pulls that it
+            # slows down the fitter.
+            pulls_slice = index_map['near_stat']
+            first = pulls_slice.start
+            last = pulls_slice.stop
+            n_near_pulls = last - first
+            n_bins = n_near_pulls // 4
+            for i, halldet in enumerate(pred.near_ads):
+                if halldet not in near_ads:
+                    first_for_ad = first + i * n_bins
+                    last_for_ad = first + (i + 1) * n_bins
+                    frozen_params.extend(list(range(first_for_ad, last_for_ad)))
         if 'reactor' not in pulls:
-            frozen_params.extend(list(range(14, 20)))
+            reactor_slice = index_map['reactor']
+            indices = list(range(reactor_slice.start, reactor_slice.stop))
+            frozen_params.extend(indices)
         if 'eff' not in pulls:
-            frozen_params.extend(list(range(20, 28)))
+            eff_slice = index_map['efficiency']
+            indices = list(range(eff_slice.start, eff_slice.stop))
+            frozen_params.extend(indices)
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
-    near_ads = None
-    print(starting_params)
+    if args.debug:
+        print(starting_params)
     print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug,
         avg_near=args.avg_near, near_ads=near_ads, variant='poisson'))
     if args.debug:
@@ -384,9 +420,6 @@ if __name__ == "__main__":
         if args.debug:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
                 rate_only=rate_only, avg_near=args.avg_near, variant='poisson'))
-        else:
-            print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
-                rate_only=rate_only, avg_near=args.avg_near, variant='poisson')[-26:])
         print(fit_params)
         if args.debug:
             print("Observed & Predicted & Avg Predicted")

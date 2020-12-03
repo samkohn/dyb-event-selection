@@ -70,32 +70,56 @@ class FitParams:
     pull_near_stat: dict
     pull_reactor: dict
     pull_efficiency: dict
+
+    @staticmethod
+    def index_map():
+        to_return = {}
+        to_return['theta13'] = 0
+        to_return['m2_ee'] = 1
+        to_return['bg'] = slice(2, 10)
+        n_bins = 37  # TODO hard-coded
+        n_near_ads = 4
+        num_near_stat = n_bins * n_near_ads
+        to_return['near_stat'] = slice(10, 10 + num_near_stat)
+        to_return['reactor'] = slice(10 + num_near_stat, 16 + num_near_stat)
+        to_return['efficiency'] = slice(16 + num_near_stat, 24 + num_near_stat)
+        return to_return
+
     @classmethod
     def from_list(cls, in_list):
-        theta13 = in_list[0]
-        m2_ee = in_list[1]
+        indexes = cls.index_map()
+        theta13 = in_list[indexes['theta13']]
+        m2_ee = in_list[indexes['m2_ee']]
         # Background pull parameters
         pull_bg = {}
-        for pull, halldet in zip(in_list[2:10], all_ads):
+        for pull, halldet in zip(in_list[indexes['bg']], all_ads):
             pull_bg[halldet] = pull
         # Near statistics pull parameters
+        near_stat_slice = indexes['near_stat']
+        first_entry = near_stat_slice.start
+        n_near_pulls = near_stat_slice.stop - first_entry
+        n_bins = n_near_pulls // 4
         pull_near_stat = {}
-        for pull, halldet in zip(in_list[10:14], near_ads):
-            pull_near_stat[halldet] = pull
+        last_entry = first_entry + n_bins
+        for halldet in near_ads:
+            pull_near_stat[halldet] = np.array(in_list[first_entry:last_entry])
+            first_entry += n_bins
+            last_entry += n_bins
         # Reactor pull parameters
         pull_reactor = {}
-        for i, pull in enumerate(in_list[14:20]):
+        for i, pull in enumerate(in_list[indexes['reactor']]):
             pull_reactor[i + 1] = pull
         # Detection efficiency pull parameters
         pull_efficiency = {}
-        for pull, halldet in zip(in_list[20:28], all_ads):
+        for pull, halldet in zip(in_list[indexes['efficiency']], all_ads):
             pull_efficiency[halldet] = pull
         return cls(theta13, m2_ee, pull_bg, pull_near_stat, pull_reactor, pull_efficiency)
+
     def to_list(self):
         return (
             [self.theta13, self.m2_ee]
             + [self.pull_bg[halldet] for halldet in all_ads]
-            + [self.pull_near_stat[halldet] for halldet in near_ads]
+            + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
             + [self.pull_reactor[core] for core in range(1, 7)]
             + [self.pull_efficiency[halldet] for halldet in all_ads]
         )

@@ -25,7 +25,7 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         observed = {ad: np.sum(constants.observed_candidates[ad], keepdims=True) for ad in far_ads}
     else:
         observed = {ad: constants.observed_candidates[ad] for ad in far_ads}
-    predicted, reco_bins = pred.predict_ad_to_ad_obs(constants, fit_params)
+    predicted = pred.predict_ad_to_ad_obs(constants, fit_params)
     if rate_only:
         for key, val in predicted.items():
             predicted[key] = np.sum(val, keepdims=True)

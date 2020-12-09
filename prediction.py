@@ -201,12 +201,12 @@ def load_constants(config_file):
     # total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
             # database, slice(ad_period.start_week, ad_period.end_week+1)
     # )
-    total_emitted_by_AD, true_bins_spectrum, empty = total_emitted_shortcut(
+    total_emitted_by_AD, true_bins_spectrum = total_emitted_shortcut(
             database, config.period
     )
+    _, time_bins, _ = reactor_spectrum(database, 1)
     # LBNL comparison removes the AD-to-AD livetime dependence from the reactor flux
     if config.lbnl_comparison:
-        _, time_bins, _ = reactor_spectrum(database, 1)
         livetime_by_week_by_AD = livetime_by_week(database, time_bins)
         livetime_by_AD_for_periods = {
                 (halldet, period.name):
@@ -220,7 +220,6 @@ def load_constants(config_file):
             total_emitted_by_AD[key] /= livetime_by_AD_for_periods[halldet,
                     ad_period.name]
 
-    _, time_bins, _ = reactor_spectrum(database, 1)
     livetimes = livetime_by_week(database, time_bins)
     rebin_matrix = generate_bin_averaging_matrix(
             np.concatenate((true_bins_spectrum, [12])),
@@ -299,7 +298,7 @@ def load_constants(config_file):
             reco_bins,
             total_emitted_by_AD,
             #total_emitted_by_week_AD,
-            empty,
+            None,
             livetimes,
             true_bins_spectrum,
             default_osc_params,
@@ -390,7 +389,6 @@ def multiplicity_efficiency(database):
         efficiency = np.average(by_run[:, 2], weights=total_livetime_ns)
         to_return[hall, det] = efficiency
     return to_return
-
 
 def reactor_spectrum(database, core):
     """Returns (spectrum, weekly_time_bins, energy_bins).
@@ -539,9 +537,7 @@ def total_emitted_shortcut(database, data_period):
                 )
 
             energies = result[:-1, 0]  # Last entry is upper bin boundary
-    return total_spectrum_by_AD, energies, None
-
-
+    return total_spectrum_by_AD, energies
 
 
 def total_emitted(database, week_range):
@@ -600,13 +596,13 @@ def xsec_weighted_spec(database):
 
 def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
         include_osc=True):
-    """Return a tuple (dict of flux fractions, energy bins).
+    """Return a dict of flux fractions for near ADs.
 
     The dict has keys ((hall, det), core) with core indexed from 1.
     """
     to_return = {}
     get_to_bin_centers_hack = np.diff(constants.true_bins_spectrum)[0]/2
-    for (hall, det) in all_ads:
+    for (hall, det) in near_ads:
         numerators = np.zeros((len(constants.true_bins_spectrum), 6))
         for core in range(1, 7):
             if week_range == slice(None):
@@ -635,10 +631,10 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
                 to_return[(hall, det), core] = np.zeros_like(denominators)
             else:
                 to_return[(hall, det), core] = numerators[:, core-1] / denominators
-    return to_return, constants.true_bins_spectrum
+    return to_return
 
 def extrapolation_factor(constants, fit_params):
-    """Return a tuple (dict of extrapolation factors, energy bins).
+    """Return a dict of extrapolation factors.
 
     The dict has keys ((far_hall, far_det), core, (near_hall, near_det))
     with core indexed from 1.
@@ -684,7 +680,7 @@ def extrapolation_factor(constants, fit_params):
                 to_return[(far_hall, far_det), core, (near_hall, near_det)] = (
                         numerators[:, core-1]/denominators[:, core-1]
                 )
-    return to_return, constants.true_bins_spectrum
+    return to_return
 
 
 def num_coincidences_per_AD(database, source):
@@ -776,7 +772,7 @@ def backgrounds_per_AD(database, source):
 def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     """Compute the bg-subtracted IBD spectra for each AD.
 
-    Returns the same style values as num_coincidences_per_AD.
+    Returns a dict mapping (hall, det) to a 1D array of IBD counts.
     """
     num_candidates = efficiency_weighted_counts(constants, fit_params)
     predicted_bg = constants.nominal_bgs
@@ -784,7 +780,7 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     for (hall, det), bg_spec in predicted_bg.items():
         pull = fit_params.pull_bg[hall, det]
         results[hall, det] = num_candidates[hall, det] - bg_spec * (1 + pull)
-    return results, constants.reco_bins
+    return results
 
 def true_to_reco_energy_matrix(database, source):
     """Retrieve the conversion matrix from true to/from reconstructed energy.
@@ -812,15 +808,12 @@ def true_to_reco_energy_matrix(database, source):
     true_bins = np.array(json.loads(true_bins_str))/1000
     return drm_matrix, true_bins, reco_bins
 
-def reco_to_true_energy(constants, fit_params):
-    """Apply the detector response to get the "true" observed spectrum.
+def true_to_reco_near_matrix_with_osc(constants, fit_params):
+    """Compute the normalized detector response matrix including oscillations.
 
-    This is handled independently for each reconstructed energy bin,
-    so the returned spectrum arrays are 2-dimensional.
-
-    Returns a tuple of (true_spectrum_dict, true_bins, reco_bins).
-    The units of the spectrum are IBDs per MeV.
-    The dict maps (hall, det) to a 2D array with indexes [true_index, reco_index].
+    Returns a dict mapping (near_hall, near_det) -> a 2D array drm, with
+    drm[true_bin, reco_bin] being the probability that an IBD in the
+    reco_bin was caused by an antineutrino with an energy in true_bin.
 
     For a given bin of reconstructed energy,
     oscillations are applied by splitting into the
@@ -843,9 +836,9 @@ def reco_to_true_energy(constants, fit_params):
         true_bin_fluxfrac_centers,
         [9.975]
     ))
-    flux_fractions_no_osc, _ = flux_fraction(constants, fit_params, include_osc=False)
+    flux_fractions_no_osc = flux_fraction(constants, fit_params, include_osc=False)
     decomposed_response = {}
-    un_normalized_response = {halldet: 0 for halldet in all_ads}
+    un_normalized_response = {halldet: 0 for halldet in near_ads}
     for ((hall, det), core), flux_frac_no_osc in flux_fractions_no_osc.items():
         distance_m = distances[core][f'EH{hall}'][det-1]
         p_sur = survival_probability(
@@ -872,67 +865,83 @@ def reco_to_true_energy(constants, fit_params):
         print(constants.reco_bins_response)
         print(constants.reco_bins)
         raise NotImplementedError("Different reco binnings")
+    return response_pdfs
+
+def true_energy_of_near_IBDs(constants, fit_params):
+    """Apply the detector response to get the "true" observed spectrum for near ADs.
+
+    This is handled independently for each reconstructed energy bin,
+    so the returned spectrum arrays are 2-dimensional.
+
+    Returns a dict of the true spectrum.
+    The units of the spectrum are IBDs per MeV.
+    The dict maps (hall, det) to a 2D array with indexes [true_index, reco_index].
+    The binning is given by constants.true_bins_response and
+    constants.reco_bins_response.
+
+    """
     true_energies = {}
-    bg_subtracted, bins = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
-    for (hall, det), num_IBDs in bg_subtracted.items():
+    bg_subtracted = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
+    response_pdfs = true_to_reco_near_matrix_with_osc(constants, fit_params)
+    for (hall, det), response_pdf in response_pdfs.items():
         true_energies[hall, det] = (
-            response_pdfs[hall, det] * np.expand_dims(num_IBDs, axis=0)
+            response_pdf * np.expand_dims(bg_subtracted[hall, det], axis=0)
         )
-    return true_energies, constants.true_bins_response, constants.reco_bins_response
+    return true_energies
 
-def num_IBDs_from_core(constants, fit_params):
-    """Compute the number of IBDs in each AD that come from a given core.
+def num_near_IBDs_from_core(constants, fit_params):
+    """Compute the number of IBDs in each near AD that come from a given core.
 
-    Return a dict of ((hall, det), core) -> N_ij, and the binnings,
-    as a tuple (N_ij_dict, true_bins, reco_bins).
+    Return a dict of ((hall, det), core) -> N_ij.
     (N_ij from Eq. 2 of DocDB-8774.)
     N_ij is a 2D array with index [true_index, reco_index]
-    with bins of energy given by the second return value.
     """
-    flux_fractions, true_bins_spec = flux_fraction(constants, fit_params)
-    true_energies, true_bins_resp, reco_bins = reco_to_true_energy(constants, fit_params)
+    true_bins_spec = constants.true_bins_spectrum
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
+    true_bins_resp = constants.true_bins_response
+    reco_bins = constants.reco_bins
+    flux_fractions = flux_fraction(constants, fit_params)
+    true_spectra = true_energy_of_near_IBDs(constants, fit_params)
     n_ij = {}
     for (halldet, core), flux_frac in flux_fractions.items():
         # rebinned_fluxfrac = average_bins(flux_frac, true_bins_spec, true_bins_resp)
         rebinned_fluxfrac = np.matmul(constants.rebin_matrix, flux_frac)
         # Must expand dims so that the shape of the arrays is
         # (N_true, 1) * (N_true, N_reco)
-        n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_energies[halldet]
-    return n_ij, true_bins_resp, reco_bins
+        n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_spectra[halldet]
+    return n_ij
 
-def predict_IBD_true_energy(constants, fit_params):
-    """Compute the predicted number of IBDs for a given pair of ADs, by true and reco
+def predict_far_IBD_true_energy(constants, fit_params):
+    """Compute the predicted number of far IBDs for a given pair of ADs, by true and reco
     energy.
 
-    Return a tuple (f_kji, true_bins, reco_bins) where f_kji is a dict of
+    Return f_kji, a dict of
     ((far_hall, far_det), core, (near_hall, near_det)) -> N,
     with core indexed from 1 and N[true_index, reco_index].
     """
-    num_from_core, true_bins, reco_bins = num_IBDs_from_core(constants, fit_params)
-    extrap_factor, true_bins_spec = extrapolation_factor(constants, fit_params)
-    # reactor flux bins don't include the upper edge of 12 MeV
-    true_bins_spec = np.concatenate((true_bins_spec, [12]))
+    true_bins = constants.true_bins_response
+    reco_bins = constants.reco_bins
+    num_from_core = num_near_IBDs_from_core(constants, fit_params)
+    extrap_factors = extrapolation_factor(constants, fit_params)
     f_kji = {}
-    for (far_halldet, core, near_halldet), extrap_fact in extrap_factor.items():
-        # rebinned_extrap_fact = average_bins(extrap_fact, true_bins_spec, true_bins)
+    for (far_halldet, core, near_halldet), extrap_fact in extrap_factors.items():
         rebinned_extrap_fact = np.matmul(constants.rebin_matrix, extrap_fact)
         n_ij = num_from_core[near_halldet, core]
         f_kji[far_halldet, core, near_halldet] = (
                 np.expand_dims(rebinned_extrap_fact, axis=1) * n_ij
         )
-    return f_kji, true_bins, reco_bins
+    return f_kji
 
 def predict_ad_to_ad_IBDs(constants, fit_params):
     """Compute the predicted number of IBDs for a given pair of ADs, summed over all
     cores.
 
-    Return a tuple (f_ki, reco_bins) where f_ki is a dict of
+    Return f_ki, a dict of
     ((far_hall, far_det), (near_hall, near_det)) -> N,
     and N indexed by reco_index.
     """
-    f_kji, true_bins, reco_bins = predict_IBD_true_energy(constants, fit_params)
+    f_kji = predict_far_IBD_true_energy(constants, fit_params)
     f_ki = {}
     for (far_halldet, core, near_halldet), n in f_kji.items():
         if (far_halldet, near_halldet) in f_ki:
@@ -951,7 +960,7 @@ def predict_ad_to_ad_IBDs(constants, fit_params):
                 / livetime_for_period(near_livetimes, period)
             )
             f_ki[far_halldet, near_halldet] *= correction
-    return f_ki, reco_bins
+    return f_ki
 
 def predict_ad_to_ad_obs(constants, fit_params):
     """Compute the number of observed coincidences for a given pair of ADs.
@@ -959,7 +968,7 @@ def predict_ad_to_ad_obs(constants, fit_params):
     The background events are added back to the far halls
     and the muon-veto and multiplicity-veto efficiencies are re-applied.
 
-    Return a tuple (f_ki, reco_bins) where f_ki is a dict of
+    Return f_ki, a dict of
     ((far_hall, far_det), (near_hall, near_det)) -> N,
     and N indexed by reco_index.
 
@@ -967,7 +976,7 @@ def predict_ad_to_ad_obs(constants, fit_params):
     to the number of observed coincidences at the far hall ADs,
     without adjusting the observed counts for backgrounds or any efficiencies.
     """
-    f_ki, reco_bins = predict_ad_to_ad_IBDs(constants, fit_params)
+    f_ki = predict_ad_to_ad_IBDs(constants, fit_params)
     predicted_bg = constants.nominal_bgs
     muon_effs = constants.muon_eff
     mult_effs = constants.multiplicity_eff
@@ -987,13 +996,13 @@ def predict_ad_to_ad_obs(constants, fit_params):
         results[far_halldet, near_halldet] = (
                 result * combined_eff
         )
-    return results, constants.reco_bins
+    return results
 
 
 def predict_halls(constants, fit_params):
     """Compute the predicted number of IBDs in EH3 based on EH1 or EH2.
 
-    Return a tuple (f_pred, reco_bins) where f_pred is a dict with keys
+    Return f_pred, is a dict with keys
     1 and 2 corresponding to EH1 and EH2, and values of a 1D array
     indexed by reco_index.
 
@@ -1002,14 +1011,14 @@ def predict_halls(constants, fit_params):
     The predictions are all summed to represent combining the far-hall ADs
     and then halved to represent averaging over the 2 near AD predictions.
     """
-    f_ki, reco_bins = predict_ad_to_ad_IBDs(constants, fit_params)
+    f_ki = predict_ad_to_ad_IBDs(constants, fit_params)
     prediction = {
             1: np.zeros_like(reco_bins[:-1]),
             2: np.zeros_like(reco_bins[:-1])
     }
     for (far_halldet, (near_hall, near_det)), ad_prediction in f_ki.items():
         prediction[near_hall] += ad_prediction/2
-    return prediction, reco_bins
+    return prediction
 
 
 def generate_bin_averaging_matrix(bins_fine, bins_coarse):

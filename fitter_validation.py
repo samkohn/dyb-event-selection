@@ -240,68 +240,96 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
     fit_file_name = f'{fit_file_name}_{random.randint(0, 1000000000)}'
     with open(fit_file_name, 'w') as f:
         json.dump(fit_config, f)
-    # Prepare fitter
-    constants = pred.load_constants(fit_file_name)
-    if rate_only or args.dm2ee is not None:
-        starting_dm2 = dm2ee
-    else:
-        starting_dm2 = 2.48e-3
-    starting_params = pred.FitParams(
-        0.15,
-        starting_dm2,
-        pred.ad_dict(0),
-        pred.ad_dict(
-            np.zeros_like(constants.observed_candidates[1, 1]),
-            halls='near'
-        ),
-        pred.core_dict(0),
-        pred.ad_dict(0),
-    )
-    near_ads = None
-    # decide whether to freeze any of the pull parameters
-    # (and, if rate-only, also freeze dm2_ee)
-    if rate_only:
-        frozen_params = [1]
-    else:
-        frozen_params = []
-    if 'all' in pulls:
-        pass
-    elif len(pulls) == 0:
-        frozen_params.extend(list(range(2, 29)))
-    else:
-        if 'bg' not in pulls:
-            frozen_params.extend(list(range(2, 10)))
-        if 'near-stat' not in pulls:
-            frozen_params.extend(list(range(10, 14)))
-        if 'reactor' not in pulls:
-            frozen_params.extend(list(range(14, 20)))
-        if 'eff' not in pulls:
-            frozen_params.extend(list(range(20, 28)))
+    try:
+        # Prepare fitter
+        constants = pred.load_constants(fit_file_name)
+        if rate_only:
+            starting_dm2 = dm2ee
+        else:
+            starting_dm2 = 2.48e-3
+        starting_params = pred.FitParams(
+            0.15,
+            starting_dm2,
+            pred.ad_dict(0),
+            pred.ad_dict(
+                np.zeros_like(constants.observed_candidates[1, 1]),
+                halls='near'
+            ),
+            pred.core_dict(0),
+            pred.ad_dict(0),
+        )
+        near_ads = None
+        n_total_params = len(starting_params.to_list())
+        # decide whether to freeze any of the pull parameters
+        # (and, if rate-only, also freeze dm2_ee)
+        if rate_only:
+            frozen_params = [1]
+        else:
+            frozen_params = []
+        if 'all' in pulls:
+            pass
+        elif len(pulls) == 0:
+            frozen_params.extend(list(range(2, n_total_params)))
+        else:
+            index_map = starting_params.index_map()
+            if 'bg' not in pulls:
+                bg_slice = index_map['bg']
+                indices = list(range(bg_slice.start, bg_slice.stop))
+                frozen_params.extend(indices)
+            if 'near-stat' not in pulls:
+                near_slice = index_map['near_stat']
+                indices = list(range(near_slice.start, near_slice.stop))
+                frozen_params.extend(indices)
+            elif near_ads is None or len(near_ads) == 4:
+                pass
+            else:
+                # Ensure that ADs not being counted are frozen out.
+                # Normally I don't care but there are so many pulls that it
+                # slows down the fitter.
+                pulls_slice = index_map['near_stat']
+                first = pulls_slice.start
+                last = pulls_slice.stop
+                n_near_pulls = last - first
+                n_bins = n_near_pulls // 4
+                for i, halldet in enumerate(pred.near_ads):
+                    if halldet not in near_ads:
+                        first_for_ad = first + i * n_bins
+                        last_for_ad = first + (i + 1) * n_bins
+                        frozen_params.extend(list(range(first_for_ad, last_for_ad)))
+            if 'reactor' not in pulls:
+                reactor_slice = index_map['reactor']
+                indices = list(range(reactor_slice.start, reactor_slice.stop))
+                frozen_params.extend(indices)
+            if 'eff' not in pulls:
+                eff_slice = index_map['efficiency']
+                indices = list(range(eff_slice.start, eff_slice.stop))
+                frozen_params.extend(indices)
 
-    # Compute fit
-    fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
-            near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
-    # Compute min chi2 and sin2_2theta13 for posterity
-    chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only,
-            avg_near=avg_near, near_ads=near_ads, variant='poisson')
-    chi2_gof = fit.chi_square(constants, fit_params, rate_only=rate_only,
-            avg_near=avg_near, near_ads=near_ads, variant='pearson')
-    best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
-    dm2ee_best = fit_params.m2_ee
-    # Obtain the error on theta13 if desired
-    if find_errors:
-        upper, lower = fit.sigma_searcher(fit_params, constants)
-        upper_sin2 = np.power(np.sin(2*upper), 2)
-        lower_sin2 = np.power(np.sin(2*lower), 2)
-        upper_error = upper_sin2 - best_sin2
-        lower_error = best_sin2 - lower_sin2
-        sin2_error = max(upper_error, lower_error)
-        dm2ee_error = None
-    else:
-        sin2_error = None
-        dm2ee_error = None
-    # Delete the temporary fit config file
-    os.remove(fit_file_name)
+        # Compute fit
+        fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
+                near_ads=near_ads, rate_only=rate_only, avg_near=avg_near)
+        # Compute min chi2 and sin2_2theta13 for posterity
+        chi2_min = fit.chi_square(constants, fit_params, rate_only=rate_only,
+                avg_near=avg_near, near_ads=near_ads, variant='poisson')
+        chi2_gof = fit.chi_square(constants, fit_params, rate_only=rate_only,
+                avg_near=avg_near, near_ads=near_ads, variant='pearson')
+        best_sin2 = np.power(np.sin(2*fit_params.theta13), 2)
+        dm2ee_best = fit_params.m2_ee
+        # Obtain the error on theta13 if desired
+        if find_errors:
+            upper, lower = fit.sigma_searcher(fit_params, constants)
+            upper_sin2 = np.power(np.sin(2*upper), 2)
+            lower_sin2 = np.power(np.sin(2*lower), 2)
+            upper_error = upper_sin2 - best_sin2
+            lower_error = best_sin2 - lower_sin2
+            sin2_error = max(upper_error, lower_error)
+            dm2ee_error = None
+        else:
+            sin2_error = None
+            dm2ee_error = None
+    finally:
+        # Delete the temporary fit config file
+        os.remove(fit_file_name)
     return (label, index, sin2, best_sin2, sin2_error, dm2ee, dm2ee_best, dm2ee_error,
             chi2_min, chi2_gof, rate_only, avg_near)
 

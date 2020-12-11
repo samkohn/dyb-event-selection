@@ -42,6 +42,9 @@ def get_event(computed):
 
 def sequential_pairing(computed):
     entries = computed.GetEntries()
+    # Ignore the last event if there are an odd number of events
+    if entries % 2 == 1:
+        entries -= 1
     halfway = entries//2
     index = 0
     first_events = [None] * halfway
@@ -52,8 +55,9 @@ def sequential_pairing(computed):
         if index < halfway:
             first_events[halfway - index - 1] = event
         else:
-            yield first_events[2 * halfway - index - 1], event
-            first_events[2 * halfway - index] = None
+            first = first_events[2 * halfway - index - 1]
+            yield first, event
+            first_events[2 * halfway - index - 1] = None
         index += 1
 
 def random_pairing_N(computed):
@@ -182,7 +186,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
                 (run, detector, pairing, efficiency, error, num_pairs))
 
 
-def main(infilename, outfile, ttree_name, pairing_algorithm):
+def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, update_db):
     import process
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
@@ -198,6 +202,9 @@ def main(infilename, outfile, ttree_name, pairing_algorithm):
             210, 1.5, 12, 210, 1.5, 12)
     computed = infile.Get(ttree_name)
     computed.SetBranchStatus('*', 0)
+    computed.SetBranchStatus('run', 1)
+    computed.SetBranchStatus('detector', 1)
+    computed.SetBranchStatus('site', 1)
     computed.SetBranchStatus('energy', 1)
     computed.SetBranchStatus('x', 1)
     computed.SetBranchStatus('y', 1)
@@ -206,6 +213,9 @@ def main(infilename, outfile, ttree_name, pairing_algorithm):
     run = computed.run
     detector = computed.detector
     site = computed.site
+    computed.SetBranchStatus('run', 0)
+    computed.SetBranchStatus('detector', 0)
+    computed.SetBranchStatus('site', 0)
     if pairing_algorithm == 'sequential':
         #first_events, second_events = sequential_pairing(computed)
         generator = sequential_pairing(computed)
@@ -215,6 +225,7 @@ def main(infilename, outfile, ttree_name, pairing_algorithm):
     else:
         raise NotImplemented(pairing_algorithm)
     #for (first_event, second_event) in zip(first_events, second_events):
+    event_DTs = []
     for (first_event, second_event) in generator:
         # Compare event distances and fill the tree
         event_dr = distance(first_event, second_event)
@@ -266,7 +277,9 @@ def main(infilename, outfile, ttree_name, pairing_algorithm):
         all_acc_buf.dr_to_prompt[1] = event_dr
         all_acc_buf.dt_to_prompt[0] = 0
         all_acc_buf.dt_to_prompt[1] = event_dt
-        if delayeds.nH_THU_DT(event_dr, event_dt) < delayeds._NH_THU_DIST_TIME_MAX:
+        event_DT = delayeds.nH_THU_DT(event_dr, event_dt)
+        event_DTs.append(event_DT)
+        if event_DT < delayeds._NH_THU_DIST_TIME_MAX:
             acc_spectrum_hist.Fill(first_event['energy'],
                     second_event['energy'])
             acc_spectrum_hist.Fill(second_event['energy'],
@@ -279,6 +292,18 @@ def main(infilename, outfile, ttree_name, pairing_algorithm):
             eps_DT_hist.Fill(second_event['energy'],
                     first_event['energy'])
         all_acc.Fill()
+    if update_db is not None:
+        event_DTs = np.array(event_DTs)
+        num_pairs = len(event_DTs)
+        DT_CUT = delayeds._NH_THU_DIST_TIME_MAX
+        num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
+        efficiency = num_passes_cut / num_pairs
+        error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
+        with sqlite3.Connection(update_db) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
+                VALUES (?, ?, ?, ?, ?, ?)''',
+                (run, detector, f'{pairing_algorithm}; {pairing_note}', efficiency, error, num_pairs))
     outfile.Write()
     outfile.Close()
     infile.Close()
@@ -293,6 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--only-DT-eff', action='store_true')
     parser.add_argument('--update-db')
     parser.add_argument('--num-pairs', type=int)
+    parser.add_argument('--pairing-note', default='')
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -300,4 +326,5 @@ if __name__ == '__main__':
         only_DT_eff(args.infile, args.ttree_name, args.pairing,
                 args.update_db, num_pairs=args.num_pairs, seed=args.seed)
     else:
-        main(args.infile, args.outfile, args.ttree_name, args.pairing)
+        main(args.infile, args.outfile, args.ttree_name, args.pairing, args.pairing_note,
+                args.update_db)

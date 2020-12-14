@@ -1,5 +1,4 @@
 import argparse
-import json
 import math
 import os
 import sqlite3
@@ -8,6 +7,9 @@ from scipy.optimize import fsolve
 
 from delayeds import _NH_THU_MAX_TIME
 
+# Numerically-evaluated uncertainty of R_s relative to R_1-fold.
+# (Uncertainty on R_s is larger)
+UNCERTAINTY_MULTIPLIER = 1.1
 
 def P_start(R_total, R_mu, Tc):
     """The probability for a coincidence window to start.
@@ -125,26 +127,24 @@ def subterm(sum_term, Tc):
 
 
 def main(infile, database, update_db, iteration, extra_cut):
-    with open(os.path.splitext(infile)[0] + '.json', 'r') as f:
-        stats = json.load(f)
-    livetime_s = stats['usable_livetime']/1e9
-    ad = stats['ad']
     import ROOT
     ch = ROOT.TChain('ad_events')
     ch.Add(infile)
     ch.GetEntry(0)
     runNo = ch.run
     site = ch.site
+    ad = ch.detector[0]
     start_time = ch.timestamp[0]
     multiplicity_1_count = ch.Draw('energy', f'detector == {ad} && '
         f'multiplicity == 1 && ({extra_cut})', 'goff')
-    multiplicity_1_count_error = math.sqrt(multiplicity_1_count)
-    multiplicity_1_rate_Hz = multiplicity_1_count / livetime_s
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT Rate_Hz FROM muon_rates WHERE
+        cursor.execute('''SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE
             RunNo = ? AND DetNo = ?''', (runNo, ad))
-        muon_rate, = cursor.fetchone()
+        muon_rate, livetime_s = cursor.fetchone()
+    multiplicity_1_count_error = math.sqrt(multiplicity_1_count)
+    multiplicity_1_rate_Hz = multiplicity_1_count / livetime_s
+    uncorr_rate_error = multiplicity_1_count_error/livetime_s * UNCERTAINTY_MULTIPLIER
 
     # convert to seconds and subtract off 1us
     window_size = _NH_THU_MAX_TIME/1e9 - 1e-6
@@ -172,7 +172,7 @@ def main(infile, database, update_db, iteration, extra_cut):
                 ad,
                 iteration,
                 underlying_uncorr_rate,
-                multiplicity_1_count_error/livetime_s,
+                uncorr_rate_error,
                 multiplicity_1_count,
                 multiplicity_1_rate_Hz,
                 R_corr,

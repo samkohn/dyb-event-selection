@@ -20,7 +20,7 @@ def coinc_rate(rs, rmu, tc):
     return prefactor * (term1 + term2 + term3)
 
 def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
-        acc_rate, run_number, database):
+        acc_rate, run_number, database, label):
     import ROOT
     if acc_rate is None:
         window_size_s = (_NH_THU_MAX_TIME - _NH_THU_MIN_TIME)/1e9
@@ -156,12 +156,19 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             c = conn.cursor()
             # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
             # DistanceCrossCheck, DistanceCrossCheck_error
-            c.execute('''INSERT OR REPLACE INTO accidental_subtraction
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (run_number, ad, base_rate, eps_distance, scale_factor,
-                DT_cross_check_value, DT_cross_check_error,
-                distance_cross_check_value, distance_cross_check_error))
-            conn.commit()
+            if label is None:
+                c.execute('''INSERT OR REPLACE INTO accidental_subtraction
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (run_number, ad, base_rate, eps_distance, scale_factor,
+                    DT_cross_check_value, DT_cross_check_error,
+                    distance_cross_check_value, distance_cross_check_error))
+            else:
+                c.execute('''INSERT OR REPLACE INTO accidental_subtraction
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (run_number, ad, label, base_rate, eps_distance, scale_factor,
+                    DT_cross_check_value, DT_cross_check_error,
+                    distance_cross_check_value, distance_cross_check_error))
+                conn.commit()
 
 
 
@@ -175,6 +182,8 @@ if __name__ == '__main__':
     parser.add_argument('--override-acc-rate', type=float, default=None)
     parser.add_argument('-o', '--output')
     parser.add_argument('--update-db', action='store_true')
+    parser.add_argument('--label',
+        help='Label in DB - if absent, will assume no Label column in schema')
     args = parser.parse_args()
 
     with open(os.path.splitext(args.datafile)[0] + '.json', 'r') as f:
@@ -197,4 +206,4 @@ if __name__ == '__main__':
 
     database = args.database if args.update_db else None
     main(args.output, args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
-            args.override_acc_rate, run_number, database)
+            args.override_acc_rate, run_number, database, args.label)

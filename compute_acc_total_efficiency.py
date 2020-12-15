@@ -27,9 +27,6 @@ def one_file(run_key, data_file_path, energy_lookup):
     efficiency = num_passing_cuts / total
     # Binomial error / total = absolute error on efficiency
     error = math.sqrt(total * efficiency * (1 - efficiency)) / total
-    print(data_file_name)
-    print(total, 'pairs total')
-    print(efficiency, '+/-', error)
     return efficiency, error, run, ad
 
 def main(main_database, energy_cuts_database, data_file_path, label, update_db):

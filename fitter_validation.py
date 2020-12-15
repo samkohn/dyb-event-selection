@@ -67,6 +67,15 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'near only fluctuations default nGd binning':
             'LBNL ToyMC 07 w/ stat fluctuations near, no fluctuations far (nominal),'
             ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'relative energy scale default nGd binning':
+            'LBNL ToyMC 10 no stat fluctuations, fluctuate relative energy scale,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'core spectra default nGd binning':
+            'LBNL ToyMC 11 no stat fluctuations, fluctuate core spectra,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'reactor power default nGd binning':
+            'LBNL ToyMC 12 no stat fluctuations, fluctuate reactor power,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
 
     }
     toymc_out_numbers = {
@@ -75,6 +84,9 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'far only fluctuations default nGd binning': '07',
         'near+far stat fluctuations default nGd binning': '08',
         'near only fluctuations default nGd binning': '07',
+        'relative energy scale default nGd binning': '10',
+        'core spectra default nGd binning': '11',
+        'reactor power default nGd binning': '12',
     }
     mc_configurations = {
         # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
@@ -83,13 +95,20 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'far only fluctuations default nGd binning': (True, False, False),
         'near+far stat fluctuations default nGd binning': (True, True, False),
         'near only fluctuations default nGd binning': (False, True, False),
+        'relative energy scale default nGd binning': (False, False, True),
+        'core spectra default nGd binning': (False, False, True),
+        'reactor power default nGd binning': (False, False, True),
     }
     mc_configuration = mc_configurations[source_category]
-    nominal_near = not mc_configuration[1]
-    nominal_far = not mc_configuration[0]
-    if nominal_near and mc_configuration[2]:
-        raise ValueError("Can't figure out how to suppress near fluctuations but add "
-                "systematics")
+    if mc_configuration == (False, False, True):
+        nominal_near = False
+        nominal_far = False
+    else:
+        nominal_near = not mc_configuration[1]
+        nominal_far = not mc_configuration[0]
+        if nominal_near and mc_configuration[2]:
+            raise ValueError("Can't figure out how to suppress near fluctuations but add "
+                    "systematics")
 
 
     source_template = source_templates[source_category]
@@ -107,7 +126,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         toy_config_template = ''
 
     NO_FLUCTUATIONS = ('02',)
-    WITH_FLUCTUATIONS = ('05', '07', '08')
+    WITH_FLUCTUATIONS = ('05', '07', '08', '10', '11', '12')
     # Get a fresh generator when needed
     grid_values = lambda: itertools.product(sin2_values, dm2ee_values)
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
@@ -344,7 +363,7 @@ if __name__ == "__main__":
     parser.add_argument('--find-errors', action='store_true')
     parser.add_argument('--source-category', type=int,
             help='1: no fluctuations, 2: full fluctuations, 3: far stat only, 4: full stat'
-            ', 5: near stat only')
+            ', 5: near stat only, 6: rel escale, 7: core spectra, 8: reactor power')
     parser.add_argument('--fit-config')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
@@ -361,6 +380,9 @@ if __name__ == "__main__":
         3: 'far only fluctuations default nGd binning',
         4: 'near+far stat fluctuations default nGd binning',
         5: 'near only fluctuations default nGd binning',
+        6: 'relative energy scale default nGd binning',
+        7: 'core spectra default nGd binning',
+        8: 'reactor power default nGd binning',
     }
     source_category = source_categories[args.source_category]
     main(

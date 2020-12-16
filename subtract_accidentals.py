@@ -27,13 +27,27 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         base_rate = coinc_rate(rs, rmu, window_size_s)
     else:
         base_rate = acc_rate
+    if 'adtime' in label:
+        global DT_VALUE
+        global DT_CUT
+        DT_VALUE_LITERAL = DT_VALUE
+        DT_CUT_LITERAL = DT_CUT
+        DR_VALUE_LITERAL = '(dr_to_prompt[1])'
+        DT_VALUE = '(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1])'
+        DT_CUT = '(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1] < 800)'
+        DR_VALUE = '(dr_to_prompt_AdTime[1])'
+    else:
+        DT_VALUE_LITERAL = DT_VALUE
+        DT_CUT_LITERAL = DT_CUT
+        DR_VALUE = '(dr_to_prompt[1])'
+        DR_VALUE_LITERAL = DR_VALUE
     hist_parameters = (2100, 1.5, 12, 2100, 1.5, 12)
     datafile = ROOT.TFile(datafilename, 'READ')
     raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', *hist_parameters)
     raw_spectrum.Sumw2()
     ad_events = datafile.Get('ad_events')
     ad_events.Draw('energy[1]:energy[0] >> raw_spec',
-            f'multiplicity == 2 && {DT_CUT} && dr_to_prompt[1] >= 0', 'goff')
+            f'multiplicity == 2 && {DT_CUT} && {DR_VALUE} >= 0', 'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
     acc_entries = accfile.Get('accidentals')
     acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
@@ -96,18 +110,18 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             *energy_axis_parameters)
     ed_vs_DT_sub = ROOT.TH2F('ed_DT_sub', 'ed_DT_sub',
             *distance_axis_parameters, *energy_axis_parameters)
-    ad_events.Draw('dr_to_prompt[1] >> dr_data', 'multiplicity == 2 && '
-            'dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0', 'goff')
+    ad_events.Draw(f'{DR_VALUE} >> dr_data', 'multiplicity == 2 && '
+            f'{DR_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
     scale_factor = base_rate * eps_distance * livetime / num_acc_events
     bg_pairs = accfile.Get('all_pairs')
-    bg_pairs.Draw('dr_to_prompt[1] >> dr_bg', (str(scale_factor) +
-            ' * 2 * (dr_to_prompt[1] < 5000 && ' +
-            'dr_to_prompt[1] >= 0)'), 'same goff')
+    bg_pairs.Draw(f'{DR_VALUE_LITERAL} >> dr_bg', (str(scale_factor) +
+            f' * 2 * ({DR_VALUE_LITERAL} < 5000 && ' +
+            f'{DR_VALUE_LITERAL} >= 0)'), 'same goff')
     dr_spectrum_sub.Add(dr_spectrum_actual, dr_spectrum_bg, 1, -1)
     ad_events.Draw(f'{DT_VALUE} >> DT_data',
-        f'multiplicity == 2 && {DT_VALUE} < 5000 && dr_to_prompt[1] >= 0', 'goff')
-    bg_pairs.Draw(f'{DT_VALUE} >> DT_bg',
-        f'{scale_factor} * 2 * ({DT_VALUE} < 5000 && dr_to_prompt[1] >= 0)', 'goff')
+        f'multiplicity == 2 && {DT_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
+    bg_pairs.Draw(f'{DT_VALUE_LITERAL} >> DT_bg',
+        f'{scale_factor} * 2 * ({DT_VALUE_LITERAL} < 5000 && {DR_VALUE_LITERAL} >= 0)', 'goff')
     DT_spectrum_sub.Add(DT_spectrum_actual, DT_spectrum_bg, 1, -1)
     if database is not None:
         # Then do the fit to get the parameters for the database
@@ -117,36 +131,36 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         fit_result = DT_spectrum_sub.Fit('pol0', 'QN0S', '', 2000, 5000)
         DT_cross_check_value = fit_result.Parameter(0)
         DT_cross_check_error = fit_result.ParError(0)
-    ad_events.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_data',
-            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0',
+    ad_events.Draw(f'energy[1]:{DR_VALUE} >> ed_dr_data',
+            f'multiplicity == 2 && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
-    ad_events.Draw('energy[0]:dr_to_prompt[1] >> ep_dr_data',
-            'multiplicity == 2 && dr_to_prompt[1] < 5000 && dr_to_prompt[1] >= 0',
+    ad_events.Draw(f'energy[0]:{DR_VALUE} >> ep_dr_data',
+            f'multiplicity == 2 && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
-    bg_pairs.Draw('energy[0]:dr_to_prompt[1] >> ed_dr_bg',
-            '2 * (dr_to_prompt[1] < 5000 && multiplicity == 2 && '
-            'dr_to_prompt[1] >= 0)', 'goff')
+    bg_pairs.Draw(f'energy[0]:{DR_VALUE_LITERAL} >> ed_dr_bg',
+            f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
+            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
     ep_vs_dr_sub.Add(ep_vs_dr_actual, ep_vs_dr_bg, 1,
             -base_rate*eps_distance*livetime/num_acc_events)
-    bg_pairs.Draw('energy[1]:dr_to_prompt[1] >> ed_dr_bg',
-            '2 * (dr_to_prompt[1] < 5000 && multiplicity == 2 && '
-            'dr_to_prompt[1] >= 0)', 'goff')
+    bg_pairs.Draw(f'energy[1]:{DR_VALUE_LITERAL} >> ed_dr_bg',
+            f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
+            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
     ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1,
             -base_rate*eps_distance*livetime/num_acc_events)
     ad_events.Draw(f'energy[1]:{DT_VALUE} >> ed_DT_data',
-            f'multiplicity == 2 && {DT_VALUE} < 5000 && dr_to_prompt[1] >= 0',
+            f'multiplicity == 2 && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
     ad_events.Draw(f'energy[0]:{DT_VALUE} >> ep_DT_data',
-            f'multiplicity == 2 && {DT_VALUE} < 5000 && dr_to_prompt[1] >= 0',
+            f'multiplicity == 2 && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
-    bg_pairs.Draw(f'energy[0]:{DT_VALUE} >> ed_DT_bg',
-            f'2 * ({DT_VALUE} < 5000 && multiplicity == 2 && '
-            'dr_to_prompt[1] >= 0)', 'goff')
+    bg_pairs.Draw(f'energy[0]:{DT_VALUE_LITERAL} >> ed_DT_bg',
+            f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
+            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
     ep_vs_DT_sub.Add(ep_vs_DT_actual, ep_vs_DT_bg, 1,
             -base_rate*eps_distance*livetime/num_acc_events)
-    bg_pairs.Draw(f'energy[1]:{DT_VALUE} >> ed_DT_bg',
-            f'2 * ({DT_VALUE} < 5000 && multiplicity == 2 && '
-            'dr_to_prompt[1] >= 0)', 'goff')
+    bg_pairs.Draw(f'energy[1]:{DT_VALUE_LITERAL} >> ed_DT_bg',
+            f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
+            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
     ed_vs_DT_sub.Add(ed_vs_DT_actual, ed_vs_DT_bg, 1,
             -base_rate*eps_distance*livetime/num_acc_events)
     outfile.Write()
@@ -172,24 +186,31 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
 
 
 def main(output, datafile, accfile, database, ad, override_acc_rate, label, update_db):
-    with open(os.path.splitext(datafile)[0] + '.json', 'r') as f:
-        stats = json.load(f)
-        livetime = stats['usable_livetime']/1e9
-        run_number = stats['run']
-        site = stats['site']
+    try:
+        with open(os.path.splitext(args.datafile)[0] + '.json', 'r') as f:
+            stats = json.load(f)
+            # livetime = stats['usable_livetime']/1e9
+            run_number = stats['run']
+            site = stats['site']
+    except FileNotFoundError:
+        import ROOT
+        infile = ROOT.TFile(args.datafile, 'READ')
+        ad_events = infile.Get('ad_events')
+        ad_events.GetEntry(0)
+        run_number = ad_events.run
+        site = ad_events.site
 
-    with sqlite3.Connection(database) as conn:
+    with sqlite3.Connection(args.database) as conn:
         c = conn.cursor()
-        if override_acc_rate:
+        if args.override_acc_rate:
             singles_rate = None
         else:
             c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
-                    'RunNo = ? AND DetNo = ?', (run_number, ad))
+                    'RunNo = ? AND DetNo = ?', (run_number, args.ad))
             singles_rate, = c.fetchone()
-        c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
-                'RunNo = ? AND DetNo = ?', (run_number, ad))
-        muon_rate, = c.fetchone()
-
+        c.execute('SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE '
+                'RunNo = ? AND DetNo = ?', (run_number, args.ad))
+        muon_rate, livetime = c.fetchone()
     database = database if update_db else None
     subtract(output, datafile, accfile, ad, singles_rate, muon_rate, livetime,
             override_acc_rate, run_number, database, label)
@@ -217,4 +238,3 @@ if __name__ == '__main__':
         args.label,
         args.update_db,
     )
-

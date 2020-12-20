@@ -19,7 +19,7 @@ def coinc_rate(rs, rmu, tc):
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 
-def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
+def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         acc_rate, run_number, database, label):
     import ROOT
     if acc_rate is None:
@@ -171,6 +171,28 @@ def main(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
                 conn.commit()
 
 
+def main(output, datafile, accfile, database, ad, override_acc_rate, label, update_db):
+    with open(os.path.splitext(datafile)[0] + '.json', 'r') as f:
+        stats = json.load(f)
+        livetime = stats['usable_livetime']/1e9
+        run_number = stats['run']
+        site = stats['site']
+
+    with sqlite3.Connection(database) as conn:
+        c = conn.cursor()
+        if override_acc_rate:
+            singles_rate = None
+        else:
+            c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
+                    'RunNo = ? AND DetNo = ?', (run_number, ad))
+            singles_rate, = c.fetchone()
+        c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
+                'RunNo = ? AND DetNo = ?', (run_number, ad))
+        muon_rate, = c.fetchone()
+
+    database = database if update_db else None
+    subtract(output, datafile, accfile, ad, singles_rate, muon_rate, livetime,
+            override_acc_rate, run_number, database, label)
 
 
 if __name__ == '__main__':
@@ -185,25 +207,14 @@ if __name__ == '__main__':
     parser.add_argument('--label',
         help='Label in DB - if absent, will assume no Label column in schema')
     args = parser.parse_args()
+    main(
+        args.output,
+        args.datafile,
+        args.accfile,
+        args.database,
+        args.ad,
+        args.override_acc_rate,
+        args.label,
+        args.update_db,
+    )
 
-    with open(os.path.splitext(args.datafile)[0] + '.json', 'r') as f:
-        stats = json.load(f)
-        livetime = stats['usable_livetime']/1e9
-        run_number = stats['run']
-        site = stats['site']
-
-    with sqlite3.Connection(args.database) as conn:
-        c = conn.cursor()
-        if args.override_acc_rate:
-            singles_rate = None
-        else:
-            c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
-                    'RunNo = ? AND DetNo = ?', (run_number, args.ad))
-            singles_rate, = c.fetchone()
-        c.execute('SELECT Rate_Hz FROM muon_rates WHERE '
-                'RunNo = ? AND DetNo = ?', (run_number, args.ad))
-        muon_rate, = c.fetchone()
-
-    database = args.database if args.update_db else None
-    main(args.output, args.datafile, args.accfile, args.ad, singles_rate, muon_rate, livetime,
-            args.override_acc_rate, run_number, database, args.label)

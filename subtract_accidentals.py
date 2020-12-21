@@ -164,7 +164,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
                     distance_cross_check_value, distance_cross_check_error))
             else:
                 c.execute('''INSERT OR REPLACE INTO accidental_subtraction
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)''',
                 (run_number, ad, label, base_rate, eps_distance, scale_factor,
                     DT_cross_check_value, DT_cross_check_error,
                     distance_cross_check_value, distance_cross_check_error))

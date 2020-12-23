@@ -72,10 +72,11 @@ def main(infilename, outfilename, site, ad, database):
     sigma0 = .14
     alpha0 = 0.8
     scale0 = 2
-    # Approximate the normalization as the area under the lower half of the
-    # x-range of the histogram (1.5-6.75 MeV)
-    approx_integral = delayed_spectrum.Integral(1,
-            delayed_spectrum.GetNbinsX()//2)
+    # Approximate the normalization as the area under the main part of
+    # the nH peak (1.5-3.5 MeV)
+    low_bin = delayed_spectrum.FindFixBin(1.5)
+    up_bin = delayed_spectrum.FindFixBin(3.499)
+    approx_integral = delayed_spectrum.Integral(low_bin, up_bin)
     bin_width = delayed_spectrum.GetBinWidth(1)
     norm0 = approx_integral * bin_width
 
@@ -89,6 +90,7 @@ def main(infilename, outfilename, site, ad, database):
     try:
         fit_result = delayed_spectrum.Fit(fitter, options, '', 1.6, 2.8)
     except:
+        print([mu0, sigma0, scale0, alpha0, norm0])
         delayed_spectrum.Draw()
         fitter.Draw()
         time.sleep(10)

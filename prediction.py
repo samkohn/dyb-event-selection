@@ -4,7 +4,7 @@ Based on the procedure outlined in DocDB-8774 Section 3.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 from datetime import datetime
 import json
 import logging
@@ -61,15 +61,36 @@ class FitConstants:
     cross_section: np.array
     rebin_matrix: np.array
     lbnl_comparison: bool
+    rel_escale_parameters: np.array
 
 @dataclass
 class FitParams:
+    """All the parameters that can be adjusted during the fit process.
+
+    Attributes
+    ----------
+    theta13
+        Not sin-squared, but the actual value, in radians.
+    m2_ee
+    pull_bg
+    pull_near_stat
+    pull_reactor
+    pull_efficiency
+        This pull parameter does *not* include the uncertainties due to
+        prompt energy cut, which is fully correlated with
+        the ``pull_rel_escale`` (relative energy scale) parameter.
+    pull_rel_escale
+        Pull parameter for relative energy scale uncertainty.
+        This parameter impacts both the shape of the prompt spectrum
+        and the efficiency (via prompt energy cut).
+    """
     theta13: float
     m2_ee: float
-    pull_bg: dict
-    pull_near_stat: dict
-    pull_reactor: dict
-    pull_efficiency: dict
+    pull_bg: dict = dc_field(default_factory=lambda: ad_dict(0))
+    pull_near_stat: dict = dc_field(default_factory=lambda: ad_dict(0, halls='near'))
+    pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))
+    pull_efficiency: dict = dc_field(default_factory=lambda: ad_dict(0))
+    pull_rel_escale: dict = dc_field(default_factory=lambda: ad_dict(0))
 
     @staticmethod
     def index_map():
@@ -83,6 +104,7 @@ class FitParams:
         to_return['near_stat'] = slice(10, 10 + num_near_stat)
         to_return['reactor'] = slice(10 + num_near_stat, 16 + num_near_stat)
         to_return['efficiency'] = slice(16 + num_near_stat, 24 + num_near_stat)
+        to_return['rel_escale'] = slice(24 + num_near_stat, 32 + num_near_stat)
         return to_return
 
     @classmethod
@@ -113,7 +135,19 @@ class FitParams:
         pull_efficiency = {}
         for pull, halldet in zip(in_list[indexes['efficiency']], all_ads):
             pull_efficiency[halldet] = pull
-        return cls(theta13, m2_ee, pull_bg, pull_near_stat, pull_reactor, pull_efficiency)
+        # Relative energy scale pull parameters
+        pull_rel_escale = {}
+        for pull, halldet in zip(in_list[indexes['rel_escale']], all_ads):
+            pull_rel_escale[halldet] = pull
+        return cls(
+            theta13,
+            m2_ee,
+            pull_bg,
+            pull_near_stat,
+            pull_reactor,
+            pull_efficiency,
+            pull_rel_escale,
+        )
 
     def to_list(self):
         return (
@@ -122,6 +156,7 @@ class FitParams:
             + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
             + [self.pull_reactor[core] for core in range(1, 7)]
             + [self.pull_efficiency[halldet] for halldet in all_ads]
+            + [self.pull_rel_escale[halldet] for halldet in all_ads]
         )
 
 @dataclass
@@ -289,6 +324,8 @@ def load_constants(config_file):
 
     cross_sec = cross_section(database)
 
+    rel_escale_params = rel_escale_parameters(database)
+
     return FitConstants(
             matrix,
             true_bins_response,
@@ -309,6 +346,7 @@ def load_constants(config_file):
             cross_sec,
             rebin_matrix,
             config.lbnl_comparison,
+            rel_escale_params,
     )
 
 
@@ -389,6 +427,35 @@ def multiplicity_efficiency(database):
         efficiency = np.average(by_run[:, 2], weights=total_livetime_ns)
         to_return[hall, det] = efficiency
     return to_return
+
+def rel_escale_parameters(database):
+    """Load the shape distortion parameters for the relative energy scale.
+
+    Return an array with rows corresponding to reco bins and columns
+    corresponding to 0: distortion for plus, 1: distortion for minus,
+    2: the energy scale deviation that generated the coefficients.
+    So if column 2 is 0.005 that's +/- 0.5%. And column 0 has the values
+    from multiplying the nominal reco energy by 1.005.
+    And column 1 has the values from multiplying the nominal reco energy
+    by 0.995.
+    """
+    with sqlite3.Connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                CoefficientPlus,
+                CoefficientMinus,
+                NominalUncertainty
+            FROM
+                rel_energy_scale_shape
+            WHERE
+                BinningId = 0
+            ORDER BY
+                BinIndex
+            '''
+        )
+        result = np.array(cursor.fetchall())
+    return result
 
 def reactor_spectrum(database, core):
     """Returns (spectrum, weekly_time_bins, energy_bins).
@@ -731,7 +798,16 @@ def efficiency_weighted_counts(constants, fit_params):
         muon_eff = muon_effs[halldet]
         mass_eff = mass_effs[halldet] / constants.standard_mass
         pull_eff = fit_params.pull_efficiency[halldet]
-        combined_eff = mult_eff * muon_eff * mass_eff * (1 + pull_eff)
+        pull_rel_escale = fit_params.pull_rel_escale[halldet]
+        if pull_rel_escale > 0:
+            rel_escale_params = constants.rel_escale_parameters[:, 0]
+        else:
+            rel_escale_params = constants.rel_escale_parameters[:, 1]
+        # NB: combined_eff has a bin dependence due to rel_escale_params
+        combined_eff = (
+            mult_eff * muon_eff * mass_eff * (1 + pull_eff)
+            * (1 + pull_rel_escale * rel_escale_params)
+        )
         # Account for near hall statistics pull parameter
         if halldet in pull_near_stat:
             pulled_coincidences = (1 + pull_near_stat[halldet]) * coincidences
@@ -992,7 +1068,16 @@ def predict_ad_to_ad_obs(constants, fit_params):
         pull_eff = fit_params.pull_efficiency[far_halldet]
         mass_far = masses[far_halldet]
         mass_eff = mass_far / constants.standard_mass
-        combined_eff = muon_eff * mult_eff * mass_eff * (1 + pull_eff)
+        pull_rel_escale = fit_params.pull_rel_escale[far_halldet]
+        if pull_rel_escale > 0:
+            rel_escale_params = constants.rel_escale_parameters[:, 0]
+        else:
+            rel_escale_params = constants.rel_escale_parameters[:, 1]
+        # NB: combined_eff has a bin dependence due to rel_escale_params
+        combined_eff = (
+            mult_eff * muon_eff * mass_eff * (1 + pull_eff)
+            * (1 + pull_rel_escale * rel_escale_params)
+        )
         results[far_halldet, near_halldet] = (
                 result * combined_eff
         )
@@ -1164,9 +1249,6 @@ if __name__ == '__main__':
     constants = load_constants(args.config)
     fit_params = FitParams(
             0.15,
-            ad_dict(0),
-            ad_dict(0, halls='near'),
-            core_dict(0),
-            ad_dict(0),
+            2.48e-3,
     )
     print(predict_ad_to_ad_obs(constants, fit_params))

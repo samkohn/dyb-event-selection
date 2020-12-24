@@ -15,7 +15,41 @@ import sqlite3
 
 import numpy as np
 
-def main(database, binning_id, mc_infile, source, rel_uncertainty, update_db):
+from prediction import survival_probability, default_osc_params
+
+# Approximate effective baselines for each hall
+effective_baselines = {
+    1: 365,
+    2: 500,
+    3: 1540,
+}
+
+def get_p_sur_helpers(sin2_2theta13, m2_ee):
+    """Return a bunch of expressions to make the TTree::Draw expression sane."""
+    theta13 = 0.5 * np.arcsin(np.sqrt(sin2_2theta13))
+    theta12 = default_osc_params.theta12
+    m2_21 = default_osc_params.m2_21
+    # Hierarchy factor = 2 * int(hierarchy) - 1 (+1 if True, else -1)
+    hierarchy = 2 * int(default_osc_params.hierarchy) - 1
+    m2_32 = m2_ee - hierarchy * default_osc_params.m2_ee_conversion
+    m2_31 = m2_32 + hierarchy * m2_21
+    cos4theta13 = np.power(np.cos(theta13), 4)
+    cos2theta12 = np.power(np.cos(theta12), 2)
+    sin2theta12 = np.power(np.sin(theta12), 2)
+    sin2_2theta12 = np.power(np.sin(2*theta12), 2)
+    return (
+        cos4theta13,
+        cos2theta12,
+        sin2theta12,
+        sin2_2theta12,
+        m2_21,
+        m2_31,
+        m2_32,
+    )
+
+
+def main(database, binning_id, mc_infile, source, rel_uncertainty, sin2_2theta13, m2_ee,
+        site, update_db):
     import ROOT
     infile = ROOT.TFile(mc_infile, 'READ')
     mc_data = infile.Get('toy')
@@ -47,10 +81,39 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, update_db):
         'escaled_minus', 'escaled_minus', nbins, bins[0], bins[nbins]
     )
     escaled_minus_histogram.GetXaxis().Set(nbins, bins)
-    mc_data.Draw("res_p >> nominal", "target == 1", "goff")
-    mc_data.Draw(f"res_p * (1 + {rel_uncertainty}) >> escaled_plus", "target == 1", "goff")
-    mc_data.Draw(f"res_p * (1 - {rel_uncertainty}) >> escaled_minus", "target == 1",
-            "goff")
+    # Prepare for survival probability computation
+    (
+        cos4theta13,
+        cos2theta12,
+        sin2theta12,
+        sin2_2theta12,
+        m2_21,
+        m2_31,
+        m2_32,
+    ) = get_p_sur_helpers(sin2_2theta13, m2_ee)
+    baseline = effective_baselines[site]
+    energy_var = 'res_p'
+    p_sur_string = (
+        '1'
+        f'- {cos4theta13 * sin2_2theta12} * TMath::Power('
+        f'    TMath::Sin({1.267 * m2_21 * baseline} / {energy_var}),'
+        '     2'
+        ')'
+        f'- {cos2theta12 * sin2_2theta13} * TMath::Power('
+        f'    TMath::Sin({1.267 * m2_31 * baseline} / {energy_var}),'
+        '     2'
+        ')'
+        f'- {sin2theta12 * sin2_2theta13} * TMath::Power('
+        f'    TMath::Sin({1.267 * m2_32 * baseline} / {energy_var}),'
+        '     2'
+        ')'
+    )
+    selection_string = f'{p_sur_string} * (target == 1)'
+    mc_data.Draw("res_p >> nominal", selection_string, "goff")
+    mc_data.Draw(f"res_p * (1 + {rel_uncertainty}) >> escaled_plus", selection_string,
+        "goff")
+    mc_data.Draw(f"res_p * (1 - {rel_uncertainty}) >> escaled_minus", selection_string,
+        "goff")
     # Load the bin contents into numpy arrays for easy manipulation
     nominal_values = np.zeros((nbins,))
     escaled_plus_values = np.zeros_like(nominal_values)
@@ -64,7 +127,7 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, update_db):
     rows = []
     for i in range(nbins):
         rows.append(
-            (source, binning_id, i, plus_coeffs[i], minus_coeffs[i], rel_uncertainty)
+            (source, site, sin2_2theta13, m2_ee, binning_id, i, plus_coeffs[i], minus_coeffs[i], rel_uncertainty)
         )
     if update_db:
         with sqlite3.Connection(database) as conn:
@@ -74,12 +137,12 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, update_db):
                 INTO
                     rel_energy_scale_shape
                 VALUES
-                    (?, ?, ?, ?, ?, ?)
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 rows
             )
     else:
-        print(np.array(rows)[:, 2:])
+        print(rows)
 
 
 
@@ -94,6 +157,9 @@ if __name__ == '__main__':
     parser.add_argument('mc_infile')
     parser.add_argument('source')
     parser.add_argument('--rel-uncertainty', type=float, default=0.005)
+    parser.add_argument('--sin2', type=float, required=True)
+    parser.add_argument('--dm2', type=float, required=True)
+    parser.add_argument('--site', type=int, required=True)
     parser.add_argument('--update-db', action='store_true')
     args = parser.parse_args()
     main(
@@ -102,5 +168,8 @@ if __name__ == '__main__':
         args.mc_infile,
         args.source,
         args.rel_uncertainty,
+        args.sin2,
+        args.dm2,
+        args.site,
         args.update_db
     )

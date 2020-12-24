@@ -61,7 +61,7 @@ class FitConstants:
     cross_section: np.array
     rebin_matrix: np.array
     lbnl_comparison: bool
-    rel_escale_parameters: np.array
+    rel_escale_parameters: dict
 
 @dataclass
 class FitParams:
@@ -431,7 +431,8 @@ def multiplicity_efficiency(database):
 def rel_escale_parameters(database):
     """Load the shape distortion parameters for the relative energy scale.
 
-    Return an array with rows corresponding to reco bins and columns
+    Return a dict keyed by hall
+    whose values are arrays with rows corresponding to reco bins and columns
     corresponding to 0: distortion for plus, 1: distortion for minus,
     2: the energy scale deviation that generated the coefficients.
     So if column 2 is 0.005 that's +/- 0.5%. And column 0 has the values
@@ -439,22 +440,28 @@ def rel_escale_parameters(database):
     And column 1 has the values from multiplying the nominal reco energy
     by 0.995.
     """
+    result = {}
+    halls = [1, 2, 3]
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT
-                CoefficientPlus,
-                CoefficientMinus,
-                NominalUncertainty
-            FROM
-                rel_energy_scale_shape
-            WHERE
-                BinningId = 0
-            ORDER BY
-                BinIndex
-            '''
-        )
-        result = np.array(cursor.fetchall())
+        for hall in halls:
+            cursor.execute('''
+                SELECT
+                    CoefficientPlus,
+                    CoefficientMinus,
+                    NominalUncertainty
+                FROM
+                    rel_energy_scale_shape
+                WHERE
+                        BinningId = 0
+                    AND
+                        Hall = ?
+                ORDER BY
+                    BinIndex
+                ''',
+                (hall,)
+            )
+            result[hall] = np.array(cursor.fetchall())
     return result
 
 def reactor_spectrum(database, core):
@@ -799,10 +806,11 @@ def efficiency_weighted_counts(constants, fit_params):
         mass_eff = mass_effs[halldet] / constants.standard_mass
         pull_eff = fit_params.pull_efficiency[halldet]
         pull_rel_escale = fit_params.pull_rel_escale[halldet]
+        hall, det = halldet
         if pull_rel_escale > 0:
-            rel_escale_params = constants.rel_escale_parameters[:, 0]
+            rel_escale_params = constants.rel_escale_parameters[hall][:, 0]
         else:
-            rel_escale_params = constants.rel_escale_parameters[:, 1]
+            rel_escale_params = constants.rel_escale_parameters[hall][:, 1]
         # NB: combined_eff has a bin dependence due to rel_escale_params
         combined_eff = (
             mult_eff * muon_eff * mass_eff * (1 + pull_eff)
@@ -1069,10 +1077,11 @@ def predict_ad_to_ad_obs(constants, fit_params):
         mass_far = masses[far_halldet]
         mass_eff = mass_far / constants.standard_mass
         pull_rel_escale = fit_params.pull_rel_escale[far_halldet]
+        hall, det = far_halldet
         if pull_rel_escale > 0:
-            rel_escale_params = constants.rel_escale_parameters[:, 0]
+            rel_escale_params = constants.rel_escale_parameters[hall][:, 0]
         else:
-            rel_escale_params = constants.rel_escale_parameters[:, 1]
+            rel_escale_params = constants.rel_escale_parameters[hall][:, 1]
         # NB: combined_eff has a bin dependence due to rel_escale_params
         combined_eff = (
             mult_eff * muon_eff * mass_eff * (1 + pull_eff)

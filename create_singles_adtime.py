@@ -17,7 +17,6 @@ def is_single(ttree_event, energy):
 def main(infilename, outfile, ttree_name):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
-    infile2 = ROOT.TFile(infilename, 'READ')
     outfile = ROOT.TFile(outfile, 'RECREATE')
     singles, singles_buf = create_event_TTree(outfile)
     singles.SetTitle('Singles sample')

@@ -505,21 +505,37 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
     return
 
 
-def _tasks_for_whole_run(run, site, filenos, processed_output_path, database):
+def _tasks_for_whole_run(run, site, filenos, processed_output_path, database, stop_time):
     """Execute all the tasks that involve the entire run, i.e. not first_pass or
     process."""
     run_hadd(run, site, filenos, processed_output_path)
     run_aggregate_stats(run, site, filenos, processed_output_path, database)
+    if time.time() > stop_time:
+        return
     run_create_singles(run, site, processed_output_path)
+    if time.time() > stop_time:
+        return
     run_compute_singles(run, site, processed_output_path, database)
     run_create_accidentals(run, site, processed_output_path)
+    if time.time() > stop_time:
+        return
     run_subtract_accidentals(run, site, processed_output_path, database)
     return
 
 
 def many_runs(
-    start_run, end_run, run_list_file, raw_output_path, processed_output_path, database,
+    start_run,
+    end_run,
+    run_list_file,
+    raw_output_path,
+    processed_output_path,
+    database,
+    max_runtime_sec,
 ):
+    if max_runtime_sec == -1:
+        stop_time = time.time() + 100 * 24 * 60 * 60  # forever
+    else:
+        stop_time = time.time() + max_runtime_sec
     run_info = get_site_filenos_for_run_range(start_run, end_run, run_list_file)
     logging.debug('Prepping for %d runs', len(run_info))
     logging.debug('First few runs: %s', str(list(run_info.keys())[:5]))
@@ -528,11 +544,13 @@ def many_runs(
     for run, (site, filenos) in run_info.items():
         run_first_pass(run, site, filenos, raw_output_path)
         run_process(run, site, filenos, raw_output_path, processed_output_path)
+    if time.time() > stop_time:
+        return
     # Execute all runs' remaining tasks in parallel to take advantage of many cores.
     with multiprocessing.Pool(NUM_MULTIPROCESSING) as pool:
         pool.starmap(
             _tasks_for_whole_run,
-            [(run, site, filenos, processed_output_path, database)
+            [(run, site, filenos, processed_output_path, database, stop_time)
                 for run, (site, filenos) in run_info.items()
             ],
         )
@@ -570,6 +588,7 @@ if __name__ == '__main__':
     parser.add_argument('--processed-output',
         help='base directory for output of processed files',
     )
+    parser.add_argument('--max-runtime-sec', type=int, default=-1)
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.INFO,
@@ -588,6 +607,7 @@ if __name__ == '__main__':
             args.raw_output,
             args.processed_output,
             args.database,
+            args.max_runtime_sec,
         )
     else:
         main(

@@ -3,6 +3,7 @@ from __future__ import print_function
 import math
 import argparse
 import json
+import logging
 import os.path
 import sqlite3
 
@@ -59,12 +60,28 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     eps_distance = num_acc_events/(
             DT_cut_fails.GetEntries() + num_acc_events)
     outfile = ROOT.TFile(outfilename, 'RECREATE')
+    if num_acc_events == 0:
+        logging.info('Found run with 0 acc events passing DT cut: Run %d, %s', run_number, accfilename)
+        if database is not None:
+            with sqlite3.Connection(database) as conn:
+                c = conn.cursor()
+                # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
+                # DistanceCrossCheck, DistanceCrossCheck_error
+                if label is None:
+                    c.execute('''INSERT OR REPLACE INTO accidental_subtraction
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (run_number, ad, base_rate, 0, 0, 0, 0, 0, 0))
+                else:
+                    c.execute('''INSERT OR REPLACE INTO accidental_subtraction
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)''',
+                    (run_number, ad, label, base_rate, 0, 0, 0, 0, 0, 0))
+                    conn.commit()
+        outfile.Write()
+        datafile.Close()
+        return
     final_spectrum = ROOT.TH2F('final', 'final', *hist_parameters)
     final_spectrum.Sumw2()
     datafile.cd()
-    if num_acc_events == 0:
-        print(f'Found run with 0 acc events: {run_number}, {datafilename}')
-        raise RuntimeError(f'Found run with 0 acc events: {run_number}, {datafilename}')
     final_spectrum.Add(raw_spectrum, acc_spectrum, 1,
         -base_rate*eps_distance*livetime/num_acc_events)
     final_spectrum.Rebin2D(2, 2)

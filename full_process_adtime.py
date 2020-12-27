@@ -510,10 +510,10 @@ def _tasks_for_whole_run(run, site, filenos, processed_output_path, database, st
     process."""
     run_hadd(run, site, filenos, processed_output_path)
     run_aggregate_stats(run, site, filenos, processed_output_path, database)
-    if time.time() > stop_time:
+    if time.time() + 20 * 60 > stop_time:
         return
     run_create_singles(run, site, processed_output_path)
-    if time.time() > stop_time:
+    if time.time() + 20 * 60 > stop_time:
         return
     run_compute_singles(run, site, processed_output_path, database)
     run_create_accidentals(run, site, processed_output_path)
@@ -547,12 +547,13 @@ def many_runs(
     if time.time() > stop_time:
         return
     # Execute all runs' remaining tasks in parallel to take advantage of many cores.
-    with multiprocessing.Pool(NUM_MULTIPROCESSING) as pool:
+    with multiprocessing.Pool(NUM_MULTIPROCESSING, maxtasksperchild=1) as pool:
         pool.starmap(
             _tasks_for_whole_run,
             [(run, site, filenos, processed_output_path, database, stop_time)
                 for run, (site, filenos) in run_info.items()
             ],
+            chunksize=2,  # Prioritize load balancing over optimizing overhead
         )
     return
 
@@ -561,7 +562,6 @@ def main(
     run, run_list_file, raw_output_path, processed_output_path, database,
 ):
     site, filenos = get_site_filenos_for_run(run, run_list_file)
-    filenos = filenos[:63]
     run_first_pass(run, site, filenos, raw_output_path)
     run_process(run, site, filenos, raw_output_path, processed_output_path)
     run_hadd(run, site, filenos, processed_output_path)

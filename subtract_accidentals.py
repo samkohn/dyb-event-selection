@@ -187,29 +187,29 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
 
 def main(output, datafile, accfile, database, ad, override_acc_rate, label, update_db):
     try:
-        with open(os.path.splitext(args.datafile)[0] + '.json', 'r') as f:
+        with open(os.path.splitext(datafile)[0] + '.json', 'r') as f:
             stats = json.load(f)
             # livetime = stats['usable_livetime']/1e9
             run_number = stats['run']
             site = stats['site']
     except FileNotFoundError:
         import ROOT
-        infile = ROOT.TFile(args.datafile, 'READ')
+        infile = ROOT.TFile(datafile, 'READ')
         ad_events = infile.Get('ad_events')
         ad_events.GetEntry(0)
         run_number = ad_events.run
         site = ad_events.site
 
-    with sqlite3.Connection(args.database) as conn:
+    with sqlite3.Connection(database) as conn:
         c = conn.cursor()
-        if args.override_acc_rate:
+        if override_acc_rate:
             singles_rate = None
         else:
             c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
-                    'RunNo = ? AND DetNo = ?', (run_number, args.ad))
+                    'RunNo = ? AND DetNo = ?', (run_number, ad))
             singles_rate, = c.fetchone()
         c.execute('SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE '
-                'RunNo = ? AND DetNo = ?', (run_number, args.ad))
+                'RunNo = ? AND DetNo = ?', (run_number, ad))
         muon_rate, livetime = c.fetchone()
     database = database if update_db else None
     subtract(output, datafile, accfile, ad, singles_rate, muon_rate, livetime,

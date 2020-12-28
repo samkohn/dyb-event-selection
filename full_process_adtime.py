@@ -508,18 +508,22 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
 def _tasks_for_whole_run(run, site, filenos, processed_output_path, database, stop_time):
     """Execute all the tasks that involve the entire run, i.e. not first_pass or
     process."""
-    run_hadd(run, site, filenos, processed_output_path)
-    run_aggregate_stats(run, site, filenos, processed_output_path, database)
-    if time.time() + 20 * 60 > stop_time:
-        return
-    run_create_singles(run, site, processed_output_path)
-    if time.time() + 20 * 60 > stop_time:
-        return
-    run_compute_singles(run, site, processed_output_path, database)
-    run_create_accidentals(run, site, processed_output_path)
-    if time.time() > stop_time:
-        return
-    run_subtract_accidentals(run, site, processed_output_path, database)
+    try:
+        run_hadd(run, site, filenos, processed_output_path)
+        run_aggregate_stats(run, site, filenos, processed_output_path, database)
+        if time.time() + 20 * 60 > stop_time:
+            return
+        run_create_singles(run, site, processed_output_path)
+        if time.time() + 20 * 60 > stop_time:
+            return
+        run_compute_singles(run, site, processed_output_path, database)
+        run_create_accidentals(run, site, processed_output_path)
+        if time.time() > stop_time:
+            return
+        run_subtract_accidentals(run, site, processed_output_path, database)
+        logging.info('Finished full processing for Run %d', run)
+    except Exception:
+        logging.exception('Exception in Run %d', run)
     return
 
 
@@ -537,8 +541,8 @@ def many_runs(
     else:
         stop_time = time.time() + max_runtime_sec
     run_info = get_site_filenos_for_run_range(start_run, end_run, run_list_file)
-    logging.debug('Prepping for %d runs', len(run_info))
-    logging.debug('First few runs: %s', str(list(run_info.keys())[:5]))
+    logging.info('Prepping for %d runs', len(run_info))
+    logging.info('First few runs: %s', str(list(run_info.keys())[:5]))
     # Execute each run's first_pass and process in series since they already use
     # multiprocessing pools.
     for run, (site, filenos) in run_info.items():

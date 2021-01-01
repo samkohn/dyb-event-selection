@@ -47,7 +47,7 @@ class FitConstants:
     true_bins_response: np.array
     reco_bins_response: np.array
     observed_candidates: dict
-    nominal_bgs: dict
+    nominal_bgs: dict  # keys = different types of bg, values = dict by AD/Hall
     reco_bins: np.array
     total_emitted_by_AD: dict
     total_emitted_by_week_AD: dict
@@ -827,9 +827,7 @@ def efficiency_weighted_counts(constants, fit_params):
 def backgrounds_per_AD(database, source):
     """Retrieve the number of predicted background events in each AD.
 
-    Returns a tuple of (dict, energy_bins),
-    where the dict maps (hall, det) to a 1D array of N_bg_events
-    for that AD, over all background types.
+    Returns a dict of (bg_name -> dict of (hall, det) -> 1D array).
     This method assumes that all ADs and background sources
     have the same binning.
 
@@ -839,31 +837,41 @@ def backgrounds_per_AD(database, source):
     """
     with sqlite3.Connection(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, NumAccs_binned, BinEdges
-        FROM num_accs
-        WHERE Source = ?
-        ORDER BY Hall, DetNo''', (source,))
-        acc_data = cursor.fetchall()
-    results = {}
-    # Parse binned records
-    for hall, det, num_accs_str, bins_str in acc_data:
-        results[hall, det] = np.array(json.loads(num_accs_str))
-    bins = np.array(json.loads(bins_str), dtype=float)
-    # convert keV to MeV
-    bins /= 1000
-    return results, bins
+        acc_data = {}
+        for hall, det in all_ads:
+            cursor.execute('''
+            SELECT
+                Spectrum
+            FROM
+                accidentals_spectrum
+            WHERE
+                Label = ?
+                AND Hall = ?
+                AND DetNo = ?
+            ORDER BY BinIndex''', (source, hall, det))
+            acc_data[hall, det] = np.array(cursor.fetchall())
+    results = {
+        'accidentals': acc_data,
+    }
+    return results
 
 def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     """Compute the bg-subtracted IBD spectra for each AD.
 
     Returns a dict mapping (hall, det) to a 1D array of IBD counts.
+
+    Currently applies the same pull parameter to each background type.
     """
     num_candidates = efficiency_weighted_counts(constants, fit_params)
     predicted_bg = constants.nominal_bgs
+    total_bg = ad_dict(0)
+    for bg_type, bg_dict in predicted_bg.items():
+        for (hall, det), bg_spec in bg_dict.items():
+            pull = fit_params.pull_bg[hall, det]
+            total_bg[hall, det] += bg_spec * (1 + pull)
     results = {}
-    for (hall, det), bg_spec in predicted_bg.items():
-        pull = fit_params.pull_bg[hall, det]
-        results[hall, det] = num_candidates[hall, det] - bg_spec * (1 + pull)
+    for halldet, bg in total_bg:
+        results[halldet] = num_candidates[halldet] - bg
     return results
 
 def true_to_reco_energy_matrix(database, source):

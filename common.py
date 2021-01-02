@@ -1,3 +1,6 @@
+import contextlib
+import sqlite3
+
 __all__ = [
         "ALL_DETECTORS",
         "AD_DETECTORS",
@@ -39,3 +42,15 @@ def dets_for(site, runno):
     phase = phase_for_run(runno)
     return dets_for_phase(site, phase)
 
+
+@contextlib.contextmanager
+def get_db(db, *args, **kwargs):
+    """Return a context manager that closes the db automatically.
+
+    This is stupid because the "with sqlite3.connect/Connection"
+    will not close the db connection, and "with closing(sqlite3.connect)"
+    will not commit the transaction. So you need both.
+    """
+    with contextlib.closing(sqlite3.connect(db, *args, **kwargs)) as conn:
+        with conn:
+            yield conn

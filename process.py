@@ -513,6 +513,30 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'y')
     copy_to_buffer(source, buf, index, 'z')
 
+def is_complete(infilename, outfilename):
+    """Check to see that the outfile exists and has events from the
+    end of infile."""
+    try:
+        if not os.path.isfile(outfilename):
+            return False
+        from ROOT import TFile
+        infile = TFile(infilename, 'READ')
+        in_events = infile.Get('events')
+        in_events.GetEntry(in_events.GetEntries() - 1)
+        last_timestamp = in_events.timestamp
+        infile.Close()
+        outfile = TFile(outfilename, 'READ')
+        out_events = outfile.Get('ad_events')
+        out_events.GetEntry(out_events.GetEntries() - 1)
+        last_out_timestamp = out_events.timestamp[0]
+        outfile.Close()
+        TIMESTAMP_CRITERION = 5000000000  # 5e9 ns = 5s
+        if abs(last_timestamp - last_out_timestamp) > TIMESTAMP_CRITERION:
+            return False
+    except:
+        return False
+    return True
+
 def main(entries, events_filename, muon_filename, out_filename, runfile,
         detector, debug):
     from ROOT import TFile

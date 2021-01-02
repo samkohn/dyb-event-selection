@@ -1,5 +1,6 @@
 import argparse
 import math
+import os
 import random
 
 import delayeds
@@ -13,6 +14,26 @@ def is_single(ttree_event, energy):
             and ttree_event.multiplicity == 1
             and ttree_event.dt_cluster_to_prev_ADevent >
                 delayeds._NH_THU_MAX_TIME)
+
+def is_complete(infilename, outfilename):
+    """Determine if the outfile exists and has events leading up to the end."""
+    if not os.path.isfile(outfilename):
+        return False
+    import ROOT
+    infile = ROOT.TFile(infilename, 'READ')
+    in_events = infile.Get('ad_events')
+    in_events.GetEntry(in_events.GetEntries() - 1)
+    last_timestamp = in_events.timestamp[0]
+    infile.Close()
+    outfile = ROOT.TFile(outfilename, 'READ')
+    out_events = outfile.Get('singles')
+    out_events.GetEntry(out_events.GetEntries() - 1)
+    singles_timestamp = out_events.timestamp
+    TIMESTAMP_CRITERION = 5000000000  # 5e9ns = 5s
+    if abs(singles_timestamp - last_timestamp) > TIMESTAMP_CRITERION:
+        return False
+    return True
+
 
 def main(infilename, outfile, ttree_name):
     import ROOT

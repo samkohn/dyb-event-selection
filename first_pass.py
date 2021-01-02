@@ -269,6 +269,49 @@ def create_outfiles(out_location, run, fileno, ads):
         'RECREATE') for ad in ads}
     return {'muon': muonFile, 'events': eventsFiles}
 
+def is_complete(run, site, fileno, infilename, output_location):
+    """Check to see that the appropriate outfiles exist and
+    have events from the end of infile."""
+    import ROOT
+    # First check to see if all outfiles exist; if not then we can return early
+    ads = dets_for(site, run)
+    muon_name = os.path.join(output_location, 'muons_{}_{:>04}.root'.format(run, fileno))
+    events_names = [os.path.join(
+            output_location, 'events_ad{}_{}_{:>04}.root'.format(ad, run, fileno)
+        )
+            for ad in ads]
+    outfiles = [muon_name] + events_names
+    for outfile in outfiles:
+        if not os.path.isfile(outfile):
+            return False
+    # Find the timestamp of the last event from the infile
+    infile = ROOT.TFile(infilename, 'READ')
+    calibStats, adSimple = initialize(infile, 'AdSimpleNL')
+    calibStats.AddFriend(adSimple)
+    indata = RawFileAdapter(calibStats, run, fileno)
+    indata.GetEntry(indata.GetEntries() - 1)
+    final_timestamp = indata.timestamp
+    infile.Close()
+    # Ensure that each outfile has events within 5 seconds of the final timestamp
+    TIMESTAMP_CRITERION = 5000000000  # 5e9 ns = 5s
+    muonfile = ROOT.TFile(muon_name, 'READ')
+    muons = muonfile.Get('muons')
+    muons.GetEntry(muons.GetEntries() - 1)
+    muons_timestamp = muons.timestamp
+    muonfile.Close()
+    if abs(final_timestamp - muons_timestamp) > TIMESTAMP_CRITERION:
+        return False
+    for events_name in events_names:
+        eventsfile = ROOT.TFile(events_name, 'READ')
+        events = eventsfile.Get('events')
+        events.GetEntry(events.GetEntries() - 1)
+        events_timestamp = events.timestamp
+        eventsfile.Close()
+        if abs(final_timestamp - events_timestamp) > TIMESTAMP_CRITERION:
+            return False
+    return True
+
+
 def main(events, infile, out_location, run_and_file, debug):
     from ROOT import TFile
     logging.debug(events)

@@ -8,8 +8,12 @@ from common import *
 import process
 import translate
 import flashers
+import first_pass
 from translate import initialize_indata_onefile as initialize
 from root_util import *
+
+is_complete = first_pass.is_complete
+
 
 class RawFileAdapter():
     ATTR_LOOKUP = {

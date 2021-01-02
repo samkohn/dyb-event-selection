@@ -9,6 +9,8 @@ import os
 import json
 import sqlite3
 
+import common
+
 def main2(run, files, site, ad, outfile, db):
     daq_livetime = 0
     usable_livetime = 0
@@ -38,6 +40,33 @@ def main2(run, files, site, ad, outfile, db):
                     'VALUES (?, ?, ?, ?, ?, ?)',
                     (run, ad, num_veto_windows, usable_livetime,
                         rate, efficiency))
+    return
+
+def is_complete(run, ad, outfilename, db):
+    """Check to ensure the outfile exists and the run has been logged to db."""
+    if not os.path.isfile(outfilename):
+        return False
+    with common.get_db(db) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                COUNT(*)
+            FROM
+                muon_rates
+            WHERE
+                RunNo = ?
+                AND DetNo = ?
+            ''',
+            (run, ad),
+        )
+        num_rows, = cursor.fetchone()
+    if num_rows == 1:
+        return True
+    elif num_rows > 1:
+        raise ValueError(f'Multiple rows in table muon_rates for Run {run} AD {ad}')
+    else:
+        return False
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

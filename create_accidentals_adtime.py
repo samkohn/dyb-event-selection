@@ -9,8 +9,11 @@ import sqlite3
 import numpy as np
 np.seterr('raise')
 
+import create_accidentals
 import delayeds
 from root_util import assign_value
+
+is_complete = create_accidentals.is_complete
 
 def distance(a, b):
     '''Distance where coordinates are specified as 'x', 'y', 'z' keys.

@@ -2,9 +2,12 @@ import argparse
 import math
 import random
 
+import create_singles
 import delayeds
 from root_util import assign_value
 from first_pass_adtime import create_event_TTree
+
+is_complete = create_singles.is_complete
 
 def is_single(ttree_event, energy):
     'Applies the single event criteria to the loaded entry in this TTree.'

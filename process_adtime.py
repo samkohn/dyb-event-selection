@@ -17,9 +17,12 @@ from muons import (
 )
 import delayeds
 from adevent import isADEvent_THU, isADEvent_THU_lowenergy
+import process
 from root_util import (TreeBuffer, float_value, assign_value,
         int_value, unsigned_int_value, long_value)
 from translate import git_describe
+
+is_complete = process.is_complete
 
 COINCIDENCE_WINDOW = delayeds._NH_THU_MAX_TIME
 

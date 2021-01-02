@@ -3,6 +3,7 @@ from __future__ import print_function
 import argparse
 from collections import deque
 import math
+import os
 import random
 import sqlite3
 
@@ -184,6 +185,30 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
             cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
                 VALUES (?, ?, ?, ?, ?, ?)''',
                 (run, detector, pairing, efficiency, error, num_pairs))
+    return
+
+
+def is_complete(infilename, outfilename):
+    """Check to see if the output file has at least 48% as many entries
+    as the input.
+    """
+    if not os.path.isfile(outfilename):
+        return False
+    import ROOT
+    infile = ROOT.TFile(infilename, 'READ')
+    in_singles = infile.Get('singles')
+    in_entries = in_singles.GetEntries()
+    infile.Close()
+    outfile = ROOT.TFile(outfilename, 'READ')
+    out_acc = outfile.Get('all_pairs')
+    if not out_acc:  # PyROOT-speak for null pointer test
+        return False
+    out_entries = out_acc.GetEntries()
+    PAIRING_FACTOR = 0.48
+    threshold = in_entries * PAIRING_FACTOR
+    if out_entries < threshold:
+        return False
+    return True
 
 
 def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, update_db):

@@ -1,7 +1,8 @@
 import argparse
 import math
-import sqlite3
 import time
+
+import common
 
 def crystal_ball(x, p):
     """Crystal Ball function.
@@ -107,7 +108,7 @@ def main(infilename, outfilename, site, ad, source, database):
         ROOT.gPad.Print(outfilename)
     infile.Close()
     if database is not None:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             c = conn.cursor()
             c.execute('''INSERT OR REPLACE INTO delayed_energy_fits
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',

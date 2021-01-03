@@ -7,7 +7,6 @@ from __future__ import print_function
 import argparse
 import os
 import json
-import sqlite3
 
 import common
 
@@ -34,7 +33,7 @@ def main2(run, files, site, ad, outfile, db):
             'num_veto_windows': num_veto_windows,
             }, f)
     if db is not None:
-        with sqlite3.Connection(db) as conn:
+        with common.get_db(db) as conn:
             cursor = conn.cursor()
             cursor.execute('INSERT OR REPLACE INTO muon_rates '
                     'VALUES (?, ?, ?, ?, ?, ?)',

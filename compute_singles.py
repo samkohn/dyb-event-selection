@@ -1,10 +1,10 @@
 import argparse
 import math
 import os
-import sqlite3
 
 from scipy.optimize import fsolve
 
+import common
 from delayeds import _NH_THU_MAX_TIME
 
 # Numerically-evaluated uncertainty of R_s relative to R_1-fold.
@@ -137,7 +137,7 @@ def main(infile, database, update_db, iteration, extra_cut):
     start_time = ch.timestamp[0]
     multiplicity_1_count = ch.Draw('energy', f'detector == {ad} && '
         f'multiplicity == 1 && ({extra_cut})', 'goff')
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE
             RunNo = ? AND DetNo = ?''', (runNo, ad))
@@ -164,7 +164,7 @@ def main(infile, database, update_db, iteration, extra_cut):
     multiplicity_eff = multiplicity_efficiency(underlying_uncorr_rate,
             R_corr, muon_rate, window_size)
     if update_db:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database, timeout=20) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO singles_rates
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (

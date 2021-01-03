@@ -5,7 +5,6 @@ import functools
 import logging
 import multiprocessing
 import os
-import sqlite3
 import subprocess
 import time
 
@@ -39,7 +38,7 @@ def time_execution(func):
 
 def setup_database(database):
     """Create the database tables to store the analysis results."""
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.executescript('''
             CREATE TABLE num_coincidences_by_run (
@@ -353,7 +352,7 @@ def run_compute_singles(run, site, processed_output_path, database):
             path_prefix,
             f'hadded_ad{ad}/out_ad{ad}_{run}.root',
         )
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 SELECT

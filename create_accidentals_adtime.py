@@ -4,7 +4,6 @@ import argparse
 from collections import deque
 import math
 import random
-import sqlite3
 
 import numpy as np
 np.seterr('raise')
@@ -182,7 +181,7 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
         print(f'Total pairs: {num_pairs}')
         print(f'Passed DT cut: {num_passes_cut}')
     else:
-        with sqlite3.Connection(update_db) as conn:
+        with common.get_db(update_db) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
                 VALUES (?, ?, ?, ?, ?, ?)''',
@@ -302,7 +301,7 @@ def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, updat
         num_passes_cut = np.count_nonzero(event_DTs < DT_CUT)
         efficiency = num_passes_cut / num_pairs
         error = math.sqrt(num_pairs * efficiency * (1 - efficiency)) / num_pairs
-        with sqlite3.Connection(update_db) as conn:
+        with common.get_db(update_db) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
                 VALUES (?, ?, ?, ?, ?, ?)''',

@@ -5,8 +5,8 @@ import argparse
 import json
 import logging
 import os.path
-import sqlite3
 
+import common
 from delayeds import (_NH_THU_DIST_TIME_CUT_STR as DT_CUT, _NH_THU_DIST_TIME_STR
         as DT_VALUE, _NH_THU_MAX_TIME, _NH_THU_MIN_TIME)
 
@@ -63,7 +63,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     if num_acc_events == 0:
         logging.info('Found run with 0 acc events passing DT cut: Run %d, %s', run_number, accfilename)
         if database is not None:
-            with sqlite3.Connection(database) as conn:
+            with common.get_db(database) as conn:
                 c = conn.cursor()
                 # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
                 # DistanceCrossCheck, DistanceCrossCheck_error
@@ -183,7 +183,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     outfile.Write()
     datafile.Close()
     if database is not None:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             c = conn.cursor()
             # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
             # DistanceCrossCheck, DistanceCrossCheck_error
@@ -217,7 +217,7 @@ def main(output, datafile, accfile, database, ad, override_acc_rate, label, upda
         run_number = ad_events.run
         site = ad_events.site
 
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         c = conn.cursor()
         if override_acc_rate:
             singles_rate = None

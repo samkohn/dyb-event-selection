@@ -3,8 +3,8 @@
 import argparse
 import itertools as it
 import multiprocessing
-import sqlite3
 
+import common
 import delayeds
 
 def one_file(run_key, data_file_path, energy_lookup):
@@ -31,7 +31,7 @@ def one_file(run_key, data_file_path, energy_lookup):
 def main(main_database, energy_cuts_database, data_file_path, update_db):
     import ROOT
     # Fetch all triplets of RunNo, Hall, DetNo to use to find files
-    with sqlite3.Connection(main_database) as conn:
+    with common.get_db(main_database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT RunNo, Hall, DetNo
             FROM runs NATURAL JOIN muon_rates
@@ -39,7 +39,7 @@ def main(main_database, energy_cuts_database, data_file_path, update_db):
         run_keys = cursor.fetchall()
 
     # Look up delayed energy cuts
-    with sqlite3.Connection(energy_cuts_database) as conn:
+    with common.get_db(energy_cuts_database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Hall, DetNo, Peak - 3 * Resolution,
             Peak + 3 * Resolution
@@ -64,7 +64,7 @@ def main(main_database, energy_cuts_database, data_file_path, update_db):
     if update_db:
         results_nominal = [(run, ad, num_nominal, 'new nominal') for run, ad, num_nominal, _ in results]
         results_adtime = [(run, ad, num_adtime, 'new adtime') for run, ad, _, num_adtime in results]
-        with sqlite3.Connection(main_database) as conn:
+        with common.get_db(main_database) as conn:
             cursor = conn.cursor()
             cursor.executemany('''INSERT OR REPLACE INTO num_coincidences_by_run
                 VALUES (?, ?, ?, ?)''', results_nominal + results_adtime)

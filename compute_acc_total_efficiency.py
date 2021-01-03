@@ -7,8 +7,8 @@ import argparse
 import itertools as it
 import math
 import multiprocessing
-import sqlite3
 
+import common
 import delayeds
 
 def one_file(run_key, data_file_path, energy_lookup):
@@ -32,7 +32,7 @@ def one_file(run_key, data_file_path, energy_lookup):
 def main(main_database, energy_cuts_database, data_file_path, label, update_db):
     import ROOT
     # Fetch all triplets of RunNo, Hall, DetNo to use to find files
-    with sqlite3.Connection(main_database) as conn:
+    with common.get_db(main_database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT RunNo, Hall, DetNo
             FROM runs NATURAL JOIN accidental_subtraction
@@ -41,7 +41,7 @@ def main(main_database, energy_cuts_database, data_file_path, label, update_db):
         run_keys = cursor.fetchall()
 
     # Look up delayed energy cuts
-    with sqlite3.Connection(energy_cuts_database) as conn:
+    with common.get_db(energy_cuts_database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Hall, DetNo, Peak - 3 * Resolution,
             Peak + 3 * Resolution
@@ -60,7 +60,7 @@ def main(main_database, energy_cuts_database, data_file_path, label, update_db):
             new_results.append(x + (label,))
         results = new_results
 
-        with sqlite3.Connection(main_database) as conn:
+        with common.get_db(main_database) as conn:
             cursor = conn.cursor()
             cursor.executemany('''UPDATE accidental_subtraction
                 SET Total_Acc_Eff = ?,

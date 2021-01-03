@@ -3,6 +3,8 @@ import math
 import os
 import sqlite3
 
+import common
+
 def get_stat_error(n_passes_cut, n_fails_cut, error_passes, error_fails):
     """Compute the statistical error on the efficiency.
 
@@ -36,7 +38,7 @@ def get_stat_error(n_passes_cut, n_fails_cut, error_passes, error_fails):
 
 def main(input_basepath, database, update_db):
     import ROOT
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('''SELECT Hall, DetNo, Peak, Resolution
@@ -92,7 +94,7 @@ def main(input_basepath, database, update_db):
         stat_errors[site, det] = stat_error
         binning_errors[site, det] = bin_width_error
     if update_db:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             cursor = conn.cursor()
             for (site, det), eff in effs.items():
                 cursor.execute('''INSERT OR REPLACE INTO

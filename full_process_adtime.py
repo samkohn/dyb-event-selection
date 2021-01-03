@@ -2,6 +2,7 @@
 
 import argparse
 import functools
+import glob
 import logging
 import multiprocessing
 import os
@@ -605,6 +606,20 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
             )
     return
 
+def run_hadd_sub_files(site, processed_output_path):
+    """Combine all accidentals-subtracted files for a given AD."""
+    path_prefix = os.path.join(processed_output_path, f'EH{site}')
+    input_template = os.path.join(path_prefix, 'sub_{label}_ad{ad}/sub_ad{ad}_?????.root')
+    output_template = os.path.join(path_prefix, 'sub_{label}_ad{ad}/sub_ad{ad}.root')
+    ads = common.dets_for(site)
+    for ad in ads:
+        for label in ['nominal', 'using_adtime']:
+            input_glob = input_template.format(ad=ad, label=label)
+            infiles = glob.glob(input_glob)
+            outfile = output_template.format(ad=ad, label=label)
+            command = ['hadd', '-f', '-v', '0', '-j', '10', outfile] + infiles
+            subprocess.run(command, check=True)
+    return
 
 def _tasks_for_whole_run(
     run,

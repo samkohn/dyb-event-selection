@@ -551,7 +551,6 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
     path_prefix = os.path.join(processed_output_path, f'EH{site}')
     ads = common.dets_for(site, run)
     override_acc_rate = None
-    label = 'test'
     update_db = True
     for ad in ads:
         datafile = os.path.join(
@@ -571,6 +570,7 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
                 '[subtract_accidentals] Found existing file. Skipping. %s', outfile
             )
         else:
+            label = 'nominal'
             subtract_accidentals.main(
                 outfile,
                 datafile,
@@ -594,6 +594,7 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
                 '[subtract_accidentals] Found existing file. Skipping. %s', outfile
             )
         else:
+            label = 'adtime'
             subtract_accidentals.main(
                 outfile,
                 datafile,

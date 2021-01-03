@@ -38,8 +38,11 @@ def dets_for_phase(site, phase):
         return [1, 2, 3] if phase == 1 else [1, 2, 3, 4]
     raise ValueError("Invalid site")
 
-def dets_for(site, runno):
-    phase = phase_for_run(runno)
+def dets_for(site, runno=None):
+    if runno is None:
+        phase = 2  # 8-ad, i.e. return all ADs for site
+    else:
+        phase = phase_for_run(runno)
     return dets_for_phase(site, phase)
 
 

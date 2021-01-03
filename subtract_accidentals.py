@@ -7,8 +7,10 @@ import logging
 import os.path
 
 import common
-from delayeds import (_NH_THU_DIST_TIME_CUT_STR as DT_CUT, _NH_THU_DIST_TIME_STR
-        as DT_VALUE, _NH_THU_MAX_TIME, _NH_THU_MIN_TIME)
+from delayeds import (_NH_THU_DIST_TIME_CUT_STR as DT_CUT_LITERAL, _NH_THU_DIST_TIME_STR
+        as DT_VALUE_LITERAL, _NH_THU_MAX_TIME, _NH_THU_MIN_TIME)
+
+DR_VALUE_LITERAL = '(dr_to_prompt[1])'
 
 def coinc_rate(rs, rmu, tc):
     rsum = rs + rmu
@@ -29,19 +31,13 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     else:
         base_rate = acc_rate
     if 'adtime' in label:
-        global DT_VALUE
-        global DT_CUT
-        DT_VALUE_LITERAL = DT_VALUE
-        DT_CUT_LITERAL = DT_CUT
-        DR_VALUE_LITERAL = '(dr_to_prompt[1])'
         DT_VALUE = '(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1])'
         DT_CUT = '(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1] < 800)'
         DR_VALUE = '(dr_to_prompt_AdTime[1])'
     else:
-        DT_VALUE_LITERAL = DT_VALUE
-        DT_CUT_LITERAL = DT_CUT
-        DR_VALUE = '(dr_to_prompt[1])'
-        DR_VALUE_LITERAL = DR_VALUE
+        DT_VALUE = DT_VALUE_LITERAL
+        DT_CUT = DT_CUT_LITERAL
+        DR_VALUE = DR_VALUE_LITERAL
     hist_parameters = (2100, 1.5, 12, 2100, 1.5, 12)
     datafile = ROOT.TFile(datafilename, 'READ')
     raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', *hist_parameters)
@@ -63,7 +59,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     if num_acc_events == 0:
         logging.info('Found run with 0 acc events passing DT cut: Run %d, %s', run_number, accfilename)
         if database is not None:
-            with common.get_db(database) as conn:
+            with common.get_db(database, timeout=60) as conn:
                 c = conn.cursor()
                 # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
                 # DistanceCrossCheck, DistanceCrossCheck_error

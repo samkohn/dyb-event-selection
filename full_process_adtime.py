@@ -192,15 +192,20 @@ def get_site_filenos_for_run_range(start_run, end_run, run_list_filename):
     return result
 
 
-def _apply_first_pass(run, fileno, output_location):
+def _apply_first_pass(run, site, fileno, output_location):
     """Multiprocessing-friendly call of first_pass."""
     logging.debug('[first_pass] Running on Run %d, file %d', run, fileno)
     num_events = -1
     debug = False
     infile_location = job_producer.get_file_location(run, fileno)
-    sentinel_outfile = os.path.join(output_location, f'muons_{run}_{fileno:>04}.root')
-    if os.path.isfile(sentinel_outfile):
-        logging.debug('[first_pass] Found existing file. Skipping. %s', sentinel_outfile)
+    if first_pass_adtime.is_complete(
+            run,
+            site,
+            fileno,
+            infile_location,
+            output_location
+    ):
+        logging.debug('[first_pass] Already completed Run %d, file %d', run, fileno)
     else:
         first_pass_adtime.main(
             num_events,
@@ -216,7 +221,7 @@ def _apply_first_pass(run, fileno, output_location):
 def run_first_pass(run, site, filenos, raw_output_path):
     """Convert from NuWa to slimmed-down ROOT files."""
     output_location = os.path.join(raw_output_path, f'EH{site}')
-    func_inputs = [(run, fileno, output_location) for fileno in filenos]
+    func_inputs = [(run, site, fileno, output_location) for fileno in filenos]
     with multiprocessing.Pool(NUM_MULTIPROCESSING) as pool:
         pool.starmap(_apply_first_pass, func_inputs)
     return
@@ -242,18 +247,24 @@ def _apply_process(run, site, fileno, input_prefix, processed_output_path):
             f'processed_ad{ad}',
             f'out_ad{ad}_{run}_{fileno:>04}.root',
         )
-        if os.path.isfile(output_location):
-            logging.debug('[process] Found existing file. Skipping. %s', output_location)
+        if process_adtime.is_complete(events_location, output_location):
+            logging.debug('[process] Already completed Run %d, file %d', run, fileno)
         else:
-            process_adtime.main(
-                num_events,
-                events_location,
-                muons_location,
-                output_location,
-                (run, fileno),
-                ad,
-                debug,
-            )
+            try:
+                process_adtime.main(
+                    num_events,
+                    events_location,
+                    muons_location,
+                    output_location,
+                    (run, fileno),
+                    ad,
+                    debug,
+                )
+            except:
+                logging.exception('Error in Run %d, file %d, ad %d, input muons location %s', run,
+                    fileno, ad, muons_location
+                )
+                raise
     logging.debug('[process] Finished Run %d, file %d', run, fileno)
     return
 
@@ -274,6 +285,7 @@ def run_process(run, site, filenos, raw_output_path, processed_output_path):
 @time_execution
 def run_hadd(run, site, filenos, processed_output_path):
     """Combine the processed output files into 1 per run."""
+    import ROOT
     path_prefix = os.path.join(processed_output_path, f'EH{site}')
     input_template = os.path.join(
         path_prefix,
@@ -289,11 +301,28 @@ def run_hadd(run, site, filenos, processed_output_path):
         for fileno in filenos:
             infiles.append(input_template.format(ad=ad, fileno=fileno))
         outfile = output_template.format(ad=ad)
+        # Check to see if the file already exists
         if os.path.isfile(outfile):
-            logging.debug('[hadd] Found existing file. Skipping. %s', outfile)
-        else:
-            command = ['hadd', '-f', '-v', '0', outfile] + infiles
-            subprocess.run(command, check=True)
+            outfile_opened = ROOT.TFile(outfile, 'READ')
+            try:
+                if not outfile_opened.IsZombie():
+                    # Check to see if the outfile has the right number of events
+                    outfile_events = outfile_opened.Get('ad_events').GetEntries()
+                    outfile_opened.Close()
+                    infile_events = 0
+                    for infile in infiles:
+                        infile_opened = ROOT.TFile(infile, 'READ')
+                        infile_events += infile_opened.Get('ad_events').GetEntries()
+                        infile_opened.Close()
+                    if infile_events == outfile_events:
+                        logging.debug('[hadd] Found existing file. Skipping. %s', outfile)
+                        continue
+            except ReferenceError:  # If file doesn't have correct TTree
+                pass
+            finally:
+                outfile_opened.Close()
+        command = ['hadd', '-f', '-v', '0', outfile] + infiles
+        subprocess.run(command, check=True)
     return
 
 
@@ -315,7 +344,7 @@ def run_aggregate_stats(run, site, filenos, processed_output_path, database):
         for fileno in filenos:
             infiles.append(input_template.format(ad=ad, fileno=fileno))
         outfile = output_template.format(ad=ad)
-        if os.path.isfile(outfile):
+        if aggregate_stats.is_complete(run, ad, outfile, database):
             logging.debug('[aggregate_stats] Found existing file. Skipping. %s', outfile)
         else:
             aggregate_stats.main2(run, infiles, site, ad, outfile, database)
@@ -337,7 +366,7 @@ def run_create_singles(run, site, processed_output_path):
             path_prefix,
             f'singles_ad{ad}/singles_ad{ad}_{run}.root',
         )
-        if os.path.isfile(outfile):
+        if create_singles_adtime.is_complete(infile, outfile):
             logging.debug('[create_singles] Found existing file. Skipping. %s', outfile)
         else:
             create_singles_adtime.main(infile, outfile, ttree_name)
@@ -357,32 +386,15 @@ def run_compute_singles(run, site, processed_output_path, database):
             path_prefix,
             f'hadded_ad{ad}/out_ad{ad}_{run}.root',
         )
-        with sqlite3.Connection(database) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT
-                    COUNT(*)
-                FROM
-                    singles_rates
-                WHERE
-                    RunNo = ?
-                    AND DetNo = ?
-                ''',
-                (run, ad)
-            )
-            num_existing, = cursor.fetchone()
-        if num_existing > 0:
-            logging.debug(
-                '[compute_singles] Found existing rate. Skipping. Run %d, AD %d', run, ad
-            )
-        else:
-            compute_singles.main(
-                infile,
-                database,
-                update_db,
-                iteration,
-                extra_cut,
-            )
+        # Ideally should check to see if rate has been computed before.
+        # But, this is so fast that I will just re-compute every time.
+        compute_singles.main(
+            infile,
+            database,
+            update_db,
+            iteration,
+            extra_cut,
+        )
     return
 
 
@@ -403,7 +415,7 @@ def run_create_accidentals(run, site, processed_output_path):
             path_prefix,
             f'acc_ad{ad}/acc_ad{ad}_{run}.root',
         )
-        if os.path.isfile(outfile):
+        if create_accidentals.is_complete(infile, outfile):
             logging.debug(
                 '[create_accidentals] Found existing file. Skipping. %s', outfile
             )
@@ -424,7 +436,7 @@ def run_create_accidentals(run, site, processed_output_path):
             path_prefix,
             f'acc_using_adtime_ad{ad}/acc_ad{ad}_{run}.root',
         )
-        if os.path.isfile(outfile):
+        if create_accidentals_adtime.is_complete(infile, outfile):
             logging.debug(
                 '[create_accidentals] Found existing file. Skipping. %s', outfile
             )

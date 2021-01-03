@@ -172,6 +172,7 @@ class Config:
     masses: Any
     num_coincs: Any
     num_coincs_source: str
+    num_coincs_format_version: int
     reco_bins: Any
     det_response_source: str
     lbnl_comparison: bool = False
@@ -265,8 +266,10 @@ def load_constants(config_file):
 
     # Parse num coincidences: Nominal, 0, hard-coded, or alternate database
     coincs_source = config.num_coincs_source
+    coincs_format = config.num_coincs_format_version
     if config.num_coincs is True:
-        num_coincidences, reco_bins = num_coincidences_per_AD(database, coincs_source)
+        num_coincidences, reco_bins = num_coincidences_per_AD(database, coincs_source,
+                version=coincs_format)
     elif config.num_coincs is False:
         num_coincidences = ad_dict(0)
         reco_bins = config.reco_bins
@@ -276,7 +279,7 @@ def load_constants(config_file):
         reco_bins = config.reco_bins
     elif isinstance(config.num_coincs, str):
         num_coincidences, reco_bins = num_coincidences_per_AD(
-                config.num_coincs, coincs_source
+                config.num_coincs, coincs_source, version=coincs_format
         )
     else:
         raise ValueError(
@@ -759,32 +762,38 @@ def extrapolation_factor(constants, fit_params):
     return to_return
 
 
-def num_coincidences_per_AD(database, source):
+def num_coincidences_per_AD(database, source, version):
     """Retrieve the number of observed IBD candidates in each AD, *including backgrounds*.
 
     Returns a tuple of (dict, energy_bins),
     where the dict maps (hall, det) to a 1D array of N_coincidences.
     This method assumes that all ADs have the same binning.
+
+    Version 0 has the entire histogram for an AD in 1 row
+    stored as a JSON-ified list.
+
+    Version 1 has each bin as a row.
     """
     binning_id = 0
-    with sqlite3.Connection(database) as conn:
-        cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, NumCoincidences_binned
-        FROM num_coincidences
-        WHERE Source = ? AND BinningId = ?
-        ORDER BY Hall, DetNo''', (source, binning_id))
-        full_data = cursor.fetchall()
-        cursor.execute('''SELECT BinEdgeEnergy_keV FROM reco_binnings
-        WHERE Id = ?
-        ORDER BY BinEdgeIndex''', (binning_id,))
-        bins = cursor.fetchall()  #  [(b0,), (b1,), ...]
-    results = {}
-    # Parse binned records
-    for hall, det, coincidence_str in full_data:
-        results[hall, det] = np.array(json.loads(coincidence_str))
-    bins = np.array(bins, dtype=float).reshape(-1)  # flatten bins
-    # convert keV to MeV
-    bins /= 1000
+    if version == 0:
+        with common.get_db(database) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''SELECT Hall, DetNo, NumCoincidences_binned
+            FROM num_coincidences
+            WHERE Source = ? AND BinningId = ?
+            ORDER BY Hall, DetNo''', (source, binning_id))
+            full_data = cursor.fetchall()
+            cursor.execute('''SELECT BinEdgeEnergy_keV FROM reco_binnings
+            WHERE Id = ?
+            ORDER BY BinEdgeIndex''', (binning_id,))
+            bins = cursor.fetchall()  #  [(b0,), (b1,), ...]
+        results = {}
+        # Parse binned records
+        for hall, det, coincidence_str in full_data:
+            results[hall, det] = np.array(json.loads(coincidence_str))
+        bins = np.array(bins, dtype=float).reshape(-1)  # flatten bins
+        # convert keV to MeV
+        bins /= 1000
     return results, bins
 
 def efficiency_weighted_counts(constants, fit_params):

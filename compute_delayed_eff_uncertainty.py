@@ -4,12 +4,14 @@ import os
 from array import array
 import math
 
+import common
+
 MAGIC_LOW_BOUND = 1.6
 MAGIC_UP_BOUND = 2.8
 
 def main(input_basepath, database, update_db):
     import ROOT
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('''SELECT Hall, DetNo, Peak, Resolution FROM
@@ -55,7 +57,7 @@ def main(input_basepath, database, update_db):
     fit_result = graph_to_fit.Fit('pol1', 'QS')
     y_intercept, slope = fit_result.Parameter(0), fit_result.Parameter(1)
     if update_db:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             cursor = conn.cursor()
             for (site, det), (nominal, wide) in values_lookup.items():
                 model_value = y_intercept + slope * wide

@@ -64,7 +64,7 @@ def calorimeter_fn(x, p):
         raise
 
 
-def main(infilename, outfilename, site, ad, database):
+def main(infilename, outfilename, site, ad, source, database):
     import ROOT
     infile = ROOT.TFile(infilename, 'READ')
     spectrum_2d = infile.Get('final')
@@ -111,8 +111,8 @@ def main(infilename, outfilename, site, ad, database):
         with common.get_db(database) as conn:
             c = conn.cursor()
             c.execute('''INSERT OR REPLACE INTO delayed_energy_fits
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (site, ad, mu, mu_err, sigma, sigma_err, scale, scale_err, alpha,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (site, ad, source, mu, mu_err, sigma, sigma_err, scale, scale_err, alpha,
                 alpha_err, norm, norm_err, chi_square, num_bins, num_params))
             conn.commit()
     else:
@@ -127,6 +127,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', default=None)
     parser.add_argument('--site', type=int)
     parser.add_argument('--ad', type=int)
+    parser.add_argument('--source', help='Label for database')
     parser.add_argument('--update-db', default=None)
     args = parser.parse_args()
-    main(args.input, args.output, args.site, args.ad, args.update_db)
+    main(args.input, args.output, args.site, args.ad, args.source, args.update_db)

@@ -42,7 +42,8 @@ def main(input_basepath, database, update_db):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('''SELECT Hall, DetNo, Peak, Resolution
-        FROM delayed_energy_fits WHERE Hall > 0 AND DetNo > 0''')
+        FROM delayed_energy_fits WHERE Hall > 0 AND DetNo > 0
+        AND Source = "adtime"''')
         results = cursor.fetchall()
     cut_lookup = {(row['Hall'], row['DetNo']): row for row in results}
     effs = {}
@@ -53,7 +54,7 @@ def main(input_basepath, database, update_db):
     DT_ALL_UP_BIN = 60  # 3000mm
     for (site, det), cuts in cut_lookup.items():
         site_dir = 'EH{}'.format(site)
-        sub_dir = 'sub_ad{}'.format(det)
+        sub_dir = 'sub_using_adtime_ad{}'.format(det)
         name = 'sub_ad{}.root'.format(det)
         path = os.path.join(input_basepath, site_dir, sub_dir, name)
         print(path)
@@ -99,7 +100,7 @@ def main(input_basepath, database, update_db):
             for (site, det), eff in effs.items():
                 cursor.execute('''INSERT OR REPLACE INTO
                 distance_time_cut_efficiency VALUES
-                (?, ?, ?, ?, ?)''', (site, det, eff, stat_errors[site, det],
+                (?, ?, ?, ?, ?, ?)''', (site, det, "adtime", eff, stat_errors[site, det],
                     binning_errors[site, det]))
 
 if __name__ == '__main__':

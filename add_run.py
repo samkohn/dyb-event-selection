@@ -1,6 +1,7 @@
 import argparse
 import json
-import sqlite3
+
+import common
 
 parser = argparse.ArgumentParser()
 parser.add_argument('infile')
@@ -12,7 +13,7 @@ run = data['run']
 hall = data['site']
 start_time = int(data['start_time']/1e9)
 
-with sqlite3.Connection('parameters.db') as conn:
+with common.get_db('parameters.db') as conn:
     c = conn.cursor()
     c.execute('INSERT OR REPLACE INTO runs VALUES (?, ?, ?)', (run, hall,
         start_time))

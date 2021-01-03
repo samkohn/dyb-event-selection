@@ -1,5 +1,6 @@
 import argparse
-import sqlite3
+
+import common
 
 def main(infilename, update_db, run, detector):
     import ROOT
@@ -29,7 +30,7 @@ def main(infilename, update_db, run, detector):
         entry -= 1
         singles.GetEntry(entry)
     if update_db:
-        with sqlite3.Connection(update_db) as conn:
+        with common.get_db(update_db) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO singles_within_run
                 VALUES (?, ?, ?, ?)''',

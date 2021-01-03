@@ -17,9 +17,12 @@ from muons import (
 )
 import delayeds
 from adevent import isADEvent_THU, isADEvent_THU_lowenergy
+import process
 from root_util import (TreeBuffer, float_value, assign_value,
         int_value, unsigned_int_value, long_value)
 from translate import git_describe
+
+is_complete = process.is_complete
 
 COINCIDENCE_WINDOW = delayeds._NH_THU_MAX_TIME
 
@@ -47,6 +50,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.detector = int_value(buffer_depth)
     fill_buf.dt_to_prompt = long_value(buffer_depth)
     fill_buf.dr_to_prompt = float_value(buffer_depth)
+    fill_buf.dr_to_prompt_AdTime = float_value(buffer_depth)
     fill_buf.dt_cluster_to_prev_ADevent = long_value()
     fill_buf.site = int_value()
     fill_buf.run = unsigned_int_value()
@@ -64,6 +68,10 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.x = float_value(buffer_depth)
     fill_buf.y = float_value(buffer_depth)
     fill_buf.z = float_value(buffer_depth)
+    fill_buf.energy_AdTime = float_value(buffer_depth)
+    fill_buf.x_AdTime = float_value(buffer_depth)
+    fill_buf.y_AdTime = float_value(buffer_depth)
+    fill_buf.z_AdTime = float_value(buffer_depth)
     fill_buf.fID = float_value(buffer_depth)
     fill_buf.fPSD = float_value(buffer_depth)
     fill_buf.dt_previous_WSMuon = long_value(buffer_depth)
@@ -89,6 +97,7 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('detector', 'I')
     branch_multiple('dt_to_prompt', 'L')
     branch_multiple('dr_to_prompt', 'F')
+    branch_multiple('dr_to_prompt_AdTime', 'F')
     branch('dt_cluster_to_prev_ADevent', 'L')
     branch('site', 'I')
     branch('run', 'i')
@@ -106,6 +115,10 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('x', 'F')
     branch_multiple('y', 'F')
     branch_multiple('z', 'F')
+    branch_multiple('energy_AdTime', 'F')
+    branch_multiple('x_AdTime', 'F')
+    branch_multiple('y_AdTime', 'F')
+    branch_multiple('z_AdTime', 'F')
     branch_multiple('dt_previous_WSMuon', 'L')
     branch_multiple('dt_previous_ADMuon', 'L')
     branch_multiple('dt_previous_ShowerMuon', 'L')
@@ -268,6 +281,9 @@ class CoincidenceHelper:
         self.prompt_x = 0
         self.prompt_y = 0
         self.prompt_z = 0
+        self.prompt_x_AdTime = 0
+        self.prompt_y_AdTime = 0
+        self.prompt_z_AdTime = 0
         self.multiplicity = 0
 
 class MuonHelper:
@@ -430,6 +446,9 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                 helper.prompt_x = clusters.x
                 helper.prompt_y = clusters.y
                 helper.prompt_z = clusters.z
+                helper.prompt_x_AdTime = clusters.x_AdTime
+                helper.prompt_y_AdTime = clusters.y_AdTime
+                helper.prompt_z_AdTime = clusters.z_AdTime
                 assign_value(fill_buf.site, clusters.site)
                 assign_value(fill_buf.run, clusters.run)
                 assign_value(fill_buf.fileno, clusters.fileno)
@@ -466,6 +485,11 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                         (clusters.x-helper.prompt_x)**2 +
                         (clusters.y-helper.prompt_y)**2 +
                         (clusters.z-helper.prompt_z)**2),
+                        helper.multiplicity-1)
+                assign_value(fill_buf.dr_to_prompt_AdTime, math.sqrt(
+                        (clusters.x_AdTime-helper.prompt_x_AdTime)**2 +
+                        (clusters.y_AdTime-helper.prompt_y_AdTime)**2 +
+                        (clusters.z_AdTime-helper.prompt_z_AdTime)**2),
                         helper.multiplicity-1)
                 assign_value(fill_buf.loopIndex, clusters.loopIndex,
                         helper.multiplicity - 1)
@@ -512,30 +536,10 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'x')
     copy_to_buffer(source, buf, index, 'y')
     copy_to_buffer(source, buf, index, 'z')
-
-def is_complete(infilename, outfilename):
-    """Check to see that the outfile exists and has events from the
-    end of infile."""
-    try:
-        if not os.path.isfile(outfilename):
-            return False
-        from ROOT import TFile
-        infile = TFile(infilename, 'READ')
-        in_events = infile.Get('events')
-        in_events.GetEntry(in_events.GetEntries() - 1)
-        last_timestamp = in_events.timestamp
-        infile.Close()
-        outfile = TFile(outfilename, 'READ')
-        out_events = outfile.Get('ad_events')
-        out_events.GetEntry(out_events.GetEntries() - 1)
-        last_out_timestamp = out_events.timestamp[0]
-        outfile.Close()
-        TIMESTAMP_CRITERION = 5000000000  # 5e9 ns = 5s
-        if abs(last_timestamp - last_out_timestamp) > TIMESTAMP_CRITERION:
-            return False
-    except:
-        return False
-    return True
+    copy_to_buffer(source, buf, index, 'energy_AdTime')
+    copy_to_buffer(source, buf, index, 'x_AdTime')
+    copy_to_buffer(source, buf, index, 'y_AdTime')
+    copy_to_buffer(source, buf, index, 'z_AdTime')
 
 def main(entries, events_filename, muon_filename, out_filename, runfile,
         detector, debug):

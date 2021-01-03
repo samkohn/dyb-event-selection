@@ -1,6 +1,6 @@
 import argparse
-import sqlite3
 
+import common
 import fit_delayed
 
 def main(infilename, outfilename, database):
@@ -40,7 +40,7 @@ def main(infilename, outfilename, database):
         # Special values for site and ad for MC results
         site = 0
         ad = 0
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             c = conn.cursor()
             c.execute('''INSERT OR REPLACE INTO delayed_energy_fits
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -74,7 +74,7 @@ def main(infilename, outfilename, database):
     if database is None:
         print(efficiencies)
     else:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             c = conn.cursor()
             for name, eff_value in efficiencies.items():
                 c.execute('''INSERT OR REPLACE INTO delayed_energy_efficiency

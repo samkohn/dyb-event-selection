@@ -3,15 +3,16 @@ from __future__ import print_function
 import argparse
 from collections import deque
 import math
-import os
 import random
 
 import numpy as np
 np.seterr('raise')
 
-import common
+import create_accidentals
 import delayeds
 from root_util import assign_value
+
+is_complete = create_accidentals.is_complete
 
 def distance(a, b):
     '''Distance where coordinates are specified as 'x', 'y', 'z' keys.
@@ -35,9 +36,9 @@ def get_event(computed):
             fPSD_t2=computed.fPSD_t2,
             f2inch_maxQ=computed.f2inch_maxQ,
             energy=computed.energy,
-            x=computed.x,
-            y=computed.y,
-            z=computed.z,
+            x=computed.x_AdTime,
+            y=computed.y_AdTime,
+            z=computed.z_AdTime,
     )
     return event
 
@@ -94,9 +95,9 @@ def random_pairing_many(computed, num_samples, cut=lambda entry:False, singles_r
     entries = computed.GetEntries()
     events = []
     computed.SetBranchStatus('*', 0)
-    computed.SetBranchStatus('x', 1)
-    computed.SetBranchStatus('y', 1)
-    computed.SetBranchStatus('z', 1)
+    computed.SetBranchStatus('x_AdTime', 1)
+    computed.SetBranchStatus('y_AdTime', 1)
+    computed.SetBranchStatus('z_AdTime', 1)
     computed.SetBranchStatus('energy', 1)
     for entry in computed:
         if cut(entry):
@@ -185,30 +186,6 @@ def only_DT_eff(infilename, ttree_name, pairing, update_db, **kwargs):
             cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
                 VALUES (?, ?, ?, ?, ?, ?)''',
                 (run, detector, pairing, efficiency, error, num_pairs))
-    return
-
-
-def is_complete(infilename, outfilename):
-    """Check to see if the output file has at least 48% as many entries
-    as the input.
-    """
-    if not os.path.isfile(outfilename):
-        return False
-    import ROOT
-    infile = ROOT.TFile(infilename, 'READ')
-    in_singles = infile.Get('singles')
-    in_entries = in_singles.GetEntries()
-    infile.Close()
-    outfile = ROOT.TFile(outfilename, 'READ')
-    out_acc = outfile.Get('all_pairs')
-    if not out_acc:  # PyROOT-speak for null pointer test
-        return False
-    out_entries = out_acc.GetEntries()
-    PAIRING_FACTOR = 0.48
-    threshold = in_entries * PAIRING_FACTOR
-    if out_entries < threshold:
-        return False
-    return True
 
 
 def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, update_db):
@@ -231,9 +208,9 @@ def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, updat
     computed.SetBranchStatus('detector', 1)
     computed.SetBranchStatus('site', 1)
     computed.SetBranchStatus('energy', 1)
-    computed.SetBranchStatus('x', 1)
-    computed.SetBranchStatus('y', 1)
-    computed.SetBranchStatus('z', 1)
+    computed.SetBranchStatus('x_AdTime', 1)
+    computed.SetBranchStatus('y_AdTime', 1)
+    computed.SetBranchStatus('z_AdTime', 1)
     computed.GetEntry(0)
     run = computed.run
     detector = computed.detector
@@ -334,7 +311,7 @@ def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, updat
     infile.Close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='Use {x,y,z}_AdTime for dr_to_prompt')
     parser.add_argument('infile')
     parser.add_argument('outfile')
     parser.add_argument('--ttree-name', default='singles')

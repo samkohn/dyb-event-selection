@@ -8,8 +8,12 @@ from common import *
 import process
 import translate
 import flashers
+import first_pass
 from translate import initialize_indata_onefile as initialize
 from root_util import *
+
+is_complete = first_pass.is_complete
+
 
 class RawFileAdapter():
     ATTR_LOOKUP = {
@@ -26,10 +30,14 @@ class RawFileAdapter():
             'fPSD_t2': ('time_PSD1', float),
             'f2inch_maxQ': ('MaxQ_2inchPMT', float),
             'triggerType': ('triggerType', int),
-            'energy': ('energy', float),
-            'x': ('x', float),
-            'y': ('y', float),
-            'z': ('z', float),
+            'energy': ('AdSimpleNL.energy', float),
+            'x': ('AdSimpleNL.x', float),
+            'y': ('AdSimpleNL.y', float),
+            'z': ('AdSimpleNL.z', float),
+            'energy_AdTime': ('AdTime.energy', float),
+            'x_AdTime': ('AdTime.x', float),
+            'y_AdTime': ('AdTime.y', float),
+            'z_AdTime': ('AdTime.z', float),
     }
     def __init__(self, ttree_w_friend, run, fileno):
         from ROOT import TFile
@@ -121,6 +129,7 @@ def load_basic_TTree(buf, indata, loopIndex):
     assign_value(buf.triggerType, indata.triggerType)
     assign_value(buf.nHit, indata.nHit)
     assign_value(buf.energy, indata.energy)
+    assign_value(buf.energy_AdTime, indata.energy_AdTime)
     return
 
 def initialize_basic_TTree(ttree, buf):
@@ -137,6 +146,7 @@ def initialize_basic_TTree(ttree, buf):
     buf.nHit = int_value()
     buf.charge = float_value()
     buf.energy = float_value()
+    buf.energy_AdTime = float_value()
 
     def branch(name, typecode):
         ttree.Branch(name, getattr(buf, name), '{}/{}'.format(name,
@@ -156,6 +166,7 @@ def initialize_basic_TTree(ttree, buf):
     branch('nHit', 'I')
     branch('charge', 'F')
     branch('energy', 'F')
+    branch('energy_AdTime', 'F')
     return
 
 def create_muon_TTree(host_file):
@@ -178,6 +189,9 @@ def load_adevent_buf(buf, indata, loopIndex):
     assign_value(buf.x, indata.x)
     assign_value(buf.y, indata.y)
     assign_value(buf.z, indata.z)
+    assign_value(buf.x_AdTime, indata.x_AdTime)
+    assign_value(buf.y_AdTime, indata.y_AdTime)
+    assign_value(buf.z_AdTime, indata.z_AdTime)
     assign_value(buf.fID, flashers.fID(indata.fMax, indata.fQuad))
     assign_value(buf.fPSD, flashers.fPSD(indata.fPSD_t1, indata.fPSD_t2))
 
@@ -197,6 +211,9 @@ def create_singles_TTree(host_file):
     buf.x = float_value()
     buf.y = float_value()
     buf.z = float_value()
+    buf.x_AdTime = float_value()
+    buf.y_AdTime = float_value()
+    buf.z_AdTime = float_value()
     buf.fID = float_value()
     buf.fPSD = float_value()
     buf.num_nearby_events = unsigned_int_value()
@@ -216,6 +233,9 @@ def create_singles_TTree(host_file):
     branch('x', 'F')
     branch('y', 'F')
     branch('z', 'F')
+    branch('x_AdTime', 'F')
+    branch('y_AdTime', 'F')
+    branch('z_AdTime', 'F')
     branch('fID', 'F')
     branch('fPSD', 'F')
     branch('num_nearby_events', 'I')
@@ -240,6 +260,9 @@ def create_event_TTree(host_file):
     buf.x = float_value()
     buf.y = float_value()
     buf.z = float_value()
+    buf.x_AdTime = float_value()
+    buf.y_AdTime = float_value()
+    buf.z_AdTime = float_value()
     buf.fID = float_value()
     buf.fPSD = float_value()
 
@@ -256,6 +279,9 @@ def create_event_TTree(host_file):
     branch('x', 'F')
     branch('y', 'F')
     branch('z', 'F')
+    branch('x_AdTime', 'F')
+    branch('y_AdTime', 'F')
+    branch('z_AdTime', 'F')
     branch('fID', 'F')
     branch('fPSD', 'F')
     return out, buf
@@ -269,49 +295,6 @@ def create_outfiles(out_location, run, fileno, ads):
         'RECREATE') for ad in ads}
     return {'muon': muonFile, 'events': eventsFiles}
 
-def is_complete(run, site, fileno, infilename, output_location):
-    """Check to see that the appropriate outfiles exist and
-    have events from the end of infile."""
-    import ROOT
-    # First check to see if all outfiles exist; if not then we can return early
-    ads = dets_for(site, run)
-    muon_name = os.path.join(output_location, 'muons_{}_{:>04}.root'.format(run, fileno))
-    events_names = [os.path.join(
-            output_location, 'events_ad{}_{}_{:>04}.root'.format(ad, run, fileno)
-        )
-            for ad in ads]
-    outfiles = [muon_name] + events_names
-    for outfile in outfiles:
-        if not os.path.isfile(outfile):
-            return False
-    # Find the timestamp of the last event from the infile
-    infile = ROOT.TFile(infilename, 'READ')
-    calibStats, adSimple = initialize(infile, 'AdSimpleNL')
-    calibStats.AddFriend(adSimple)
-    indata = RawFileAdapter(calibStats, run, fileno)
-    indata.GetEntry(indata.GetEntries() - 1)
-    final_timestamp = indata.timestamp
-    infile.Close()
-    # Ensure that each outfile has events within 5 seconds of the final timestamp
-    TIMESTAMP_CRITERION = 5000000000  # 5e9 ns = 5s
-    muonfile = ROOT.TFile(muon_name, 'READ')
-    muons = muonfile.Get('muons')
-    muons.GetEntry(muons.GetEntries() - 1)
-    muons_timestamp = muons.timestamp
-    muonfile.Close()
-    if abs(final_timestamp - muons_timestamp) > TIMESTAMP_CRITERION:
-        return False
-    for events_name in events_names:
-        eventsfile = ROOT.TFile(events_name, 'READ')
-        events = eventsfile.Get('events')
-        events.GetEntry(events.GetEntries() - 1)
-        events_timestamp = events.timestamp
-        eventsfile.Close()
-        if abs(final_timestamp - events_timestamp) > TIMESTAMP_CRITERION:
-            return False
-    return True
-
-
 def main(events, infile, out_location, run_and_file, debug):
     from ROOT import TFile
     logging.debug(events)
@@ -322,7 +305,9 @@ def main(events, infile, out_location, run_and_file, debug):
     run, fileno = run_and_file
     infile = TFile(infile, 'READ')
     calibStats, adSimple = initialize(infile, 'AdSimpleNL')
+    calibStats, adTime = initialize(infile, 'AdTime')
     calibStats.AddFriend(adSimple)
+    calibStats.AddFriend(adTime)
     indata = RawFileAdapter(calibStats, run, fileno)
     ads = dets_for(indata.site, run)
     outfiles = create_outfiles(out_location, run, fileno, ads)

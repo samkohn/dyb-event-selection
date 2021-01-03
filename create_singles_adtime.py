@@ -1,11 +1,13 @@
 import argparse
 import math
-import os
 import random
 
+import create_singles
 import delayeds
 from root_util import assign_value
-from first_pass import create_event_TTree
+from first_pass_adtime import create_event_TTree
+
+is_complete = create_singles.is_complete
 
 def is_single(ttree_event, energy):
     'Applies the single event criteria to the loaded entry in this TTree.'
@@ -14,26 +16,6 @@ def is_single(ttree_event, energy):
             and ttree_event.multiplicity == 1
             and ttree_event.dt_cluster_to_prev_ADevent >
                 delayeds._NH_THU_MAX_TIME)
-
-def is_complete(infilename, outfilename):
-    """Determine if the outfile exists and has events leading up to the end."""
-    if not os.path.isfile(outfilename):
-        return False
-    import ROOT
-    infile = ROOT.TFile(infilename, 'READ')
-    in_events = infile.Get('ad_events')
-    in_events.GetEntry(in_events.GetEntries() - 1)
-    last_timestamp = in_events.timestamp[0]
-    infile.Close()
-    outfile = ROOT.TFile(outfilename, 'READ')
-    out_events = outfile.Get('singles')
-    out_events.GetEntry(out_events.GetEntries() - 1)
-    singles_timestamp = out_events.timestamp
-    TIMESTAMP_CRITERION = 5000000000  # 5e9ns = 5s
-    if abs(singles_timestamp - last_timestamp) > TIMESTAMP_CRITERION:
-        return False
-    return True
-
 
 def main(infilename, outfile, ttree_name):
     import ROOT
@@ -70,9 +52,13 @@ def main(infilename, outfile, ttree_name):
             assign_value(singles_buf.fPSD_t2, computed.fPSD_t2[0])
             assign_value(singles_buf.f2inch_maxQ, computed.f2inch_maxQ[0])
             assign_value(singles_buf.energy, computed.energy[0])
+            assign_value(singles_buf.energy_AdTime, computed.energy_AdTime[0])
             assign_value(singles_buf.x, computed.x[0])
             assign_value(singles_buf.y, computed.y[0])
             assign_value(singles_buf.z, computed.z[0])
+            assign_value(singles_buf.x_AdTime, computed.x_AdTime[0])
+            assign_value(singles_buf.y_AdTime, computed.y_AdTime[0])
+            assign_value(singles_buf.z_AdTime, computed.z_AdTime[0])
             singles.Fill()
         index += 1
     outfile.Write()

@@ -1,7 +1,7 @@
 import argparse
 import math
-import sqlite3
 
+import common
 import delayeds
 
 def main(infile, update_db, pairing, run, detector, selection_str):
@@ -25,7 +25,7 @@ def main(infile, update_db, pairing, run, detector, selection_str):
         print(f'Passed DT cut: {num_pass_DT_cut}')
     else:
         all_pairs.GetEntry(0)
-        with sqlite3.Connection(update_db) as conn:
+        with common.get_db(update_db) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO distance_time_eff_study
                 VALUES (?, ?, ?, ?, ?, ?)''',

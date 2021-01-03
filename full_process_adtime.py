@@ -10,6 +10,8 @@ import subprocess
 import sys
 import time
 
+import tenacity
+
 import aggregate_stats
 import common
 import compute_singles
@@ -23,6 +25,7 @@ import subtract_accidentals
 
 
 NUM_MULTIPROCESSING = 64
+
 
 def time_execution(func):
     """Convention that first arg is always the run number"""
@@ -43,7 +46,7 @@ def time_execution(func):
 
 def setup_database(database):
     """Create the database tables to store the analysis results."""
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.executescript('''
             CREATE TABLE num_coincidences_by_run (
@@ -125,6 +128,86 @@ def setup_directory_structure(raw_output_path, processed_output_path):
             ))
     for path in paths:
         os.makedirs(path, exist_ok=True)
+
+
+@tenacity.retry(
+    reraise=True,
+    wait=tenacity.wait_random_exponential(max=60),
+    retry=tenacity.retry_if_exception_type(sqlite3.Error),
+)
+def _update_progress_db(database, run, site, ad, column):
+    """Update the progress tracker by checking off the given column.
+
+    If ad is None then use all ADs active during that run.
+    """
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        if isinstance(column, str):
+            # Need to use unsafe string interpolation for column name
+            update_string = f'''
+                INSERT INTO
+                    processing_progress (RunNo, Hall, DetNo, {column})
+                VALUES (?, ?, ?, 1)
+                ON CONFLICT
+                    (RunNo, DetNo)
+                DO
+                UPDATE
+                SET
+                    {column} = 1;
+            '''
+        else:  # other iterable:
+            column_list_commas = ', '.join(column)
+            column_set_equal_1 = ', '.join([f'{c} = 1' for c in column])
+            ones = ', '.join(['1'] * len(column))
+            update_string = f'''
+                INSERT INTO
+                    processing_progress (RunNo, Hall, DetNo, {column_list_commas})
+                VALUES (?, ?, ?, {ones})
+                ON CONFLICT
+                    (RunNo, DetNo)
+                DO
+                UPDATE
+                SET
+                    {column_set_equal_1};
+            '''
+        if ad is None:
+            ads = common.dets_for(site, run)
+            rows = [(run, site, det) for det in ads]
+            cursor.executemany(update_string, rows)
+        else:
+            cursor.execute(update_string, (run, site, ad))
+    if ad is None:
+        logging.debug('Updated progress db for Run %d, all ADs, script %s', run, column)
+    else:
+        logging.debug('Updated progress db for Run %d, AD %d, script %s', run, ad, column)
+
+
+def _fetch_progress(database):
+    """Fetch a dict of progress from the progress tracker,
+    keyed by run then script name.
+    """
+    with common.get_db(database) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''SELECT * FROM processing_progress''')
+        rows = cursor.fetchall()
+    progress = {}
+    for row in rows:
+        progress[row['RunNo'], row['DetNo']] = dict(row)
+    return progress
+
+
+def _should_run(run, site, name, progress):
+    """Return True if all ADs have finished the given processing."""
+    ads = common.dets_for(site, run)
+    should_run = False
+    for ad in ads:
+        run_progress = progress.get((run, ad), None)
+        if run_progress is None:
+            should_run = True
+        elif run_progress[name] == 0 or run_progress[name] is None:
+            should_run = True
+    return should_run
 
 
 def get_site_filenos_for_run(run, run_list_filename):
@@ -216,6 +299,7 @@ def _apply_first_pass(run, site, fileno, output_location):
         )
     logging.debug('[first_pass] Finished Run %d, file %d', run, fileno)
     return
+
 
 @time_execution
 def run_first_pass(run, site, filenos, raw_output_path):
@@ -374,6 +458,11 @@ def run_create_singles(run, site, processed_output_path):
 
 
 @time_execution
+@tenacity.retry(
+    reraise=True,
+    wait=tenacity.wait_random_exponential(max=60),
+    retry=tenacity.retry_if_exception_type(sqlite3.Error),
+)
 def run_compute_singles(run, site, processed_output_path, database):
     """Compute the singles (underlying uncorrelated) rate."""
     path_prefix = os.path.join(processed_output_path, f'EH{site}')
@@ -517,25 +606,65 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
     return
 
 
-def _tasks_for_whole_run(run, site, filenos, processed_output_path, database, stop_time):
+def _tasks_for_whole_run(
+    run,
+    site,
+    filenos,
+    processed_output_path,
+    database,
+    stop_time,
+    progress,
+):
     """Execute all the tasks that involve the entire run, i.e. not first_pass or
     process."""
+    finished = []
     try:
-        run_hadd(run, site, filenos, processed_output_path)
-        run_aggregate_stats(run, site, filenos, processed_output_path, database)
+        if _should_run(run, site, 'Hadd', progress):
+            run_hadd(run, site, filenos, processed_output_path)
+            finished.append('Hadd')
+        else:
+            logging.debug('[compute_singles] Skipping Run %d based on db progress', run)
+        if _should_run(run, site, 'AggregateStats', progress):
+            run_aggregate_stats(run, site, filenos, processed_output_path, database)
+            finished.append('AggregateStats')
+        else:
+            logging.debug('[aggregate_stats] Skipping Run %d based on db progress', run)
         if time.time() + 20 * 60 > stop_time:
             return
-        run_create_singles(run, site, processed_output_path)
+        if _should_run(run, site, 'CreateSingles', progress):
+            run_create_singles(run, site, processed_output_path)
+            finished.append('CreateSingles')
+        else:
+            logging.debug('[create_singles] Skipping Run %d based on db progress', run)
         if time.time() + 20 * 60 > stop_time:
             return
-        run_compute_singles(run, site, processed_output_path, database)
-        run_create_accidentals(run, site, processed_output_path)
+        if _should_run(run, site, 'ComputeSingles', progress):
+            run_compute_singles(run, site, processed_output_path, database)
+            finished.append('ComputeSingles')
+        else:
+            logging.debug('[compute_singles] Skipping Run %d based on db progress', run)
+        if _should_run(run, site, 'CreateAccidentals', progress):
+            run_create_accidentals(run, site, processed_output_path)
+            finished.append('CreateAccidentals')
+        else:
+            logging.debug(
+                '[create_accidentals] Skipping Run %d based on db progress', run
+            )
         if time.time() > stop_time:
             return
-        run_subtract_accidentals(run, site, processed_output_path, database)
+        if _should_run(run, site, 'SubtractAccidentals', progress):
+            run_subtract_accidentals(run, site, processed_output_path, database)
+            finished.append('SubtractAccidentals')
+        else:
+            logging.debug(
+                '[subtract_accidentals] Skipping Run %d based on db progress', run
+            )
         logging.info('Finished full processing for Run %d', run)
     except Exception:
         logging.exception('Exception in Run %d', run)
+    finally:
+        if len(finished) > 0:
+            _update_progress_db(database, run, site, None, finished)
     return
 
 
@@ -553,20 +682,29 @@ def many_runs(
     else:
         stop_time = time.time() + max_runtime_sec
     run_info = get_site_filenos_for_run_range(start_run, end_run, run_list_file)
+    progress = _fetch_progress(database)
     logging.info('Prepping for %d runs', len(run_info))
     logging.info('First few runs: %s', str(list(run_info.keys())[:5]))
     # Execute each run's first_pass and process in series since they already use
     # multiprocessing pools.
     for run, (site, filenos) in run_info.items():
-        run_first_pass(run, site, filenos, raw_output_path)
-        run_process(run, site, filenos, raw_output_path, processed_output_path)
+        if _should_run(run, site, 'FirstPass', progress):
+            run_first_pass(run, site, filenos, raw_output_path)
+            _update_progress_db(database, run, site, None, 'FirstPass')
+        else:
+            logging.debug('[first_pass] Skipping Run %d based on db progress', run)
+        if _should_run(run, site, 'Process', progress):
+            run_process(run, site, filenos, raw_output_path, processed_output_path)
+            _update_progress_db(database, run, site, None, 'Process')
+        else:
+            logging.debug('[process] Skipping Run %d based on db progress', run)
     if time.time() > stop_time:
         return
     # Execute all runs' remaining tasks in parallel to take advantage of many cores.
     with multiprocessing.Pool(NUM_MULTIPROCESSING, maxtasksperchild=1) as pool:
         pool.starmap(
             _tasks_for_whole_run,
-            [(run, site, filenos, processed_output_path, database, stop_time)
+            [(run, site, filenos, processed_output_path, database, stop_time, progress)
                 for run, (site, filenos) in run_info.items()
             ],
             chunksize=2,  # Prioritize load balancing over optimizing overhead
@@ -579,13 +717,28 @@ def main(
 ):
     site, filenos = get_site_filenos_for_run(run, run_list_file)
     run_first_pass(run, site, filenos, raw_output_path)
+    _update_progress_db(database, run, site, None, 'FirstPass')
     run_process(run, site, filenos, raw_output_path, processed_output_path)
+    _update_progress_db(database, run, site, None, 'Process')
+    finished = []
     run_hadd(run, site, filenos, processed_output_path)
+    finished.append('Hadd')
+    _update_progress_db(database, run, site, None, finished)
     run_aggregate_stats(run, site, filenos, processed_output_path, database)
+    finished.append('AggregateStats')
+    _update_progress_db(database, run, site, None, finished)
     run_create_singles(run, site, processed_output_path)
+    finished.append('CreateSingles')
+    _update_progress_db(database, run, site, None, finished)
     run_compute_singles(run, site, processed_output_path, database)
+    finished.append('ComputeSingles')
+    _update_progress_db(database, run, site, None, finished)
     run_create_accidentals(run, site, processed_output_path)
+    finished.append('CreateAccidentals')
+    _update_progress_db(database, run, site, None, finished)
     run_subtract_accidentals(run, site, processed_output_path, database)
+    finished.append('SubtractAccidentals')
+    _update_progress_db(database, run, site, None, finished)
     return
 
 

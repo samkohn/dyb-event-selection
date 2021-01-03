@@ -5,12 +5,12 @@ import json
 import multiprocessing
 import os
 import random
-import sqlite3
 import subprocess
 import time
 
 import numpy as np
 
+import common
 import dump_LBNL_toyMC
 import fit
 import prediction as pred
@@ -228,7 +228,7 @@ def load_to_database(database, results, mc_configuration):
     for row in results:
         new_row = tuple(row) + tuple(mc_configuration)
         extended_results.append(new_row)
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.executemany('''INSERT OR REPLACE INTO fitter_validation_results
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', extended_results)

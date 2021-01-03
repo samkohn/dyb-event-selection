@@ -1,11 +1,11 @@
 import argparse
 from pprint import pprint
-import sqlite3
 import sys
 
 import numpy as np
 from scipy.optimize import least_squares
 
+import common
 import prediction as pred
 
 def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=None,
@@ -305,7 +305,7 @@ def chi_square_grid(starting_params, constants, theta13_values):
 def save_result(database, source, index, theta13_best, theta13_low_err, theta13_up_err, chi_square):
     """Save the specified results to the database.
     """
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         sin2_best, sin2_low, sin2_up = np.power(np.sin(2*np.array(
             [theta13_best, theta13_low_err, theta13_up_err]

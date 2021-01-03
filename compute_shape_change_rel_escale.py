@@ -11,10 +11,10 @@ by the given fraction of the nominal uncertainty.
 
 import argparse
 from array import array
-import sqlite3
 
 import numpy as np
 
+import common
 from prediction import survival_probability, default_osc_params
 
 # Approximate effective baselines for each hall
@@ -54,7 +54,7 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, sin2_2theta13
     infile = ROOT.TFile(mc_infile, 'READ')
     mc_data = infile.Get('toy')
     # Read in the prompt energy bins
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT
@@ -130,7 +130,7 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, sin2_2theta13
             (source, site, sin2_2theta13, m2_ee, binning_id, i, plus_coeffs[i], minus_coeffs[i], rel_uncertainty)
         )
     if update_db:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             cursor = conn.cursor()
             cursor.executemany('''
                 INSERT OR REPLACE

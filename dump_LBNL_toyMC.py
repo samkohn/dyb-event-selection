@@ -2,12 +2,12 @@
 
 import argparse
 import json
-import sqlite3
 
+import common
 from prediction import all_ads, near_ads, far_ads
 
 def dump_to_db(database, rows):
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.executemany('''INSERT OR REPLACE INTO num_coincidences
             VALUES (?, ?, ?, ?, ?)''', rows)

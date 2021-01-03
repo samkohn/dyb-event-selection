@@ -1,10 +1,11 @@
 """Read and store the reactor spectra."""
 import argparse
-import sqlite3
+
+import common
 
 def main(infilename, database, source, data_period):
     with open(infilename, 'r') as f:
-        with sqlite3.Connection(database) as conn:
+        with common.get_db(database) as conn:
             cursor = conn.cursor()
             for line in f:
                 items = [float(x) for x in line.split()]

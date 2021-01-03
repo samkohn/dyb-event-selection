@@ -14,6 +14,8 @@ from typing import Any
 
 import numpy as np
 
+import common
+
 @dataclass
 class InputOscParams:
     theta12: float
@@ -386,7 +388,7 @@ def muon_veto_efficiency(database):
     Return a dict of (hall, det) -> efficiency (as a float).
     """
     run_by_run = {}
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         for hall, det in all_ads:
             cursor.execute('''SELECT Livetime_ns, Efficiency
@@ -409,7 +411,7 @@ def multiplicity_efficiency(database):
     Return a dict of (hall, det) -> efficiency (as a float).
     """
     run_by_run = {}
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         for hall, det in all_ads:
             cursor.execute('''SELECT Livetime_ns, Efficiency,
@@ -442,7 +444,7 @@ def rel_escale_parameters(database):
     """
     result = {}
     halls = [1, 2, 3]
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         for hall in halls:
             cursor.execute('''
@@ -470,7 +472,7 @@ def reactor_spectrum(database, core):
     spectrum[i, j] has energy bin i and time/week bin j,
     and units of nuebar/MeV/s.
     """
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         # cursor.execute('''SELECT U235, U238, Pu239, Pu241 FROM thermal_energy_per_fission
             # WHERE Source = "Phys. Rev. C 88, 014605 (2013)"''')
@@ -526,7 +528,7 @@ def livetime_for_period(weekly_livetimes, period):
 def livetime_by_week(database, weekly_time_bins):
     """Retrieve a 1D array of # seconds livetime for each week."""
     ordered = {}
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         for hall, det in all_ads:
             cursor.execute('''SELECT Hall, DetNo, Start_time, Livetime_ns/Efficiency
@@ -591,7 +593,7 @@ def total_emitted_shortcut(database, data_period):
             for period in [period_6ad, period_8ad, period_7ad]
             for halldet in all_ads
     }
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         for core in range(1, 7):
             cursor.execute('''SELECT Energy, NuPerMeVPerSec
@@ -641,7 +643,7 @@ def total_emitted(database, week_range):
 
 def cross_section(database):
     """Return (xsec, energy) in units of cm^2, MeV."""
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Energy, CrossSection FROM xsec
                 WHERE Source = "DybBerkFit/toySpectra//Wei on 7/11/2012"
@@ -887,7 +889,7 @@ def true_to_reco_energy_matrix(database, source):
 
     There is no particular normalization to the returned array.
     """
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Matrix, RecoBins, TrueBins
             FROM detector_response

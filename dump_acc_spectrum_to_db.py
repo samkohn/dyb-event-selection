@@ -1,13 +1,14 @@
 """Dump the accidentals / singles spectrum to the database."""
 import argparse
-import sqlite3
 
 import numpy as np
+
+import common
 
 def main(infilename, hist_name, database, site, ad, label, binning_id, binning_db_path):
     import ROOT
     # fetch binning
-    with sqlite3.Connection(binning_db_path) as conn:
+    with common.get_db(binning_db_path) as conn:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT
@@ -29,16 +30,17 @@ def main(infilename, hist_name, database, site, ad, label, binning_id, binning_d
     values = np.zeros((len(bin_edges) - 1,))
     for i in range(1, len(bin_edges)):  # this is correctly off-by-1
         values[i-1] = binned_hist.GetBinContent(i)
-    values /= sum(values)  # normalize
+    total_counts = sum(values)
+    values /= total_counts  # normalize
     rows = []
     for bin_index, value in enumerate(values):
         rows.append(
             (label, site, ad, binning_id, bin_index, value)
         )
-    with sqlite3.Connection(database) as conn:
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.executemany('''
-            INSERT INTO
+            INSERT OR REPLACE INTO
                 accidentals_spectrum
             VALUES
                 (?, ?, ?, ?, ?, ?)

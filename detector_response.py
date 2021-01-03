@@ -6,10 +6,11 @@ and true antineutrino energy.
 
 import argparse
 import json
-import sqlite3
 import time
 
 import numpy as np
+
+import common
 
 def main(toymc_infile, update_db, image_outfile, binning):
     import ROOT
@@ -63,7 +64,7 @@ def main(toymc_infile, update_db, image_outfile, binning):
         response_matrix.append(row)
 
     if update_db:
-        with sqlite3.Connection(update_db) as conn:
+        with common.get_db(update_db) as conn:
             cursor = conn.cursor()
             label = f"THU ToyMC res_p:Ev No Cuts {binning} binning"
             cursor.execute('''INSERT OR REPLACE INTO detector_response

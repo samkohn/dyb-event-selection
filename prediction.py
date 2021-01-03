@@ -289,14 +289,17 @@ def load_constants(config_file):
     # Parse backgrounds: Nominal, 0, hard-coded, or alternate database
     backgrounds_source = config.backgrounds_source
     if config.backgrounds is True:
-        nominal_bgs, reco_bins = backgrounds_per_AD(database, backgrounds_source)
+        nominal_bgs = backgrounds_per_AD(database, backgrounds_source)
     elif config.backgrounds is False:
-        nominal_bgs = ad_dict(0)
+        nominal_bgs = backgrounds_per_AD(None, None, return_zero=True)
     elif isinstance(config.backgrounds, list):
         bg_arrays = [np.array(bg) for bg in config.backgrounds]
-        nominal_bgs = dict(zip(all_ads, bg_arrays))
+        # Assign supplied backgrounds to be of type 'accidentals'
+        nominal_bgs = {
+            'accidentals': dict(zip(all_ads, bg_arrays)),
+        }
     elif isinstance(config.backgrounds, str):
-        nominal_bgs, reco_bins = backgrounds_per_AD(config.backgrounds,
+        nominal_bgs = backgrounds_per_AD(config.backgrounds,
                 backgrounds_source)
     else:
         raise ValueError(f"Invalid backgrounds specification: {config.backgrounds}")
@@ -835,7 +838,7 @@ def efficiency_weighted_counts(constants, fit_params):
         to_return[halldet] = pulled_coincidences / combined_eff
     return to_return
 
-def backgrounds_per_AD(database, source):
+def backgrounds_per_AD(database, source, return_zero=False):
     """Retrieve the number of predicted background events in each AD.
 
     Returns a dict of (bg_name -> dict of (hall, det) -> 1D array).
@@ -845,8 +848,14 @@ def backgrounds_per_AD(database, source):
     Currently-included backgrounds:
 
     - Accidentals
+
+    To get a dict with the correct format but 0 background, set return_zero=True.
     """
-    with sqlite3.Connection(database) as conn:
+    if return_zero:
+        return {
+            'accidentals': ad_dict(0),
+        }
+    with common.get_db(database) as conn:
         cursor = conn.cursor()
         acc_data = {}
         for hall, det in all_ads:
@@ -860,7 +869,19 @@ def backgrounds_per_AD(database, source):
                 AND Hall = ?
                 AND DetNo = ?
             ORDER BY BinIndex''', (source, hall, det))
-            acc_data[hall, det] = np.array(cursor.fetchall())
+            acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
+            cursor.execute('''
+            SELECT
+                Count
+            FROM
+                accidentals_counts
+            WHERE
+                Label = ?
+                AND Hall = ?
+                AND DetNo = ?
+            ''', (source, hall, det)
+            )
+            acc_data[hall, det] *= cursor.fetchone()[0]
     results = {
         'accidentals': acc_data,
     }
@@ -881,7 +902,7 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
             pull = fit_params.pull_bg[hall, det]
             total_bg[hall, det] += bg_spec * (1 + pull)
     results = {}
-    for halldet, bg in total_bg:
+    for halldet, bg in total_bg.items():
         results[halldet] = num_candidates[halldet] - bg
     return results
 
@@ -1080,15 +1101,19 @@ def predict_ad_to_ad_obs(constants, fit_params):
     without adjusting the observed counts for backgrounds or any efficiencies.
     """
     f_ki = predict_ad_to_ad_IBDs(constants, fit_params)
+    results = f_ki.copy()
     predicted_bg = constants.nominal_bgs
+    total_bg = ad_dict(0)
+    for bg_type, bg_dict in predicted_bg.items():
+        for (hall, det), bg_spec in bg_dict.items():
+            pull = fit_params.pull_bg[hall, det]
+            total_bg[hall, det] += bg_spec * (1 + pull)
+    for (far_hall, far_det), near_halldet in f_ki.keys():
+        bg_for_far = total_bg[far_hall, far_det]
+        results[(far_hall, far_det), near_halldet] += bg_for_far
     muon_effs = constants.muon_eff
     mult_effs = constants.multiplicity_eff
     masses = constants.masses
-    results = f_ki.copy()
-    for (far_hall, far_det), near_halldet in f_ki.keys():
-        bg_for_far = predicted_bg[far_hall, far_det]
-        pull = fit_params.pull_bg[far_hall, far_det]
-        results[(far_hall, far_det), near_halldet] += bg_for_far * (1 + pull)
     for (far_halldet, near_halldet), result in results.items():
         muon_eff = muon_effs[far_halldet]
         mult_eff = mult_effs[far_halldet]

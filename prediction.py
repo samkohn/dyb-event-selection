@@ -167,6 +167,7 @@ class Config:
     period: Any
     backgrounds: Any
     backgrounds_source: str
+    background_types: list
     mult_eff: Any
     muon_eff: Any
     masses: Any
@@ -288,19 +289,22 @@ def load_constants(config_file):
 
     # Parse backgrounds: Nominal, 0, hard-coded, or alternate database
     backgrounds_source = config.backgrounds_source
+    bg_types = config.background_types
     if config.backgrounds is True:
-        nominal_bgs = backgrounds_per_AD(database, backgrounds_source)
+        nominal_bgs = backgrounds_per_AD(database, backgrounds_source, types=bg_types)
     elif config.backgrounds is False:
-        nominal_bgs = backgrounds_per_AD(None, None, return_zero=True)
+        nominal_bgs = backgrounds_per_AD(None, None, return_zero=True, types=bg_types)
     elif isinstance(config.backgrounds, list):
         bg_arrays = [np.array(bg) for bg in config.backgrounds]
-        # Assign supplied backgrounds to be of type 'accidentals'
-        nominal_bgs = {
-            'accidentals': dict(zip(all_ads, bg_arrays)),
-        }
+        nominal_bgs = backgrounds_per_AD(None, None, return_zero=True, types=bg_types[0])
+        # Assign supplied backgrounds to be the first type given in background_types
+        nominal_bgs[bg_types[0]] = dict(zip(all_ads, bg_arrays))
     elif isinstance(config.backgrounds, str):
-        nominal_bgs = backgrounds_per_AD(config.backgrounds,
-                backgrounds_source)
+        nominal_bgs = backgrounds_per_AD(
+            config.backgrounds,
+            backgrounds_source,
+            types=bg_types,
+        )
     else:
         raise ValueError(f"Invalid backgrounds specification: {config.backgrounds}")
 
@@ -842,7 +846,7 @@ def efficiency_weighted_counts(constants, fit_params):
     return to_return
 
 
-def backgrounds_per_AD(database, source, return_zero=False):
+def backgrounds_per_AD(database, source, return_zero=False, types=None):
     """Retrieve the number of predicted background events in each AD.
 
     Returns a dict of (bg_name -> dict of (hall, det) -> 1D array).
@@ -852,44 +856,100 @@ def backgrounds_per_AD(database, source, return_zero=False):
     Currently-included backgrounds:
 
     - Accidentals
+    - Li9
+    - Fast-neutron
+    - AmC
 
     To get a dict with the correct format but 0 background, set return_zero=True.
+
+    The types parameter, if provided, limits the returned dict to only
+    certain types of background. The list can contain any of:
+
+     - "accidental"
+     - "li9"
+     - "fast-neutron"
+     - "amc"
+
+     If types is None, then the default of all types is used.
     """
     if return_zero:
-        return {
-            'accidentals': ad_dict(0),
-        }
+        if types is None:
+            return {
+                'accidental': ad_dict(0),
+                'li9': ad_dict(0),
+                'fast-neutron': ad_dict(0),
+                'amc': ad_dict(0),
+            }
+        else:
+            return {bg: ad_dict(0) for bg in types}
+    result = {}
     with common.get_db(database) as conn:
         cursor = conn.cursor()
-        acc_data = {}
-        for hall, det in all_ads:
+        if 'accidental' in types:
+            acc_data = {}
+            for hall, det in all_ads:
+                cursor.execute('''
+                    SELECT
+                        Spectrum
+                    FROM
+                        accidentals_spectrum
+                    WHERE
+                        Label = ?
+                        AND Hall = ?
+                        AND DetNo = ?
+                    ORDER BY BinIndex
+                    ''',
+                    (source, hall, det),
+                )
+                acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
+                cursor.execute('''
+                SELECT
+                    Count
+                FROM
+                    bg_counts
+                WHERE
+                    BgName = "accidental"
+                    AND Label = ?
+                    AND Hall = ?
+                    AND DetNo = ?
+                ''', (source, hall, det)
+                )
+                acc_data[hall, det] *= cursor.fetchone()[0]
+            result['accidental'] = acc_data
+        if 'li9' in types:
             cursor.execute('''
-            SELECT
-                Spectrum
-            FROM
-                accidentals_spectrum
-            WHERE
-                Label = ?
-                AND Hall = ?
-                AND DetNo = ?
-            ORDER BY BinIndex''', (source, hall, det))
-            acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
-            cursor.execute('''
-            SELECT
-                Count
-            FROM
-                accidentals_counts
-            WHERE
-                Label = ?
-                AND Hall = ?
-                AND DetNo = ?
-            ''', (source, hall, det)
+                SELECT
+                    Spectrum
+                FROM
+                    li9_spectrum
+                WHERE
+                    Label = ?
+                ORDER BY BinIndex
+                ''',
+                (source,),
             )
-            acc_data[hall, det] *= cursor.fetchone()[0]
-    results = {
-        'accidentals': acc_data,
-    }
-    return results
+            li9_spectrum = np.array(cursor.fetchall()).reshape(-1)
+            li9_data = {}
+            for hall, det in all_ads:
+                cursor.execute('''
+                SELECT
+                    Count
+                FROM
+                    bg_counts
+                WHERE
+                    BgName = "li9"
+                    AND Label = ?
+                    AND Hall = ?
+                    AND DetNo = ?
+                ''', (source, hall, det)
+                )
+                li9_data[hall, det] = cursor.fetchone()[0] * li9_spectrum
+            result['li9'] = li9_data
+    if 'fast-neutron' in types:
+        result['fast-neutron'] = ad_dict(0)
+    if 'amc' in types:
+        result['amc'] = ad_dict(0)
+    return result
 
 def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     """Compute the bg-subtracted IBD spectra for each AD.

@@ -384,7 +384,7 @@ if __name__ == "__main__":
     parser.add_argument('--test-mode', action='store_true')
     parser.add_argument('--rate-only', action='store_true')
     parser.add_argument('--avg-near', action='store_true')
-    parser.add_argument('--pulls', nargs='+', choices=('bg', 'near-stat', 'reactor',
+    parser.add_argument('--pulls', nargs='*', choices=('bg', 'near-stat', 'reactor',
         'eff', 'rel-escale', 'all'), default=[])
     parser.add_argument('--stage', choices=('6ad', '7ad', '8ad'), default='8ad')
     args = parser.parse_args()

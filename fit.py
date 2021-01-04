@@ -31,10 +31,10 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
             predicted[key] = np.sum(val, keepdims=True)
         num_bins = 1
         num_shape_bins = 37  # TODO
-        num_pulls = 22 + num_shape_bins * 4
+        num_pulls = 30 + num_shape_bins * 4
     else:
         num_bins = 37
-        num_pulls = 22 + num_bins * 4  # n_bins * n_ads = n_near_stat_pulls
+        num_pulls = 30 + num_bins * 4  # n_bins * n_ads = n_near_stat_pulls
     if debug:
         pprint(observed)
         pprint(predicted)
@@ -108,6 +108,12 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     for halldet, pull in fit_params.pull_efficiency.items():
         numerator = pull * pull
         denominator = 0.003 * 0.003
+        chi_square += numerator/denominator
+        return_array_values[term_index] = numerator/denominator
+        term_index += 1
+    for halldet, pull in fit_params.pull_rel_escale.items():
+        numerator = pull * pull
+        denominator = 0.002 * 0.002
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1
@@ -337,7 +343,7 @@ if __name__ == "__main__":
     parser.add_argument("--dm2ee", type=float)
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
-    parser.add_argument("--pulls", nargs='+', choices=('bg', 'near-stat', 'reactor',
+    parser.add_argument("--pulls", nargs='*', choices=('bg', 'near-stat', 'reactor',
         'eff', 'rel-escale', 'all'), default=[])
     args = parser.parse_args()
     rate_only = not args.shape

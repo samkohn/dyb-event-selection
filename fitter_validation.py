@@ -81,7 +81,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
             ' default nGd binning sin2={sin2} dm2ee={dm2ee}',
         'acc bg fluctuations default nGd binning':
             'LBNL ToyMC 14 accidental bg fluctuations, no IBD stat fluctuations,'
-            ' default nGd binning sin2={sin2} dm2ee={dm2ee}',
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
     }
     toymc_out_numbers = {
         'no fluctuations default nGd binning': '02',

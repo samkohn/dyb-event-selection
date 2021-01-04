@@ -102,6 +102,63 @@ def setup_database(database):
                 Total_Acc_Eff_err REAL,
                 PRIMARY KEY(RunNo, DetNo, Label)
             );
+
+            CREATE TABLE delayed_energy_fits (
+                Hall INTEGER NOT NULL,
+                DetNo INTEGER NOT NULL,
+                Source TEXT NOT NULL,
+                Peak REAL,
+                Peak_error REAL,
+                Resolution REAL,
+                Resolution_error REAL,
+                ExpScale REAL,
+                ExpScale_error REAL,
+                PeakFraction REAL,
+                PeakFraction_error REAL,
+                Normalization REAL,
+                Normalization_error REAL,
+                ChiSquare REAL,
+                NumBins INTEGER,
+                NumFitParams INTEGER,
+                PRIMARY KEY(Hall, DetNo, Source)
+            );
+
+            CREATE TABLE distance_time_cut_efficiency (
+                Hall INTEGER NOT NULL,
+                DetNo INTEGER NOT NULL,
+                Source TEXT NOT NULL,
+                Efficiency REAL,
+                StatError REAL,
+                BinningError REAL,
+                PRIMARY KEY(Hall, DetNo, Source)
+            );
+
+            CREATE TABLE accidentals_spectrum (
+                Label TEXT NOT NULL,
+                Hall INTEGER NOT NULL,
+                DetNo INTEGER NOT NULL,
+                BinningId INTEGER NOT NULL,
+                BinIndex INTEGER NOT NULL,
+                Spectrum REAL NOT NULL,
+                PRIMARY KEY(Label, Hall, DetNo, BinningId, BinIndex)
+            );
+
+            CREATE TABLE processing_progress (
+                RunNo INTEGER NOT NULL,
+                Hall INTEGER NOT NULL,
+                DetNo INTEGER NOT NULL,
+                FirstPass INTEGER,
+                Process INTEGER,
+                Hadd INTEGER,
+                AggregateStats INTEGER,
+                CreateSingles INTEGER,
+                ComputeSingles INTEGER,
+                CreateAccidentals INTEGER,
+                SubtractAccidentals INTEGER,
+                AccEfficiency INTEGER,
+                NumCoincidences INTEGER,
+                PRIMARY KEY(RunNo, DetNo)
+            );
         '''
         )
     return

@@ -58,12 +58,12 @@ def main(main_database, energy_cuts_database, data_file_path, update_db):
     for site, ad, low_bound, up_bound in adtime_energy_bounds:
         energy_lookup['adtime', site, ad] = (low_bound, up_bound)
 
-    with multiprocessing.Pool(63) as pool:
+    with multiprocessing.Pool() as pool:
         results = pool.starmap(one_file, zip(run_keys, it.repeat(data_file_path),
             it.repeat(energy_lookup)))
     if update_db:
-        results_nominal = [(run, ad, num_nominal, 'new nominal') for run, ad, num_nominal, _ in results]
-        results_adtime = [(run, ad, num_adtime, 'new adtime') for run, ad, _, num_adtime in results]
+        results_nominal = [(run, ad, num_nominal, 'nominal') for run, ad, num_nominal, _ in results]
+        results_adtime = [(run, ad, num_adtime, 'adtime') for run, ad, _, num_adtime in results]
         with common.get_db(main_database) as conn:
             cursor = conn.cursor()
             cursor.executemany('''INSERT OR REPLACE INTO num_coincidences_by_run

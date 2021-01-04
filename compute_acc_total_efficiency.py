@@ -43,15 +43,25 @@ def main(main_database, energy_cuts_database, data_file_path, label, update_db):
     # Look up delayed energy cuts
     with common.get_db(energy_cuts_database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, Peak - 3 * Resolution,
-            Peak + 3 * Resolution
-            FROM delayed_energy_fits''')
+        cursor.execute('''
+            SELECT
+                Hall,
+                DetNo,
+                Peak - 3 * Resolution,
+                Peak + 3 * Resolution
+            FROM
+                delayed_energy_fits
+            WHERE
+                Source = ?
+            ''',
+            (label,)
+        )
         energy_bounds = cursor.fetchall()
     energy_lookup = {}
     for site, ad, low_bound, up_bound in energy_bounds:
         energy_lookup[site, ad] = (low_bound, up_bound)
 
-    with multiprocessing.Pool(63) as pool:
+    with multiprocessing.Pool() as pool:
         results = pool.starmap(one_file, zip(run_keys, it.repeat(data_file_path),
             it.repeat(energy_lookup)))
     if update_db:

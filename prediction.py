@@ -799,16 +799,19 @@ def num_coincidences_per_AD(database, source, version):
         bins /= 1000
     return results, bins
 
+
 def efficiency_weighted_counts(constants, fit_params):
     """Adjust the observed counts by dividing by efficiencies.
 
-    This includes the muon and multiplicity efficiencies as well as
-    the detection efficiency pull parameter.
-    The actual detection efficiency is not included since it is common to all ADs.
+    This includes the muon and multiplicity efficiencies,
+    detection efficiency pull parameter, target masses,
+    oscillation-dependent changes in efficiency,
+    and changes due to relative energy scale variation.
+    The actual absolute detection efficiency is not included since it is common to all ADs.
 
     Returns a dict mapping (hall, det) to a 1D array of N_coincidences.
     """
-    num_coincidences = constants.observed_candidates
+    num_coincidences = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
     mult_effs = constants.multiplicity_eff
     muon_effs = constants.muon_eff
     mass_effs = constants.masses
@@ -837,6 +840,7 @@ def efficiency_weighted_counts(constants, fit_params):
             pulled_coincidences = coincidences
         to_return[halldet] = pulled_coincidences / combined_eff
     return to_return
+
 
 def backgrounds_per_AD(database, source, return_zero=False):
     """Retrieve the number of predicted background events in each AD.
@@ -893,8 +897,14 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     Returns a dict mapping (hall, det) to a 1D array of IBD counts.
 
     Currently applies the same pull parameter to each background type.
+
+    Assumes that the background counts are the raw number of events
+    contaminating the observed number of counts.
+    This means e.g. the number of Li9 events that survived the muon veto
+    and were not multiplicity-vetoed.
+    These counts will be corrected for these effects *later*.
     """
-    num_candidates = efficiency_weighted_counts(constants, fit_params)
+    num_candidates = constants.observed_candidates
     predicted_bg = constants.nominal_bgs
     total_bg = ad_dict(0)
     for bg_type, bg_dict in predicted_bg.items():
@@ -905,6 +915,7 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     for halldet, bg in total_bg.items():
         results[halldet] = num_candidates[halldet] - bg
     return results
+
 
 def true_to_reco_energy_matrix(database, source):
     """Retrieve the conversion matrix from true to/from reconstructed energy.
@@ -1005,7 +1016,7 @@ def true_energy_of_near_IBDs(constants, fit_params):
 
     """
     true_energies = {}
-    bg_subtracted = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
+    bg_subtracted = efficiency_weighted_counts(constants, fit_params)
     response_pdfs = true_to_reco_near_matrix_with_osc(constants, fit_params)
     for (hall, det), response_pdf in response_pdfs.items():
         true_energies[hall, det] = (
@@ -1089,8 +1100,8 @@ def predict_ad_to_ad_IBDs(constants, fit_params):
 def predict_ad_to_ad_obs(constants, fit_params):
     """Compute the number of observed coincidences for a given pair of ADs.
 
-    The background events are added back to the far halls
-    and the muon-veto and multiplicity-veto efficiencies are re-applied.
+    First the efficiencies are re-applied to convert back to
+    "detected" counts, and then the background events are added back in.
 
     Return f_ki, a dict of
     ((far_hall, far_det), (near_hall, near_det)) -> N,
@@ -1102,15 +1113,6 @@ def predict_ad_to_ad_obs(constants, fit_params):
     """
     f_ki = predict_ad_to_ad_IBDs(constants, fit_params)
     results = f_ki.copy()
-    predicted_bg = constants.nominal_bgs
-    total_bg = ad_dict(0)
-    for bg_type, bg_dict in predicted_bg.items():
-        for (hall, det), bg_spec in bg_dict.items():
-            pull = fit_params.pull_bg[hall, det]
-            total_bg[hall, det] += bg_spec * (1 + pull)
-    for (far_hall, far_det), near_halldet in f_ki.keys():
-        bg_for_far = total_bg[far_hall, far_det]
-        results[(far_hall, far_det), near_halldet] += bg_for_far
     muon_effs = constants.muon_eff
     mult_effs = constants.multiplicity_eff
     masses = constants.masses
@@ -1134,6 +1136,15 @@ def predict_ad_to_ad_obs(constants, fit_params):
         results[far_halldet, near_halldet] = (
                 result * combined_eff
         )
+    predicted_bg = constants.nominal_bgs
+    total_bg = ad_dict(0)
+    for bg_type, bg_dict in predicted_bg.items():
+        for (hall, det), bg_spec in bg_dict.items():
+            pull = fit_params.pull_bg[hall, det]
+            total_bg[hall, det] += bg_spec * (1 + pull)
+    for (far_hall, far_det), near_halldet in f_ki.keys():
+        bg_for_far = total_bg[far_hall, far_det]
+        results[(far_hall, far_det), near_halldet] += bg_for_far
     return results
 
 

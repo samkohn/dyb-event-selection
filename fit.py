@@ -73,9 +73,20 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         term_index += len(stat_term)
 
     # Pull terms
+    acc_uncertainties = {
+        (1, 1): 0.00153785488958991,
+        (1, 2): 0.00153149553868691,
+        (2, 1): 0.00177087097940007,
+        (2, 2): 0.00168488976519089,
+        (3, 1): 0.0043956043956044,
+        (3, 2): 0.00424966799468792,
+        (3, 3): 0.00424164524421594,
+        (3, 4): 0.00417661097852029,
+    }
     for halldet, pull in fit_params.pull_bg.items():
         numerator = pull*pull
-        denominator = 0.010*0.010  # TODO relative error on accidentals
+        #denominator = 0.010*0.010  # TODO relative error on accidentals
+        denominator = acc_uncertainties[halldet]**2
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1

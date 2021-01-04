@@ -332,6 +332,10 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
                 eff_slice = index_map['efficiency']
                 indices = list(range(eff_slice.start, eff_slice.stop))
                 frozen_params.extend(indices)
+            if 'rel-escale' not in pulls:
+                escale_slice = index_map['rel_escale']
+                indices = list(range(escale_slice.start, escale_slice.stop))
+                frozen_params.extend(indices)
 
         # Compute fit
         fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,
@@ -381,7 +385,7 @@ if __name__ == "__main__":
     parser.add_argument('--rate-only', action='store_true')
     parser.add_argument('--avg-near', action='store_true')
     parser.add_argument('--pulls', nargs='+', choices=('bg', 'near-stat', 'reactor',
-        'eff', 'all'), default=[])
+        'eff', 'rel-escale', 'all'), default=[])
     parser.add_argument('--stage', choices=('6ad', '7ad', '8ad'), default='8ad')
     args = parser.parse_args()
     source_categories = {

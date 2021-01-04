@@ -327,7 +327,7 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
     parser.add_argument("--pulls", nargs='+', choices=('bg', 'near-stat', 'reactor',
-        'eff', 'all'), default=[])
+        'eff', 'rel-escale', 'all'), default=[])
     args = parser.parse_args()
     rate_only = not args.shape
     pulls = args.pulls
@@ -392,6 +392,10 @@ if __name__ == "__main__":
         if 'eff' not in pulls:
             eff_slice = index_map['efficiency']
             indices = list(range(eff_slice.start, eff_slice.stop))
+            frozen_params.extend(indices)
+        if 'rel-escale' not in pulls:
+            escale_slice = index_map['rel_escale']
+            indices = list(range(escale_slice.start, escale_slice.stop))
             frozen_params.extend(indices)
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")

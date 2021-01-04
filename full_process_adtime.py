@@ -15,11 +15,14 @@ import tenacity
 
 import aggregate_stats
 import common
+import compute_acc_total_efficiency
+import compute_num_coincidences
 import compute_singles
 import create_accidentals
 import create_accidentals_adtime
 import create_singles_adtime
 import first_pass_adtime
+import fit_delayed_adtime
 import job_producer
 import process_adtime
 import subtract_accidentals
@@ -670,14 +673,84 @@ def run_hadd_sub_files(site, processed_output_path):
     input_template = os.path.join(path_prefix, 'sub_{label}_ad{ad}/sub_ad{ad}_?????.root')
     output_template = os.path.join(path_prefix, 'sub_{label}_ad{ad}/sub_ad{ad}.root')
     ads = common.dets_for(site)
+    num_cores = str(min(os.cpu_count(), 10))
     for ad in ads:
         for label in ['nominal', 'using_adtime']:
             input_glob = input_template.format(ad=ad, label=label)
             infiles = glob.glob(input_glob)
             outfile = output_template.format(ad=ad, label=label)
-            command = ['hadd', '-f', '-v', '0', '-j', '10', outfile] + infiles
+            command = ['hadd', '-f', '-v', '0', '-j', num_cores, outfile] + infiles
             subprocess.run(command, check=True)
     return
+
+def run_compute_num_coincidences(processed_output_path, database):
+    """Count the number of coincidences for each run.
+
+    Must be run after the delayed energy fits.
+    """
+    infile_template = os.path.join(
+        processed_output_path,
+        'EH{site}',
+        'hadded_ad{ad}',
+        'out_ad{ad}_{run}.root',
+    )
+    compute_num_coincidences.main(database, database, infile_template, True)
+    return
+
+
+def run_compute_total_acc_efficiency(processed_output_path, database):
+    """Compute the accidental sample efficiency."""
+    logging.info('beginning nominal acc efficiency')
+    infile_template = os.path.join(
+        processed_output_path,
+        'EH{site}',
+        'acc_ad{ad}',
+        'acc_ad{ad}_{run}.root',
+    )
+    compute_acc_total_efficiency.main(
+        database,
+        database,
+        infile_template,
+        'nominal',
+        True,
+    )
+    logging.info('beginning adtime acc efficiency')
+    infile_template = os.path.join(
+        processed_output_path,
+        'EH{site}',
+        'acc_using_adtime_ad{ad}',
+        'acc_ad{ad}_{run}.root',
+    )
+    compute_acc_total_efficiency.main(
+        database,
+        database,
+        infile_template,
+        'adtime',
+        True,
+    )
+    return
+
+
+def run_fit_delayed(site, ad, processed_output_path, database):
+    """Fit the delayed energy spectrum and extract the parameters."""
+    infile = os.path.join(
+        processed_output_path,
+        f'EH{site}',
+        f'sub_nominal_ad{ad}',
+        f'sub_ad{ad}.root',
+    )
+    outfile = f'fit_nominal_eh{site}_ad{ad}.pdf'
+    fit_delayed_adtime.main(infile, outfile, site, ad, 'nominal', database)
+    infile = os.path.join(
+        processed_output_path,
+        f'EH{site}',
+        f'sub_using_adtime_ad{ad}',
+        f'sub_ad{ad}.root',
+    )
+    outfile = f'fit_adtime_eh{site}_ad{ad}.pdf'
+    fit_delayed_adtime.main(infile, outfile, site, ad, 'adtime', database)
+    return
+
 
 def _tasks_for_whole_run(
     run,

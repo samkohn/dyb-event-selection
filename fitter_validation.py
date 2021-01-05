@@ -300,17 +300,19 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
             frozen_params.extend(list(range(2, n_total_params)))
         else:
             index_map = starting_params.index_map()
-            if 'bg' not in pulls:
-                bg_slice = index_map['bg']
-                indices = list(range(bg_slice.start, bg_slice.stop))
-                frozen_params.extend(indices)
-            if 'near-stat' not in pulls:
-                near_slice = index_map['near_stat']
-                indices = list(range(near_slice.start, near_slice.stop))
-                frozen_params.extend(indices)
-            elif near_ads is None or len(near_ads) == 4:
-                pass
-            else:
+            def freeze(name):
+                pull_slice = index_map[name]
+                if isinstance(pull_slice, slice):  # range of values
+                    indices = list(range(pull_slice.start, pull_slice.stop))
+                    frozen_params.extend(indices)
+                elif isinstance(pull_slice, int):  # just a single value
+                    frozen_params.append(pull_slice)
+                else:
+                    raise ValueError(f"Can't parse starting_params.index_map()[{name!r}]")
+            for pull_name in pull_choices:
+                if pull_name not in pulls:
+                    freeze(pull_name)
+            if 'near-stat' in pulls and near_ads is not None and len(near_ads) != 4:
                 # Ensure that ADs not being counted are frozen out.
                 # Normally I don't care but there are so many pulls that it
                 # slows down the fitter.
@@ -324,18 +326,6 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
                         first_for_ad = first + i * n_bins
                         last_for_ad = first + (i + 1) * n_bins
                         frozen_params.extend(list(range(first_for_ad, last_for_ad)))
-            if 'reactor' not in pulls:
-                reactor_slice = index_map['reactor']
-                indices = list(range(reactor_slice.start, reactor_slice.stop))
-                frozen_params.extend(indices)
-            if 'eff' not in pulls:
-                eff_slice = index_map['efficiency']
-                indices = list(range(eff_slice.start, eff_slice.stop))
-                frozen_params.extend(indices)
-            if 'rel-escale' not in pulls:
-                escale_slice = index_map['rel_escale']
-                indices = list(range(escale_slice.start, escale_slice.stop))
-                frozen_params.extend(indices)
 
         # Compute fit
         fit_params = fit.fit_lsq_frozen(starting_params, constants, frozen_params,

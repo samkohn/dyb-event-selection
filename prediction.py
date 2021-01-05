@@ -28,8 +28,9 @@ no_osc_params = InputOscParams(0, 0, True, 0)
 near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
+sites = [1, 2, 3]
 
-def ad_dict(initial_value, halls='all'):
+def ad_dict(initial_value, halls='all', factory=False):
     if halls == 'all':
         ads = all_ads
     elif halls == 'near':
@@ -38,10 +39,18 @@ def ad_dict(initial_value, halls='all'):
         ads = far_ads
     else:
         raise ValueError(f'Invalid halls: {halls} (must be "all", "near", or "far")')
-    return dict(zip(ads, [initial_value]*len(ads)))
+    if factory:
+        val_array = [initial_value() for _ in ads]
+    else:
+        val_array = [initial_value for _ in ads]
+    return dict(zip(ads, val_array))
 
 def core_dict(initial_value):
     return dict(zip(range(1, 7), [initial_value] * 6))
+
+def site_dict(initial_value):
+    val_array = [initial_value] * len(sites)
+    return dict(zip(sites, val_array))
 
 @dataclass
 class FitConstants:
@@ -50,6 +59,7 @@ class FitConstants:
     reco_bins_response: np.array
     observed_candidates: dict
     nominal_bgs: dict  # keys = different types of bg, values = dict by AD/Hall
+    bg_errors: dict  # keys = different types of bg, values = dict by AD/Hall
     reco_bins: np.array
     total_emitted_by_AD: dict
     total_emitted_by_week_AD: dict
@@ -88,25 +98,34 @@ class FitParams:
     """
     theta13: float
     m2_ee: float
-    pull_bg: dict = dc_field(default_factory=lambda: ad_dict(0))
-    pull_near_stat: dict = dc_field(default_factory=lambda: ad_dict(0, halls='near'))
     pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))
     pull_efficiency: dict = dc_field(default_factory=lambda: ad_dict(0))
     pull_rel_escale: dict = dc_field(default_factory=lambda: ad_dict(0))
+    pull_accidental: dict = dc_field(default_factory=lambda: ad_dict(0))
+    pull_li9: dict = dc_field(default_factory=lambda: site_dict(0))
+    pull_fast_neutron: dict = dc_field(default_factory=lambda: site_dict(0))
+    pull_amc: float = 0
+    pull_near_stat: dict = dc_field(
+        # initialize an ad_dict with independent numpy arrays
+        default_factory=lambda: ad_dict(lambda: np.zeros(37), halls='near', factory=True)
+    )
 
     @staticmethod
     def index_map():
         to_return = {}
         to_return['theta13'] = 0
         to_return['m2_ee'] = 1
-        to_return['bg'] = slice(2, 10)
+        to_return['reactor'] = slice(2, 8)
+        to_return['efficiency'] = slice(8, 16)
+        to_return['rel-escale'] = slice(16, 24)
+        to_return['accidental'] = slice(24, 32)
+        to_return['li9'] = slice(32, 35)
+        to_return['fast-neutron'] = slice(35, 38)
+        to_return['amc'] = 38
         n_bins = 37  # TODO hard-coded
         n_near_ads = 4
         num_near_stat = n_bins * n_near_ads
-        to_return['near_stat'] = slice(10, 10 + num_near_stat)
-        to_return['reactor'] = slice(10 + num_near_stat, 16 + num_near_stat)
-        to_return['efficiency'] = slice(16 + num_near_stat, 24 + num_near_stat)
-        to_return['rel_escale'] = slice(24 + num_near_stat, 32 + num_near_stat)
+        to_return['near-stat'] = slice(39, 39 + num_near_stat)
         return to_return
 
     @classmethod
@@ -114,21 +133,6 @@ class FitParams:
         indexes = cls.index_map()
         theta13 = in_list[indexes['theta13']]
         m2_ee = in_list[indexes['m2_ee']]
-        # Background pull parameters
-        pull_bg = {}
-        for pull, halldet in zip(in_list[indexes['bg']], all_ads):
-            pull_bg[halldet] = pull
-        # Near statistics pull parameters
-        near_stat_slice = indexes['near_stat']
-        first_entry = near_stat_slice.start
-        n_near_pulls = near_stat_slice.stop - first_entry
-        n_bins = n_near_pulls // 4
-        pull_near_stat = {}
-        last_entry = first_entry + n_bins
-        for halldet in near_ads:
-            pull_near_stat[halldet] = np.array(in_list[first_entry:last_entry])
-            first_entry += n_bins
-            last_entry += n_bins
         # Reactor pull parameters
         pull_reactor = {}
         for i, pull in enumerate(in_list[indexes['reactor']]):
@@ -139,27 +143,73 @@ class FitParams:
             pull_efficiency[halldet] = pull
         # Relative energy scale pull parameters
         pull_rel_escale = {}
-        for pull, halldet in zip(in_list[indexes['rel_escale']], all_ads):
+        for pull, halldet in zip(in_list[indexes['rel-escale']], all_ads):
             pull_rel_escale[halldet] = pull
+        # Background pull parameters
+        pull_acc = {}
+        for pull, halldet in zip(in_list[indexes['accidental']], all_ads):
+            pull_acc[halldet] = pull
+        pull_li9 = {}
+        for pull, site in zip(in_list[indexes['li9']], sites):
+            pull_li9[site] = pull
+        pull_fastn = {}
+        for pull, site in zip(in_list[indexes['fast-neutron']], sites):
+            pull_fastn[site] = pull
+        pull_amc = in_list[indexes['amc']]
+        # Near statistics pull parameters
+        near_stat_slice = indexes['near-stat']
+        first_entry = near_stat_slice.start
+        n_near_pulls = near_stat_slice.stop - first_entry
+        n_bins = n_near_pulls // 4
+        pull_near_stat = {}
+        last_entry = first_entry + n_bins
+        for halldet in near_ads:
+            pull_near_stat[halldet] = np.array(in_list[first_entry:last_entry])
+            first_entry += n_bins
+            last_entry += n_bins
         return cls(
             theta13,
             m2_ee,
-            pull_bg,
-            pull_near_stat,
             pull_reactor,
             pull_efficiency,
             pull_rel_escale,
+            pull_acc,
+            pull_li9,
+            pull_fastn,
+            pull_amc,
+            pull_near_stat,
         )
 
     def to_list(self):
         return (
             [self.theta13, self.m2_ee]
-            + [self.pull_bg[halldet] for halldet in all_ads]
-            + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
             + [self.pull_reactor[core] for core in range(1, 7)]
             + [self.pull_efficiency[halldet] for halldet in all_ads]
             + [self.pull_rel_escale[halldet] for halldet in all_ads]
+            + [self.pull_accidental[halldet] for halldet in all_ads]
+            + [self.pull_li9[site] for site in sites]
+            + [self.pull_fast_neutron[site] for site in sites]
+            + [self.pull_amc]
+            + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
         )
+
+    def pull_bg(self, name, all=False):
+        """Lookup the corresponding pull param dict using a string.
+
+        If all is True, then name is ignored and a dict is returned
+        that contains all background types.
+        """
+        bg_dict = {
+            'accidental': self.pull_accidental,
+            'li9': self.pull_li9,
+            'fast-neutron': self.pull_fast_neutron,
+            'amc': self.pull_amc,
+        }
+        if all:
+            return bg_dict
+        else:
+            return bg_dict[name]
+
 
 @dataclass
 class Config:
@@ -168,6 +218,7 @@ class Config:
     backgrounds: Any
     backgrounds_source: str
     background_types: list
+    background_errors: list
     mult_eff: Any
     muon_eff: Any
     masses: Any
@@ -291,16 +342,23 @@ def load_constants(config_file):
     backgrounds_source = config.backgrounds_source
     bg_types = config.background_types
     if config.backgrounds is True:
-        nominal_bgs = backgrounds_per_AD(database, backgrounds_source, types=bg_types)
+        nominal_bgs, bg_errors = backgrounds_per_AD(database, backgrounds_source, types=bg_types)
     elif config.backgrounds is False:
-        nominal_bgs = backgrounds_per_AD(None, None, return_zero=True, types=bg_types)
+        nominal_bgs, bg_errors = backgrounds_per_AD(None, None, return_zero=True, types=bg_types)
     elif isinstance(config.backgrounds, list):
+        # List of lists to get each AD's spectrum
+        # List of floats to get each AD's absolute error (then divide by sum(count) for
+        # relative)
         bg_arrays = [np.array(bg) for bg in config.backgrounds]
-        nominal_bgs = backgrounds_per_AD(None, None, return_zero=True, types=bg_types[0])
+        bg_errors_input = [
+            err / sum(count) for err, count in zip(config.background_errors, bg_arrays)
+        ]
+        nominal_bgs, bg_errors = backgrounds_per_AD(None, None, return_zero=True, types=bg_types[0])
         # Assign supplied backgrounds to be the first type given in background_types
         nominal_bgs[bg_types[0]] = dict(zip(all_ads, bg_arrays))
+        bg_errors[bg_types[0]] = dict(zip(all_ads, bg_errors_input))
     elif isinstance(config.backgrounds, str):
-        nominal_bgs = backgrounds_per_AD(
+        nominal_bgs, bg_errors = backgrounds_per_AD(
             config.backgrounds,
             backgrounds_source,
             types=bg_types,
@@ -344,6 +402,7 @@ def load_constants(config_file):
             reco_bins_response,
             num_coincidences,
             nominal_bgs,
+            bg_errors,
             reco_bins,
             total_emitted_by_AD,
             #total_emitted_by_week_AD,
@@ -804,7 +863,7 @@ def num_coincidences_per_AD(database, source, version):
     return results, bins
 
 
-def efficiency_weighted_counts(constants, fit_params):
+def efficiency_weighted_counts(constants, fit_params, halls='all'):
     """Adjust the observed counts by dividing by efficiencies.
 
     This includes the muon and multiplicity efficiencies,
@@ -815,7 +874,7 @@ def efficiency_weighted_counts(constants, fit_params):
 
     Returns a dict mapping (hall, det) to a 1D array of N_coincidences.
     """
-    num_coincidences = num_bg_subtracted_IBDs_per_AD(constants, fit_params)
+    num_coincidences = num_bg_subtracted_IBDs_per_AD(constants, fit_params, halls=halls)
     mult_effs = constants.multiplicity_eff
     muon_effs = constants.muon_eff
     mass_effs = constants.masses
@@ -847,9 +906,13 @@ def efficiency_weighted_counts(constants, fit_params):
 
 
 def backgrounds_per_AD(database, source, return_zero=False, types=None):
-    """Retrieve the number of predicted background events in each AD.
+    """Retrieve the number of predicted background events and rate errors in each AD.
 
-    Returns a dict of (bg_name -> dict of (hall, det) -> 1D array).
+    Returns a tuple of (spectra, errors).
+    Spectra is a dict of (bg_name -> dict of (hall, det) -> 1D array).
+    Errors is a dict of (bg_name -> dict of (hall, det) ->
+    *relative* error on the normalization of the corresponding
+    spectrum) (i.e. 0.1 = 10%).
     This method assumes that all ADs and background sources
     have the same binning.
 
@@ -860,7 +923,10 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
     - Fast-neutron
     - AmC
 
-    To get a dict with the correct format but 0 background, set return_zero=True.
+    To get a dict with the correct format but 0 background
+    and a nominal error of 1, set return_zero=True.
+    The error is set to 1 so that in the chi-square expression
+    we can divide by the error without dividing by zero.
 
     The types parameter, if provided, limits the returned dict to only
     certain types of background. The list can contain any of:
@@ -874,19 +940,32 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
     """
     if return_zero:
         if types is None:
-            return {
-                'accidental': ad_dict(0),
-                'li9': ad_dict(0),
-                'fast-neutron': ad_dict(0),
-                'amc': ad_dict(0),
-            }
+            return (
+                {
+                    'accidental': ad_dict(0),
+                    'li9': ad_dict(0),
+                    'fast-neutron': ad_dict(0),
+                    'amc': ad_dict(0),
+                },
+                {
+                    'accidental': 1,
+                    'li9': 1,
+                    'fast-neutron': 1,
+                    'amc': 1,
+                },
+            )
         else:
-            return {bg: ad_dict(0) for bg in types}
+            return (
+                {bg: ad_dict(0) for bg in types},
+                {bg: 1 for bg in types},
+            )
     result = {}
+    errors = {}
     with common.get_db(database) as conn:
         cursor = conn.cursor()
         if 'accidental' in types:
             acc_data = {}
+            acc_errors = {}
             for hall, det in all_ads:
                 cursor.execute('''
                     SELECT
@@ -904,7 +983,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                 acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
                 cursor.execute('''
                 SELECT
-                    Count
+                    Count, Error
                 FROM
                     bg_counts
                 WHERE
@@ -914,8 +993,11 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND DetNo = ?
                 ''', (source, hall, det)
                 )
-                acc_data[hall, det] *= cursor.fetchone()[0]
+                count, error = cursor.fetchone()
+                acc_data[hall, det] *= count
+                acc_errors[hall, det] = error/count
             result['accidental'] = acc_data
+            errors['accidental'] = acc_errors
         if 'li9' in types:
             cursor.execute('''
                 SELECT
@@ -930,10 +1012,11 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
             )
             li9_spectrum = np.array(cursor.fetchall()).reshape(-1)
             li9_data = {}
+            li9_errors = {}
             for hall, det in all_ads:
                 cursor.execute('''
                 SELECT
-                    Count
+                    Count, Error
                 FROM
                     bg_counts
                 WHERE
@@ -943,15 +1026,78 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND DetNo = ?
                 ''', (source, hall, det)
                 )
-                li9_data[hall, det] = cursor.fetchone()[0] * li9_spectrum
+                count, error = cursor.fetchone()
+                li9_data[hall, det] = count * li9_spectrum
+                li9_errors[hall, det] = error/count
             result['li9'] = li9_data
+            errors['li9'] = li9_errors
     if 'fast-neutron' in types:
         result['fast-neutron'] = ad_dict(0)
+        errors['fast-neutron'] = ad_dict(1)
     if 'amc' in types:
         result['amc'] = ad_dict(0)
-    return result
+        errors['amc'] = ad_dict(1)
+    return (result, errors)
 
-def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
+def bg_with_pulls(constants, fit_params, halls='all'):
+    """Apply the pull parameters to each background.
+
+    This is non-trivial because some pull parameters are per-AD
+    but others are per-site or totally correlated across all ADs.
+
+    The halls parameter could also be 'near' or 'far'.
+    """
+    if halls == 'all':
+        ads = all_ads
+    elif halls == 'near':
+        ads = near_ads
+    elif halls == 'far':
+        ads = far_ads
+    nominal_bg = constants.nominal_bgs
+    pulled_bg = {}
+    if 'accidental' in nominal_bg:
+        # Uncorrelated between ADs
+        bg_specs = nominal_bg['accidental']
+        bg_pulls = fit_params.pull_accidental
+        bg_dict = {}
+        for halldet in ads:
+            bg_spec = bg_specs[halldet]
+            pull = bg_pulls[halldet]
+            bg_dict[halldet] = bg_spec * (1 + pull)
+        pulled_bg['accidental'] = bg_dict
+    if 'li9' in nominal_bg:
+        # Correlated within site, uncorrelated between sites
+        bg_specs = nominal_bg['li9']
+        bg_pulls = fit_params.pull_li9
+        bg_dict = {}
+        for (hall, det) in ads:
+            bg_spec = bg_specs[hall, det]
+            pull = bg_pulls[hall]
+            bg_dict[hall, det] = bg_spec * (1 + pull)
+        pulled_bg['li9'] = bg_dict
+    if 'fast-neutron' in nominal_bg:
+        # Correlated within site, uncorrelated between sites
+        bg_specs = nominal_bg['fast-neutron']
+        bg_pulls = fit_params.pull_fast_neutron
+        bg_dict = {}
+        for (hall, det) in ads:
+            bg_spec = bg_specs[hall, det]
+            pull = bg_pulls[hall]
+            bg_dict[hall, det] = bg_spec * (1 + pull)
+        pulled_bg['fast-neutron'] = bg_dict
+    if 'amc' in nominal_bg:
+        # Correlated among all ADs and sites
+        bg_specs = nominal_bg['amc']
+        pull = fit_params.pull_amc
+        bg_dict = {}
+        for halldet in ads:
+            bg_spec = bg_specs[halldet]
+            bg_dict[halldet] = bg_spec * (1 + pull)
+        pulled_bg['amc'] = bg_dict
+    return pulled_bg
+
+
+def num_bg_subtracted_IBDs_per_AD(constants, fit_params, halls='all'):
     """Compute the bg-subtracted IBD spectra for each AD.
 
     Returns a dict mapping (hall, det) to a 1D array of IBD counts.
@@ -966,11 +1112,11 @@ def num_bg_subtracted_IBDs_per_AD(constants, fit_params):
     """
     num_candidates = constants.observed_candidates
     predicted_bg = constants.nominal_bgs
-    total_bg = ad_dict(0)
-    for bg_type, bg_dict in predicted_bg.items():
-        for (hall, det), bg_spec in bg_dict.items():
-            pull = fit_params.pull_bg[hall, det]
-            total_bg[hall, det] += bg_spec * (1 + pull)
+    pulled_bg = bg_with_pulls(constants, fit_params, halls=halls)
+    total_bg = ad_dict(0, halls=halls)
+    for bg_type, bg_dict in pulled_bg.items():
+        for halldet, bg_spec in bg_dict.items():
+            total_bg[halldet] += bg_spec
     results = {}
     for halldet, bg in total_bg.items():
         results[halldet] = num_candidates[halldet] - bg
@@ -1076,7 +1222,7 @@ def true_energy_of_near_IBDs(constants, fit_params):
 
     """
     true_energies = {}
-    bg_subtracted = efficiency_weighted_counts(constants, fit_params)
+    bg_subtracted = efficiency_weighted_counts(constants, fit_params, halls='near')
     response_pdfs = true_to_reco_near_matrix_with_osc(constants, fit_params)
     for (hall, det), response_pdf in response_pdfs.items():
         true_energies[hall, det] = (
@@ -1196,12 +1342,11 @@ def predict_ad_to_ad_obs(constants, fit_params):
         results[far_halldet, near_halldet] = (
                 result * combined_eff
         )
-    predicted_bg = constants.nominal_bgs
-    total_bg = ad_dict(0)
-    for bg_type, bg_dict in predicted_bg.items():
-        for (hall, det), bg_spec in bg_dict.items():
-            pull = fit_params.pull_bg[hall, det]
-            total_bg[hall, det] += bg_spec * (1 + pull)
+    pulled_bg = bg_with_pulls(constants, fit_params, halls='far')
+    total_bg = ad_dict(0, halls='far')
+    for bg_type, bg_dict in pulled_bg.items():
+        for halldet, bg_spec in bg_dict.items():
+            total_bg[halldet] += bg_spec
     for (far_hall, far_det), near_halldet in f_ki.keys():
         bg_for_far = total_bg[far_hall, far_det]
         results[(far_hall, far_det), near_halldet] += bg_for_far

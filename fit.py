@@ -73,20 +73,37 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         term_index += len(stat_term)
 
     # Pull terms
-    acc_uncertainties = {
-        (1, 1): 0.00153785488958991,
-        (1, 2): 0.00153149553868691,
-        (2, 1): 0.00177087097940007,
-        (2, 2): 0.00168488976519089,
-        (3, 1): 0.0043956043956044,
-        (3, 2): 0.00424966799468792,
-        (3, 3): 0.00424164524421594,
-        (3, 4): 0.00417661097852029,
-    }
-    for halldet, pull in fit_params.pull_bg.items():
-        numerator = pull*pull
-        #denominator = 0.010*0.010  # TODO relative error on accidentals
-        denominator = acc_uncertainties[halldet]**2
+    if 'accidental' in constants.nominal_bgs:
+        acc_errors = constants.bg_errors['accidental']
+        for halldet, pull in fit_params.pull_accidental.items():
+            numerator = pull*pull
+            denominator = acc_errors[halldet]**2
+            chi_square += numerator/denominator
+            return_array_values[term_index] = numerator/denominator
+            term_index += 1
+    if 'li9' in constants.nominal_bgs:
+        li9_errors = constants.bg_errors['li9']
+        for site, pull in fit_params.pull_li9.items():
+            numerator = pull*pull
+            # relative errors within site are the same so just pick EHX-AD1
+            denominator = li9_errors[(site, 1)]**2
+            chi_square += numerator/denominator
+            return_array_values[term_index] = numerator/denominator
+            term_index += 1
+    if 'fast-neutron' in constants.nominal_bgs:
+        fast_neutron_errors = constants.bg_errors['fast-neutron']
+        for site, pull in fit_params.pull_fast_neutron.items():
+            numerator = pull*pull
+            # relative errors within site are the same so just pick EHX-AD1
+            denominator = fast_neutron_errors[(site, 1)]**2
+            chi_square += numerator/denominator
+            return_array_values[term_index] = numerator/denominator
+            term_index += 1
+    if 'amc' in constants.nominal_bgs:
+        # Only 1 AmC pull parameter
+        amc_errors = constants.bg_errors['amc']
+        numerator = fit_params.pull_amc**2
+        denominator = amc_errors[1, 1]**2
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1
@@ -331,6 +348,16 @@ def save_result(database, source, index, theta13_best, theta13_low_err, theta13_
         VALUES (?, ?, ?, ?, ?, ?, ?)''',
         (source, index, sin2_best, chi_square, 3, sin2_up, sin2_low))
 
+pull_choices = (
+    'reactor',
+    'efficiency',
+    'rel-escale',
+    'accidental',
+    'li9',
+    'fast-neutron',
+    'amc',
+    'near-stat',
+)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
@@ -343,8 +370,9 @@ if __name__ == "__main__":
     parser.add_argument("--dm2ee", type=float)
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
-    parser.add_argument("--pulls", nargs='*', choices=('bg', 'near-stat', 'reactor',
-        'eff', 'rel-escale', 'all'), default=[])
+    parser.add_argument(
+        "--pulls", nargs='*', choices=pull_choices+('all',), default=[]
+    )
     args = parser.parse_args()
     rate_only = not args.shape
     pulls = args.pulls
@@ -357,13 +385,6 @@ if __name__ == "__main__":
     starting_params = pred.FitParams(
         0.15,
         starting_dm2,
-        pred.ad_dict(0),
-        pred.ad_dict(
-            np.zeros_like(constants.observed_candidates[1, 1]),
-            halls='near'
-        ),
-        pred.core_dict(0),
-        pred.ad_dict(0),
     )
     n_total_params = len(starting_params.to_list())
     # decide whether to freeze any of the pull parameters
@@ -378,17 +399,19 @@ if __name__ == "__main__":
         frozen_params.extend(list(range(2, n_total_params)))
     else:
         index_map = starting_params.index_map()
-        if 'bg' not in pulls:
-            bg_slice = index_map['bg']
-            indices = list(range(bg_slice.start, bg_slice.stop))
-            frozen_params.extend(indices)
-        if 'near-stat' not in pulls:
-            near_slice = index_map['near_stat']
-            indices = list(range(near_slice.start, near_slice.stop))
-            frozen_params.extend(indices)
-        elif near_ads is None or len(near_ads) == 4:
-            pass
-        else:
+        def freeze(name):
+            pull_slice = index_map[name]
+            if isinstance(pull_slice, slice):  # range of values
+                indices = list(range(pull_slice.start, pull_slice.stop))
+                frozen_params.extend(indices)
+            elif isinstance(pull_slice, int):  # just a single value
+                frozen_params.append(pull_slice)
+            else:
+                raise ValueError(f"Can't parse starting_params.index_map()[{name!r}]")
+        for pull_name in pull_choices:
+            if pull_name not in pulls:
+                freeze(pull_name)
+        if 'near-stat' in pulls and near_ads is not None and len(near_ads) != 4:
             # Ensure that ADs not being counted are frozen out.
             # Normally I don't care but there are so many pulls that it
             # slows down the fitter.
@@ -402,18 +425,6 @@ if __name__ == "__main__":
                     first_for_ad = first + i * n_bins
                     last_for_ad = first + (i + 1) * n_bins
                     frozen_params.extend(list(range(first_for_ad, last_for_ad)))
-        if 'reactor' not in pulls:
-            reactor_slice = index_map['reactor']
-            indices = list(range(reactor_slice.start, reactor_slice.stop))
-            frozen_params.extend(indices)
-        if 'eff' not in pulls:
-            eff_slice = index_map['efficiency']
-            indices = list(range(eff_slice.start, eff_slice.stop))
-            frozen_params.extend(indices)
-        if 'rel-escale' not in pulls:
-            escale_slice = index_map['rel_escale']
-            indices = list(range(escale_slice.start, escale_slice.stop))
-            frozen_params.extend(indices)
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
     if args.debug:

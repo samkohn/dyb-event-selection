@@ -45,7 +45,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         fit_config_template, config_template, find_errors, test_mode,
         gen_mc_only, dump_mc, rate_only, avg_near, pulls, stage
 ):
-    num_multiprocessing = 63
+    num_multiprocessing = 64
     toy_out_location = os.path.abspath(toy_out_location)
     if test_mode:
         sin2_values = np.array([0.065])
@@ -288,13 +288,6 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
         starting_params = pred.FitParams(
             0.15,
             starting_dm2,
-            pred.ad_dict(0),
-            pred.ad_dict(
-                np.zeros_like(constants.observed_candidates[1, 1]),
-                halls='near'
-            ),
-            pred.core_dict(0),
-            pred.ad_dict(0),
         )
         near_ads = None
         n_total_params = len(starting_params.to_list())
@@ -366,6 +359,16 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
             chi2_min, chi2_gof, rate_only, avg_near)
 
 
+pull_choices = (
+    'reactor',
+    'efficiency',
+    'rel-escale',
+    'accidental',
+    'li9',
+    'fast-neutron',
+    'amc',
+    'near-stat',
+)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('database')
@@ -385,8 +388,9 @@ if __name__ == "__main__":
     parser.add_argument('--test-mode', action='store_true')
     parser.add_argument('--rate-only', action='store_true')
     parser.add_argument('--avg-near', action='store_true')
-    parser.add_argument('--pulls', nargs='*', choices=('bg', 'near-stat', 'reactor',
-        'eff', 'rel-escale', 'all'), default=[])
+    parser.add_argument(
+        "--pulls", nargs='*', choices=pull_choices+('all',), default=[]
+    )
     parser.add_argument('--stage', choices=('6ad', '7ad', '8ad'), default='8ad')
     args = parser.parse_args()
     source_categories = {
@@ -400,8 +404,8 @@ if __name__ == "__main__":
         8: 'reactor power default nGd binning',
         9: 'no fluctuations w acc bg default nGd binning',
         10: 'acc bg fluctuations default nGd binning',
-        11: 'no fluctuations w li9 bg default nGd binning'
-        12: 'li9 bg fluctuations default nGd binning'
+        11: 'no fluctuations w li9 bg default nGd binning',
+        12: 'li9 bg fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
     main(

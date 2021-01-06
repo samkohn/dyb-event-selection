@@ -31,10 +31,9 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
             predicted[key] = np.sum(val, keepdims=True)
         num_bins = 1
         num_shape_bins = 37  # TODO
-        num_pulls = 30 + num_shape_bins * 4
     else:
         num_bins = 37
-        num_pulls = 30 + num_bins * 4  # n_bins * n_ads = n_near_stat_pulls
+    num_pulls = fit_params.num_pulls
     if debug:
         pprint(observed)
         pprint(predicted)

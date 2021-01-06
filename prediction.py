@@ -10,7 +10,7 @@ import json
 import logging
 import pdb
 import sqlite3
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -96,6 +96,7 @@ class FitParams:
         This parameter impacts both the shape of the prompt spectrum
         and the efficiency (via prompt energy cut).
     """
+    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 4 * 37
     theta13: float
     m2_ee: float
     pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))
@@ -109,7 +110,6 @@ class FitParams:
         # initialize an ad_dict with independent numpy arrays
         default_factory=lambda: ad_dict(lambda: np.zeros(37), halls='near', factory=True)
     )
-
     @staticmethod
     def index_map():
         to_return = {}

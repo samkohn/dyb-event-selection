@@ -94,6 +94,21 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'all bg fluctuations default nGd binning':
             'LBNL ToyMC 18 all bg fluctuations, no IBD stat fluctuations,'
             ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'efficiency default nGd binning':
+            'LBNL ToyMC 19 no stat fluctuations, fluctuate detection efficiency,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'no fluctuations w fastn bg default nGd binning':
+            'LBNL ToyMC 20 no stat fluctuations, w/ fastn background,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee}',
+        'fastn bg fluctuations default nGd binning':
+            'LBNL ToyMC 21 fastn bg fluctuations, no IBD stat fluctuations,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'no fluctuations w amc bg default nGd binning':
+            'LBNL ToyMC 22 no stat fluctuations, w/ amc background,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee}',
+        'amc bg fluctuations default nGd binning':
+            'LBNL ToyMC 23 amc bg fluctuations, no IBD stat fluctuations,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
     }
     toymc_out_numbers = {
         'no fluctuations default nGd binning': '02',
@@ -110,6 +125,11 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'li9 bg fluctuations default nGd binning': '16',
         'no fluctuations w all all bg default nGd binning': '17',
         'all bg fluctuations default nGd binning': '18',
+        'efficiency default nGd binning': '19',
+        'no fluctuations w fastn bg default nGd binning': '20',
+        'fastn bg fluctuations default nGd binning': '21',
+        'no fluctuations w amc bg default nGd binning': '22',
+        'amc bg fluctuations default nGd binning': '23'
     }
     mc_configurations = {
         # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
@@ -127,6 +147,11 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'li9 bg fluctuations default nGd binning': (False, False, True),
         'no fluctuations w all all bg default nGd binning': (False, False, True),
         'all bg fluctuations default nGd binning': (False, False, True),
+        'efficiency default nGd binning': (False, False, True),
+        'no fluctuations w fastn bg default nGd binning': (False, False, False),
+        'fastn bg fluctuations default nGd binning': (False, False, True),
+        'no fluctuations w amc bg default nGd binning': (False, False, False),
+        'amc bg fluctuations default nGd binning': (False, False, True),
     }
     mc_configuration = mc_configurations[source_category]
     if mc_configuration == (False, False, True):
@@ -154,8 +179,9 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
     else:
         toy_config_template = ''
 
-    NO_FLUCTUATIONS = ('02', '13', '15', '17')
-    WITH_FLUCTUATIONS = ('05', '07', '08', '10', '11', '12', '14', '16', '18')
+    NO_FLUCTUATIONS = ('02', '13', '15', '17', '20', '22')
+    WITH_FLUCTUATIONS = ('05', '07', '08', '10', '11', '12', '14', '16', '18', '19', '21',
+            '23')
     # Get a fresh generator when needed
     grid_values = lambda: itertools.product(sin2_values, dm2ee_values)
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
@@ -392,7 +418,9 @@ if __name__ == "__main__":
             help='1: no fluctuations, 2: full fluctuations, 3: far stat only, 4: full stat'
             ', 5: near stat only, 6: rel escale, 7: core spectra, 8: reactor power'
             ', 9: no flucts w accs, 10: acc flucts, 11: no flucts w li9'
-            ', 12: li9 flucts, 13: no flucts w all bg, 14: all bg flucts')
+            ', 12: li9 flucts, 13: no flucts w all bg, 14: all bg flucts'
+            ', 15: detection eff, 16: no flucts w fastn, 17: fastn flucts'
+            ', 18: no flucts w amc, 19: amc flucts')
     parser.add_argument('--fit-config')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
@@ -419,6 +447,11 @@ if __name__ == "__main__":
         12: 'li9 bg fluctuations default nGd binning',
         13: 'no fluctuations w all all bg default nGd binning',
         14: 'all bg fluctuations default nGd binning',
+        15: 'efficiency default nGd binning',
+        16: 'no fluctuations w fastn bg default nGd binning',
+        17: 'fastn bg fluctuations default nGd binning',
+        18: 'no fluctuations w amc bg default nGd binning',
+        19: 'amc bg fluctuations default nGd binning',
     }
     source_category = source_categories[args.source_category]
     main(

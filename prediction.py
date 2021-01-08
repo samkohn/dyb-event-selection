@@ -106,6 +106,7 @@ class FitParams:
     pull_li9: dict = dc_field(default_factory=lambda: site_dict(0))
     pull_fast_neutron: dict = dc_field(default_factory=lambda: site_dict(0))
     pull_amc: float = 0
+    pull_alpha_n: dict = dc_field(default_factory=lambda: ad_dict(0))
     pull_near_stat: dict = dc_field(
         # initialize an ad_dict with independent numpy arrays
         default_factory=lambda: ad_dict(lambda: np.zeros(37), halls='near', factory=True)
@@ -122,10 +123,11 @@ class FitParams:
         to_return['li9'] = slice(32, 35)
         to_return['fast-neutron'] = slice(35, 38)
         to_return['amc'] = 38
+        to_return['alpha-n'] = slice(39, 47)
         n_bins = 37  # TODO hard-coded
         n_near_ads = 4
         num_near_stat = n_bins * n_near_ads
-        to_return['near-stat'] = slice(39, 39 + num_near_stat)
+        to_return['near-stat'] = slice(47, 47 + num_near_stat)
         return to_return
 
     @classmethod
@@ -156,6 +158,9 @@ class FitParams:
         for pull, site in zip(in_list[indexes['fast-neutron']], sites):
             pull_fastn[site] = pull
         pull_amc = in_list[indexes['amc']]
+        pull_alpha_n = {}
+        for pull, halldet in zip(in_list[indexes['alpha-n']], all_ads):
+            pull_alpha_n[halldet] = pull
         # Near statistics pull parameters
         near_stat_slice = indexes['near-stat']
         first_entry = near_stat_slice.start
@@ -177,6 +182,7 @@ class FitParams:
             pull_li9,
             pull_fastn,
             pull_amc,
+            pull_alpha_n,
             pull_near_stat,
         )
 
@@ -190,6 +196,7 @@ class FitParams:
             + [self.pull_li9[site] for site in sites]
             + [self.pull_fast_neutron[site] for site in sites]
             + [self.pull_amc]
+            + [self.pull_alpha_n[halldet] for halldet in all_ads]
             + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
         )
 
@@ -204,6 +211,7 @@ class FitParams:
             'li9': self.pull_li9,
             'fast-neutron': self.pull_fast_neutron,
             'amc': self.pull_amc,
+            'alpha-n': self.pull_alpha_n,
         }
         if all:
             return bg_dict
@@ -922,6 +930,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
     - Li9
     - Fast-neutron
     - AmC
+    - Alpha-n
 
     To get a dict with the correct format but 0 background
     and a nominal error of 1, set return_zero=True.
@@ -935,6 +944,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
      - "li9"
      - "fast-neutron"
      - "amc"
+     - "alpha-n"
 
      If types is None, then the default of all types is used.
     """
@@ -946,12 +956,14 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     'li9': ad_dict(0),
                     'fast-neutron': ad_dict(0),
                     'amc': ad_dict(0),
+                    'alpha-n': ad_dict(0),
                 },
                 {
                     'accidental': 1,
                     'li9': 1,
                     'fast-neutron': 1,
                     'amc': 1,
+                    'alpha-n': 1,
                 },
             )
         else:
@@ -1031,12 +1043,107 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                 li9_errors[hall, det] = error/count
             result['li9'] = li9_data
             errors['li9'] = li9_errors
-    if 'fast-neutron' in types:
-        result['fast-neutron'] = ad_dict(0)
-        errors['fast-neutron'] = ad_dict(1)
-    if 'amc' in types:
-        result['amc'] = ad_dict(0)
-        errors['amc'] = ad_dict(1)
+        if 'fast-neutron' in types:
+            cursor.execute('''
+                SELECT
+                    Spectrum
+                FROM
+                    fast_neutron_spectrum
+                WHERE
+                    Label = ?
+                ORDER BY BinIndex
+                ''',
+                (source,),
+            )
+            fast_neutron_spectrum = np.array(cursor.fetchall()).reshape(-1)
+            fast_neutron_data = {}
+            fast_neutron_errors = {}
+            for hall, det in all_ads:
+                cursor.execute('''
+                SELECT
+                    Count, Error
+                FROM
+                    bg_counts
+                WHERE
+                    BgName = "fast-neutron"
+                    AND Label = ?
+                    AND Hall = ?
+                    AND DetNo = ?
+                ''', (source, hall, det)
+                )
+                count, error = cursor.fetchone()
+                fast_neutron_data[hall, det] = count * fast_neutron_spectrum
+                fast_neutron_errors[hall, det] = error/count
+            result['fast-neutron'] = fast_neutron_data
+            errors['fast-neutron'] = fast_neutron_errors
+        if 'amc' in types:
+            cursor.execute('''
+                SELECT
+                    Spectrum
+                FROM
+                    amc_spectrum
+                WHERE
+                    Label = ?
+                ORDER BY BinIndex
+                ''',
+                (source,),
+            )
+            amc_spectrum = np.array(cursor.fetchall()).reshape(-1)
+            amc_data = {}
+            amc_errors = {}
+            for hall, det in all_ads:
+                cursor.execute('''
+                SELECT
+                    Count, Error
+                FROM
+                    bg_counts
+                WHERE
+                    BgName = "amc"
+                    AND Label = ?
+                    AND Hall = ?
+                    AND DetNo = ?
+                ''', (source, hall, det)
+                )
+                count, error = cursor.fetchone()
+                amc_data[hall, det] = count * amc_spectrum
+                amc_errors[hall, det] = error/count
+            result['amc'] = amc_data
+            errors['amc'] = amc_errors
+        if 'alpha-n' in types:
+            alpha_n_data = {}
+            alpha_n_errors = {}
+            for hall, det in all_ads:
+                cursor.execute('''
+                    SELECT
+                        Spectrum
+                    FROM
+                        alpha_n_spectrum
+                    WHERE
+                        Label = ?
+                        AND Hall = ?
+                        AND DetNo = ?
+                    ORDER BY BinIndex
+                    ''',
+                    (source, hall, det),
+                )
+                alpha_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
+                cursor.execute('''
+                SELECT
+                    Count, Error
+                FROM
+                    bg_counts
+                WHERE
+                    BgName = "alpha-n"
+                    AND Label = ?
+                    AND Hall = ?
+                    AND DetNo = ?
+                ''', (source, hall, det)
+                )
+                count, error = cursor.fetchone()
+                alpha_n_data[hall, det] *= count
+                alpha_n_errors[hall, det] = error/count
+            result['alpha-n'] = alpha_n_data
+            errors['alpha-n'] = alpha_n_errors
     return (result, errors)
 
 def bg_with_pulls(constants, fit_params, halls='all'):
@@ -1094,6 +1201,16 @@ def bg_with_pulls(constants, fit_params, halls='all'):
             bg_spec = bg_specs[halldet]
             bg_dict[halldet] = bg_spec * (1 + pull)
         pulled_bg['amc'] = bg_dict
+    if 'alpha-n' in nominal_bg:
+        # Uncorrelated between ADs
+        bg_specs = nominal_bg['alpha-n']
+        bg_pulls = fit_params.pull_alpha_n
+        bg_dict = {}
+        for halldet in ads:
+            bg_spec = bg_specs[halldet]
+            pull = bg_pulls[halldet]
+            bg_dict[halldet] = bg_spec * (1 + pull)
+        pulled_bg['alpha-n'] = bg_dict
     return pulled_bg
 
 

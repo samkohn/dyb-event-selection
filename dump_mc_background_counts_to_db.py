@@ -8,6 +8,7 @@ BG_LOOKUP = {
     '13': 'li9',
     '15': 'fast-neutron',
     '17': 'amc',
+    '19': 'alpha-n',
 }
 
 BG_ERROR_LOOKUP = {
@@ -15,6 +16,7 @@ BG_ERROR_LOOKUP = {
     '14': 'li9',
     '16': 'fast-neutron',
     '18': 'amc',
+    '20': 'alpha-n',
 }
 
 def main(infilename, database, label):

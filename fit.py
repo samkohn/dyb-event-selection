@@ -355,6 +355,7 @@ pull_choices = (
     'li9',
     'fast-neutron',
     'amc',
+    'alpha-n',
     'near-stat',
 )
 if __name__ == "__main__":

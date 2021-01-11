@@ -752,6 +752,19 @@ def run_fit_delayed(site, ad, processed_output_path, database):
     return
 
 
+def post_processing(processed_output_path, database):
+    """Run the scripts that rely on all data being processed through many_runs."""
+    sites = (1, 2, 3)
+    for site in sites:
+        dets = common.dets_for(site)
+        run_hadd_sub_files(site, processed_output_path)
+        for det in dets:
+            run_fit_delayed(site, det, processed_output_path, database)
+    run_compute_num_coincidences(processed_output_path, database)
+    run_compute_total_acc_efficiency(processed_output_path, database)
+    return
+
+
 def _tasks_for_whole_run(
     run,
     site,

@@ -108,7 +108,7 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, sin2_2theta13
         '     2'
         ')'
     )
-    selection_string = f'{p_sur_string} * (target == 1)'
+    selection_string = f'{p_sur_string} * (target == 64)'  # nGd
     mc_data.Draw("res_p >> nominal", selection_string, "goff")
     mc_data.Draw(f"res_p * (1 + {rel_uncertainty}) >> escaled_plus", selection_string,
         "goff")
@@ -127,7 +127,7 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, sin2_2theta13
     rows = []
     for i in range(nbins):
         rows.append(
-            (source, site, sin2_2theta13, m2_ee, binning_id, i, plus_coeffs[i], minus_coeffs[i], rel_uncertainty)
+            (source, sin2_2theta13, m2_ee, site, binning_id, i, plus_coeffs[i], minus_coeffs[i], rel_uncertainty)
         )
     if update_db:
         with common.get_db(database) as conn:

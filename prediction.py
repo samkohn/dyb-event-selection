@@ -96,7 +96,7 @@ class FitParams:
         This parameter impacts both the shape of the prompt spectrum
         and the efficiency (via prompt energy cut).
     """
-    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 4 * 37
+    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 4 * 37
     theta13: float
     m2_ee: float
     pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))
@@ -512,12 +512,10 @@ def rel_escale_parameters(database):
 
     Return a dict keyed by hall
     whose values are arrays with rows corresponding to reco bins and columns
-    corresponding to 0: distortion for plus, 1: distortion for minus,
-    2: the energy scale deviation that generated the coefficients.
-    So if column 2 is 0.005 that's +/- 0.5%. And column 0 has the values
-    from multiplying the nominal reco energy by 1.005.
-    And column 1 has the values from multiplying the nominal reco energy
-    by 0.995.
+    corresponding to 0: distortion for plus, 1: distortion for minus.
+    The scale of the distortions is normalized so that the factor
+    (1 + rel_escale_offset * rel_escale_parameters) gives the appropriate
+    correction if rel_escale_offset is e.g. 0.001 for 0.1%.
     """
     result = {}
     halls = [1, 2, 3]
@@ -535,12 +533,15 @@ def rel_escale_parameters(database):
                         BinningId = 0
                     AND
                         Hall = ?
+                    AND
+                        Source LIKE "%nGd%"
                 ORDER BY
                     BinIndex
                 ''',
                 (hall,)
             )
-            result[hall] = np.array(cursor.fetchall())
+            params = np.array(cursor.fetchall())
+            result[hall] = params[:, :2]/params[:, 2:]  # divide by last column
     return result
 
 def reactor_spectrum(database, core):

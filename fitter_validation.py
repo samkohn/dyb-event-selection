@@ -109,6 +109,9 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'amc bg fluctuations default nGd binning':
             'LBNL ToyMC 23 amc bg fluctuations, no IBD stat fluctuations,'
             ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'resolution default nGd binning':
+            'LBNL ToyMC 24 no stat fluctuations, fluctuate energy resolution,'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
     }
     toymc_out_numbers = {
         'no fluctuations default nGd binning': '02',
@@ -129,7 +132,8 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'no fluctuations w fastn bg default nGd binning': '20',
         'fastn bg fluctuations default nGd binning': '21',
         'no fluctuations w amc bg default nGd binning': '22',
-        'amc bg fluctuations default nGd binning': '23'
+        'amc bg fluctuations default nGd binning': '23',
+        'resolution default nGd binning': '24',
     }
     mc_configurations = {
         # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
@@ -152,6 +156,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'fastn bg fluctuations default nGd binning': (False, False, True),
         'no fluctuations w amc bg default nGd binning': (False, False, False),
         'amc bg fluctuations default nGd binning': (False, False, True),
+        'resolution default nGd binning': (False, False, True),
     }
     mc_configuration = mc_configurations[source_category]
     if mc_configuration == (False, False, True):
@@ -181,7 +186,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
 
     NO_FLUCTUATIONS = ('02', '13', '15', '17', '20', '22')
     WITH_FLUCTUATIONS = ('05', '07', '08', '10', '11', '12', '14', '16', '18', '19', '21',
-            '23')
+            '23', '24')
     # Get a fresh generator when needed
     grid_values = lambda: itertools.product(sin2_values, dm2ee_values)
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
@@ -420,7 +425,7 @@ if __name__ == "__main__":
             ', 9: no flucts w accs, 10: acc flucts, 11: no flucts w li9'
             ', 12: li9 flucts, 13: no flucts w all bg, 14: all bg flucts'
             ', 15: detection eff, 16: no flucts w fastn, 17: fastn flucts'
-            ', 18: no flucts w amc, 19: amc flucts')
+            ', 18: no flucts w amc, 19: amc flucts, 20: resolution')
     parser.add_argument('--fit-config')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
@@ -452,6 +457,7 @@ if __name__ == "__main__":
         17: 'fastn bg fluctuations default nGd binning',
         18: 'no fluctuations w amc bg default nGd binning',
         19: 'amc bg fluctuations default nGd binning',
+        20: 'resolution default nGd binning',
     }
     source_category = source_categories[args.source_category]
     main(

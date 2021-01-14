@@ -52,6 +52,60 @@ def site_dict(initial_value):
     val_array = [initial_value] * len(sites)
     return dict(zip(sites, val_array))
 
+class RebinCache:
+    """A cache to save time in rebinning flux fractor and extrap factor.
+
+    These matrix multiplications / rebins are the slowest operations in
+    the prediction calculation, by far.
+    """
+    def __init__(self):
+        self.flux_fractions = {}
+        self.extrap_factors = {}
+        return
+
+    def _save_flux_frac(self, orig_hash, rebinned):
+        self.flux_fractions[orig_hash] = rebinned
+        return
+
+    def _save_extrap_fact(self, orig_hash, rebinned):
+        self.extrap_factors[orig_hash] = rebinned
+        return
+
+    def flux_frac(self, orig, rebin_matrix):
+        """Compute or retrieve the rebinned flux fraction.
+
+        Relies on the cache and if the original flux fraction
+        has already been rebinned, will return the saved version.
+        If the original is new, then this method will
+        compute the rebinning, save it in the internal cache,
+        and return it.
+        """
+        orig_hash = hash(tuple(orig))
+        if orig_hash not in self.flux_fractions:
+            self._save_flux_frac(
+                orig_hash,
+                np.matmul(rebin_matrix, orig)
+            )
+        return self.flux_fractions[orig_hash]
+
+    def extrap_fact(self, orig, rebin_matrix):
+        """Compute or retrieve the rebinned extrapolation factor.
+
+        Relies on the cache and if the original extrapolation factor
+        has already been rebinned, will return the saved version.
+        If the original is new, then this method will
+        compute the rebinning, save it in the internal cache,
+        and return it.
+        """
+        orig_hash = hash(tuple(orig))
+        if orig_hash not in self.extrap_factors:
+            self._save_extrap_fact(
+                orig_hash,
+                np.matmul(rebin_matrix, orig)
+            )
+        return self.extrap_factors[orig_hash]
+
+
 @dataclass
 class FitConstants:
     detector_response: dict
@@ -74,6 +128,7 @@ class FitConstants:
     rebin_matrix: np.array
     lbnl_comparison: bool
     rel_escale_parameters: dict
+    _rebin_cache: RebinCache
 
 @dataclass
 class FitParams:
@@ -426,6 +481,7 @@ def load_constants(config_file):
             rebin_matrix,
             config.lbnl_comparison,
             rel_escale_params,
+            RebinCache(),
     )
 
 
@@ -1147,6 +1203,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
             errors['alpha-n'] = alpha_n_errors
     return (result, errors)
 
+
 def bg_with_pulls(constants, fit_params, halls='all'):
     """Apply the pull parameters to each background.
 
@@ -1308,7 +1365,8 @@ def true_to_reco_near_matrix_with_osc(constants, fit_params):
             input_osc_params=constants.input_osc_params
         )
         weighted_fluxfrac = flux_frac_no_osc * p_sur
-        rebinned_fluxfrac = np.matmul(constants.rebin_matrix, weighted_fluxfrac)
+        rebinned_fluxfrac = constants._rebin_cache.flux_frac(weighted_fluxfrac,
+                constants.rebin_matrix)
         decomposed_response[(hall, det), core] = (
             constants.detector_response * np.expand_dims(rebinned_fluxfrac, axis=1)
         )
@@ -1364,8 +1422,8 @@ def num_near_IBDs_from_core(constants, fit_params):
     true_spectra = true_energy_of_near_IBDs(constants, fit_params)
     n_ij = {}
     for (halldet, core), flux_frac in flux_fractions.items():
-        # rebinned_fluxfrac = average_bins(flux_frac, true_bins_spec, true_bins_resp)
-        rebinned_fluxfrac = np.matmul(constants.rebin_matrix, flux_frac)
+        rebinned_fluxfrac = constants._rebin_cache.flux_frac(flux_frac,
+                constants.rebin_matrix)
         # Must expand dims so that the shape of the arrays is
         # (N_true, 1) * (N_true, N_reco)
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_spectra[halldet]
@@ -1385,7 +1443,8 @@ def predict_far_IBD_true_energy(constants, fit_params):
     extrap_factors = extrapolation_factor(constants, fit_params)
     f_kji = {}
     for (far_halldet, core, near_halldet), extrap_fact in extrap_factors.items():
-        rebinned_extrap_fact = np.matmul(constants.rebin_matrix, extrap_fact)
+        rebinned_extrap_fact = constants._rebin_cache.extrap_fact(extrap_fact,
+                constants.rebin_matrix)
         n_ij = num_from_core[near_halldet, core]
         f_kji[far_halldet, core, near_halldet] = (
                 np.expand_dims(rebinned_extrap_fact, axis=1) * n_ij

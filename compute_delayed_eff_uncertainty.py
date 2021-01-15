@@ -15,14 +15,18 @@ def main(input_basepath, database, update_db):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute('''SELECT Hall, DetNo, Peak, Resolution FROM
-            delayed_energy_fits WHERE Hall > 0 AND DetNo > 0''')
+            delayed_energy_fits
+            WHERE
+                Hall > 0
+                AND DetNo > 0
+                AND Source = "nominal"''')  #TODO hardcoded
         results = cursor.fetchall()
     cut_lookup = {(row['Hall'], row['DetNo']): row for row in results}
     values_lookup = {}
     errors_lookup = {}
     for (site, det), cuts in cut_lookup.items():
         site_dir = 'EH{}'.format(site)
-        sub_dir = 'sub_ad{}'.format(det)
+        sub_dir = 'sub_nominal_ad{}'.format(det)  #TODO hardcoded
         name = 'sub_ad{}.root'.format(det)
         path = os.path.join(input_basepath, site_dir, sub_dir, name)
         print(path)
@@ -79,6 +83,8 @@ def main(input_basepath, database, update_db):
 
 
 if __name__ == '__main__':
+    raise RuntimeError("You better double check the Source and file path"
+        " and comment out this line before running for real.")
     parser = argparse.ArgumentParser()
     parser.add_argument('input')
     parser.add_argument('database')

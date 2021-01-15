@@ -141,6 +141,18 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1
+    theta12_error = constants.theta12_err
+    numerator = fit_params.pull_theta12**2
+    denominator = theta12_error**2
+    chi_square += numerator/denominator
+    return_array_values[term_index] = numerator/denominator
+    term_index += 1
+    m2_21_error = constants.m2_21_err
+    numerator = fit_params.pull_m2_21**2
+    denominator = m2_21_error**2
+    chi_square += numerator/denominator
+    return_array_values[term_index] = numerator/denominator
+    term_index += 1
     if return_array:
         return return_array_values
     else:
@@ -365,6 +377,8 @@ pull_choices = (
     'amc',
     'alpha-n',
     'near-stat',
+    'theta12',
+    'm2_21',
 )
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -408,6 +422,8 @@ if __name__ == "__main__":
     else:
         index_map = starting_params.index_map()
         def freeze(name):
+            if name in ('theta12', 'm2_21'):
+                name = 'pull_' + name
             pull_slice = index_map[name]
             if isinstance(pull_slice, slice):  # range of values
                 indices = list(range(pull_slice.start, pull_slice.stop))

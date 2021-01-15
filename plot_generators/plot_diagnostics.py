@@ -181,12 +181,16 @@ if __name__ == '__main__':
         print('Retrieving and plotting delayed energy fit data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
+            raise RuntimeError("Double check the Source in DB query below!")
             cursor.execute('''SELECT Hall, DetNo, Peak, Peak_error,
             Resolution, Resolution_error,
             ExpScale, ExpScale_error,
             PeakFraction, PeakFraction_error,
             Normalization, Normalization_error
-                FROM delayed_energy_fits ORDER BY Hall, DetNo''')
+            FROM delayed_energy_fits
+            WHERE
+                Source = "adtime"
+            ORDER BY Hall, DetNo''')
             data = np.array(cursor.fetchall())
 
         # Peak locations
@@ -302,8 +306,11 @@ if __name__ == '__main__':
         print('Retrieving and plotting distance-time (DT) efficiency data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
+            raise RuntimeError("Double check the Source in DB query below!")
             cursor.execute('''SELECT Hall, DetNo, Efficiency, StatError
-                FROM distance_time_cut_efficiency ORDER BY Hall, DetNo''')
+                FROM distance_time_cut_efficiency
+                WHERE Source = "nominal"
+                ORDER BY Hall, DetNo''')
             data = np.array(cursor.fetchall())
 
         fig, ax = plt.subplots()
@@ -312,7 +319,24 @@ if __name__ == '__main__':
         ax.set_ylabel('Efficiency')
         ax.grid()
         fig.tight_layout()
-        fig.savefig('distance_time_cut_efficiency.pdf')
+        fig.savefig('distance_time_cut_efficiency_nominal.pdf')
+
+        raise RuntimeError("Double check the Source in DB query below!")
+        with sqlite3.Connection(database) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''SELECT Hall, DetNo, Efficiency, StatError
+                FROM distance_time_cut_efficiency
+                WHERE Source = "adtime"
+                ORDER BY Hall, DetNo''')
+            data = np.array(cursor.fetchall())
+
+        fig, ax = plt.subplots()
+        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
+        ax.set_title('Distance-time (DT) cut efficiency')
+        ax.set_ylabel('Efficiency')
+        ax.grid()
+        fig.tight_layout()
+        fig.savefig('distance_time_cut_efficiency_adtime.pdf')
 
     if plot_all or ('acc-DT-eff' in plot_types):
         print('Retrieving and plotting accidentals DT efficiency data...')

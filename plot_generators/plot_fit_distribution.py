@@ -116,6 +116,7 @@ Fit $\mu$: {fitparams.mean:.5f} $\pm$ {fitparams.stdev/np.sqrt(len(data[:, 1])):
 Fit $\sigma$: {fitparams.stdev:.5f}
 $\Delta m^{{2}}_{{ee}}$: {dm2:.2e} eV${{}}^2$
 Sample $\mu$: {data[:, 1].mean():.5f}
+Sample $\sigma$: {data[:, 1].std():.5f}
 '''
             if args.verbose:
                 print(text)

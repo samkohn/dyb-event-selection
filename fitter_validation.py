@@ -118,6 +118,9 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'all sys and stat default nGd binning':
             'LBNL ToyMC 26 all systematics and stat fluctuations'
             ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
+        'all sys and stat except solar osc default nGd binning':
+            'LBNL ToyMC 27 all systematics and stat fluctuations except solar osc'
+            ' default nGd binning sin2={sin2} dm2ee={dm2ee} experiment #{entry}',
     }
     toymc_out_numbers = {
         'no fluctuations default nGd binning': '02',
@@ -142,6 +145,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'resolution default nGd binning': '24',
         'scint nonlinearity default nGd binning': '25',
         'all sys and stat default nGd binning': '26',
+        'all sys and stat except solar osc default nGd binning': '27',
     }
     mc_configurations = {
         # (Has far stat fluctuations, has near stats, has any systematic fluctuations)
@@ -167,6 +171,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
         'resolution default nGd binning': (False, False, True),
         'scint nonlinearity default nGd binning': (False, False, True),
         'all sys and stat default nGd binning': (True, True, True),
+        'all sys and stat except solar osc default nGd binning': (True, True, True),
     }
     mc_configuration = mc_configurations[source_category]
     if mc_configuration == (False, False, True):
@@ -196,7 +201,7 @@ def main(database, label, source_category, toy_out_location, toy_code_dir,
 
     NO_FLUCTUATIONS = ('02', '13', '15', '17', '20', '22')
     WITH_FLUCTUATIONS = ('05', '07', '08', '10', '11', '12', '14', '16', '18', '19', '21',
-            '23', '24', '25', '26')
+            '23', '24', '25', '26', '27')
     # Get a fresh generator when needed
     grid_values = lambda: itertools.product(sin2_values, dm2ee_values)
     if toymc_out_numbers[source_category] in NO_FLUCTUATIONS:
@@ -436,7 +441,8 @@ if __name__ == "__main__":
             ', 12: li9 flucts, 13: no flucts w all bg, 14: all bg flucts'
             ', 15: detection eff, 16: no flucts w fastn, 17: fastn flucts'
             ', 18: no flucts w amc, 19: amc flucts, 20: resolution'
-            ', 21: scintillator nonlinearity, 22: all fluctuations (syst & stat)')
+            ', 21: scintillator nonlinearity, 22: all fluctuations (syst & stat)'
+            ', 23: all fluctuations except for solar osc')
     parser.add_argument('--fit-config')
     parser.add_argument('--gen-mc-only', action='store_true')
     parser.add_argument('--dump-mc', action='store_true')
@@ -471,6 +477,7 @@ if __name__ == "__main__":
         20: 'resolution default nGd binning',
         21: 'scint nonlinearity default nGd binning',
         22: 'all sys and stat default nGd binning',
+        23: 'all sys and stat except solar osc default nGd binning',
     }
     source_category = source_categories[args.source_category]
     main(

@@ -30,9 +30,9 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         for key, val in predicted.items():
             predicted[key] = np.sum(val, keepdims=True)
         num_bins = 1
-        num_shape_bins = 37  # TODO
+        num_shape_bins = 34  # TODO
     else:
-        num_bins = 37
+        num_bins = 34
     num_pulls = fit_params.num_pulls
     if debug:
         pprint(observed)
@@ -131,13 +131,13 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
         term_index += 1
     for halldet, pull in fit_params.pull_efficiency.items():
         numerator = pull * pull
-        denominator = 0.003 * 0.003
+        denominator = 0.006 * 0.006  #TODO nH
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1
     for halldet, pull in fit_params.pull_rel_escale.items():
         numerator = pull * pull
-        denominator = 0.002 * 0.002
+        denominator = 0.005 * 0.005
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1

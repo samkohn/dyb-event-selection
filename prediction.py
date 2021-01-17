@@ -4,6 +4,7 @@ Based on the procedure outlined in DocDB-8774 Section 3.
 """
 
 import argparse
+from collections import defaultdict
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime
 import json
@@ -153,7 +154,7 @@ class FitParams:
         This parameter impacts both the shape of the prompt spectrum
         and the efficiency (via prompt energy cut).
     """
-    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 1 + 1 + 4 * 37
+    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 1 + 1 + 4 * 34  # TODO binning
     theta13: float
     m2_ee: float
     pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))
@@ -168,7 +169,8 @@ class FitParams:
     pull_m2_21: float = 0
     pull_near_stat: dict = dc_field(
         # initialize an ad_dict with independent numpy arrays
-        default_factory=lambda: ad_dict(lambda: np.zeros(37), halls='near', factory=True)
+        default_factory=lambda: ad_dict(lambda: np.zeros(34), halls='near', factory=True)
+        # TODO binning
     )
     @staticmethod
     def index_map():
@@ -185,7 +187,7 @@ class FitParams:
         to_return['alpha-n'] = slice(39, 47)
         to_return['pull_theta12'] = 47
         to_return['pull_m2_21'] = 48
-        n_bins = 37  # TODO hard-coded
+        n_bins = 34  # TODO hard-coded
         n_near_ads = 4
         num_near_stat = n_bins * n_near_ads
         to_return['near-stat'] = slice(49, 49 + num_near_stat)
@@ -312,6 +314,7 @@ class Config:
     det_response_source: str
     sin2_2theta12_error: Any
     m2_21_error: Any
+    binning_id: int
     lbnl_comparison: bool = False
 
 
@@ -377,9 +380,14 @@ def load_constants(config_file):
     # total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
             # database, slice(ad_period.start_week, ad_period.end_week+1)
     # )
-    total_emitted_by_AD, true_bins_spectrum = total_emitted_shortcut(
-            database, config.period
-    )
+    # Sum over all periods TODO
+    total_emitted_by_AD = defaultdict(int)
+    for period in ad_periods.values():
+        total_emitted_for_period, true_bins_spectrum = total_emitted_shortcut(
+            database, period.name
+        )
+        for halldetcore, spec in total_emitted_for_period.items():
+            total_emitted_by_AD[halldetcore] += spec
     _, time_bins, _ = reactor_spectrum(database, 1)
     # LBNL comparison removes the AD-to-AD livetime dependence from the reactor flux
     if config.lbnl_comparison:
@@ -407,7 +415,7 @@ def load_constants(config_file):
     coincs_format = config.num_coincs_format_version
     if config.num_coincs is True:
         num_coincidences, reco_bins = num_coincidences_per_AD(database, coincs_source,
-                version=coincs_format)
+            version=coincs_format, binning_id=config.binning_id)
     elif config.num_coincs is False:
         num_coincidences = ad_dict(0)
         reco_bins = config.reco_bins
@@ -417,7 +425,8 @@ def load_constants(config_file):
         reco_bins = config.reco_bins
     elif isinstance(config.num_coincs, str):
         num_coincidences, reco_bins = num_coincidences_per_AD(
-                config.num_coincs, coincs_source, version=coincs_format
+            config.num_coincs, coincs_source, version=coincs_format,
+            binning_id=config.binning_id
         )
     else:
         raise ValueError(
@@ -628,11 +637,11 @@ def rel_escale_parameters(database):
                 FROM
                     rel_energy_scale_shape
                 WHERE
-                        BinningId = 0
+                        BinningId = 1
                     AND
                         Hall = ?
                     AND
-                        Source LIKE "%nGd%"
+                        Source LIKE "%nH%"
                 ORDER BY
                     BinIndex
                 ''',
@@ -937,7 +946,7 @@ def extrapolation_factor(constants, fit_params):
     return to_return
 
 
-def num_coincidences_per_AD(database, source, version):
+def num_coincidences_per_AD(database, source, version, binning_id):
     """Retrieve the number of observed IBD candidates in each AD, *including backgrounds*.
 
     Returns a tuple of (dict, energy_bins),
@@ -949,7 +958,6 @@ def num_coincidences_per_AD(database, source, version):
 
     Version 1 has each bin as a row.
     """
-    binning_id = 0
     if version == 0:
         with common.get_db(database) as conn:
             cursor = conn.cursor()

@@ -108,7 +108,7 @@ def main(database, binning_id, mc_infile, source, rel_uncertainty, sin2_2theta13
         '     2'
         ')'
     )
-    selection_string = f'{p_sur_string} * (target == 64)'  # nGd
+    selection_string = f'{p_sur_string} * (target == 1)'  # nH
     mc_data.Draw("res_p >> nominal", selection_string, "goff")
     mc_data.Draw(f"res_p * (1 + {rel_uncertainty}) >> escaled_plus", selection_string,
         "goff")

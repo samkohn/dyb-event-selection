@@ -5,7 +5,7 @@ import numpy as np
 
 import common
 
-def main(infilename, hist_name, database, label, binning_id, binning_db_path):
+def main(infilename, hist_name, database, label, binning_id, binning_db_path, is_TF1):
     import ROOT
     # fetch binning
     with common.get_db(binning_db_path) as conn:
@@ -25,10 +25,18 @@ def main(infilename, hist_name, database, label, binning_id, binning_db_path):
         bin_edges = np.array(cursor.fetchall(), dtype=float).reshape(-1)/1000
     infile = ROOT.TFile(infilename, 'READ')
     bg_spec = infile.Get(hist_name)
-    # Annoyingly, the AmC spectrum is stored as a TF1, so I have to bin it manually
     values = np.zeros((len(bin_edges) - 1,))
-    for bin_index, (low_edge, up_edge) in enumerate(zip(bin_edges[:-1], bin_edges[1:])):
-        values[bin_index] = bg_spec.Integral(low_edge, up_edge)
+    if is_TF1:
+        # Annoyingly, the AmC spectrum is stored as a TF1, so I have to bin it manually
+        for bin_index, (low_edge, up_edge) in (
+            enumerate(zip(bin_edges[:-1], bin_edges[1:]))
+        ):
+            values[bin_index] = bg_spec.Integral(low_edge, up_edge)
+    else:
+        # extract bin values
+        binned_hist = bg_spec.Rebin(len(bin_edges) - 1, 'rebinned_bg', bin_edges)
+        for i in range(1, len(bin_edges)):  # this is correctly off-by-1
+            values[i-1] = binned_hist.GetBinContent(i)
     total_counts = sum(values)
     values /= total_counts  # normalize
     rows = []
@@ -57,6 +65,10 @@ if __name__ == '__main__':
     parser.add_argument('--binning-id', type=int)
     parser.add_argument('--binning-db-path')
     parser.add_argument('--hist-name')
+    parser.add_argument('--TF1', action='store_true',
+        help='Use this if the AmC spectrum is stored as a TF1 '
+        'rather than a TH1'
+    )
     args = parser.parse_args()
     main(
         args.infile,
@@ -65,4 +77,5 @@ if __name__ == '__main__':
         args.label,
         args.binning_id,
         args.binning_db_path,
+        args.TF1,
     )

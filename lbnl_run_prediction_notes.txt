@@ -1,0 +1,48 @@
+// Must define:
+//   char* toyfile to point to ToyMC outfile location
+//   double sinSq2theta13
+//   double dm2ee
+{
+// Create objects
+auto* pred = new Predictor();
+auto* fluxcalc = new FluxCalculator(Paths::baselines(), Paths::histogram());
+pred->EnterFluxCalculator(fluxcalc);
+
+// Load data on livetime, efficiencies, uncertainties, bgs, etc.
+pred->LoadMainData(Paths::input(0));
+pred->LoadMainData(Paths::input(1));
+pred->LoadMainData(Paths::input(2));
+
+
+// Load observed events spectra (Paths::sig_spectra contains the default spectra)
+// TString sig_spectra[] = {Paths::sig_spectra(0), Paths::sig_spectra(1), Paths::sig_spectra(2)};
+// pred->LoadIBDSpec(sig_spectra);
+
+// Load ToyMC output file
+pred->LoadToyIBDSpec(toyfile);
+pred->LoadToyMCEntry(0, false);  // false to avoid double-correcting spectra
+
+// Load background spectra and correct both BG and Observed spectra for efficiency,
+// and subtract the BG from Observed
+TString acc_spectra[] = {Paths::acc_spectra(0), Paths::acc_spectra(1), Paths::acc_spectra(2)};
+pred->LoadBgSpec(acc_spectra, Paths::li9(), Paths::amc(), Paths::fn(), Paths::aln());
+
+// Configure binning
+pred->SetEvisBins(Binning::n_evis(), Binning::evis());
+pred->SetEnuBins(Binning::n_enu(), Binning::enu());
+
+// Load detector response
+pred->LoadEvisToEnuMatrix(Paths::response());
+
+// Configure other oscillation parameters
+//fluxcalc->osccalc-> //.....
+// Examine values to make sure you have it right:
+fluxcalc->osccalc->Dump();
+
+auto* predper = pred->MakeAllPredictions(sinSq2theta13, dm2ee, 0, -1, true);
+
+// function for extracting number of predicted events
+/*
+double num_predicted(int near_index, int far_index, int stage_index) { double rate = predper->GetPred(stage_index, far_index, near_index)->Integral(); double livetime = pred->tdper[stage_index].Livetime[far_index]; return rate * livetime; }
+*/
+}

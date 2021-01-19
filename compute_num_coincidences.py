@@ -154,6 +154,8 @@ def main(main_database, data_file_path, binning_id, spectrum, total, update_db):
                     ''',
                     spectrum_rows
                 )
+    else:
+        print(results[:10])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

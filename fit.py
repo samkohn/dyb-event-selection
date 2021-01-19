@@ -260,32 +260,27 @@ def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_onl
     frozen_params_dict = {}
     all_params = starting_params.to_list()
     x0 = []
+    reverse_map = {}
+    num_frozen_so_far = 0
     for i, param in enumerate(all_params):
         if i in frozen_params:
             frozen_params_dict[i] = param
         else:
             x0.append(param)
+            reverse_map[i] = num_frozen_so_far
+            num_frozen_so_far += 1
     residual = residual_frozen_param(frozen_params_dict, near_ads, rate_only, avg_near)
     result = least_squares(residual, x0, args=(constants,), method='trf')
     # Assemble best-fit FitParams object from fitter fitter output
     starting_param_list = starting_params.to_list()
-    param_list = [result.x[0]]  # We know we can start with theta13
-    if rate_only:
-        param_list.append(starting_params.m2_ee)  # fixed m2_ee for rate-only
-        first_pull_index = 1
-    else:
-        param_list.append(result.x[1])  # fitted m2_ee for rate+shape
-        first_pull_index = 2
-    num_transfered_so_far = 0
+    result_param_list = []
     for i, starting_param in enumerate(starting_param_list):
-        if i < 2:
-            continue
-        if i in frozen_params:
-            param_list.append(starting_param)
+        if i in reverse_map:
+            result_param_list.append(result.x[reverse_map[i]])
         else:
-            param_list.append(result.x[first_pull_index + num_transfered_so_far])
-            num_transfered_so_far += 1
-    fit_params = pred.FitParams.from_list(param_list)
+            result_param_list.append(starting_param)
+    fit_params = pred.FitParams.from_list(result_param_list)
+
     if raw_result:
         return (fit_params, result)
     else:
@@ -392,6 +387,7 @@ if __name__ == "__main__":
     parser.add_argument("--dm2ee", type=float)
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
+    parser.add_argument("--freeze-sin2-2theta13", type=float)
     parser.add_argument(
         "--pulls", nargs='*', choices=pull_choices+('all',), default=[]
     )
@@ -409,18 +405,24 @@ if __name__ == "__main__":
         starting_dm2,
     )
     n_total_params = len(starting_params.to_list())
+    index_map = starting_params.index_map()
     # decide whether to freeze any of the pull parameters
     # (and, if rate-only, also freeze dm2_ee)
-    if rate_only or args.dm2ee is not None:
-        frozen_params = [1]
+    frozen_params = []
+    if args.freeze_sin2_2theta13 is None:
+        pass
     else:
-        frozen_params = []
+        frozen_params.append(index_map['theta13'])
+        starting_params.theta13 = 0.5 * np.arcsin(np.sqrt(args.freeze_sin2_2theta13))
+    if rate_only or args.dm2ee is not None:
+        frozen_params.append(index_map['m2_ee'])
+    else:
+        pass
     if 'all' in pulls:
         pass
     elif len(pulls) == 0:
         frozen_params.extend(list(range(2, n_total_params)))
     else:
-        index_map = starting_params.index_map()
         def freeze(name):
             if name in ('theta12', 'm2_21'):
                 name = 'pull_' + name
@@ -464,7 +466,7 @@ if __name__ == "__main__":
                 near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near,
                 raw_result=True)
         print(repr(result.x))
-        print('sin22theta13 =', np.power(np.sin(2*result.x[0]), 2))
+        print('sin22theta13 =', np.power(np.sin(2*fit_params.theta13), 2))
         print(f'Num function evals: {result.nfev}')
         print(f'Num jacobian evals: {result.njev}')
         print(result.message)

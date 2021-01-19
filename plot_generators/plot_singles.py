@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('--root', action='store_true')
     args = parser.parse_args()
 
-    events = ROOT.TChain('ad_events')
+    events = ROOT.TChain('singles')
 
     infiles = iglob(args.infile)
     for infile in infiles:
@@ -31,9 +31,7 @@ if __name__ == '__main__':
     canvas.SetTopMargin(margin)
     canvas.SetBottomMargin(margin)
 
-    events.Draw('energy[0] >> singles',
-            'multiplicity == 1 && '
-            'dt_cluster_to_prev_ADevent > 1500e3')
+    events.Draw('energy[0] >> singles')
 
     hist.GetXaxis().SetTitle('Energy [MeV]')
     hist.GetYaxis().SetTitle('Number of events per 0.01 MeV')

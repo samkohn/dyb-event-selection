@@ -313,6 +313,7 @@ class Config:
     num_coincs_format_version: int
     reco_bins: Any
     det_response_source: str
+    rel_escale_source: str
     sin2_2theta12_error: Any
     m2_21_error: Any
     binning_id: int
@@ -498,7 +499,7 @@ def load_constants(config_file):
 
     cross_sec = cross_section(database)
 
-    rel_escale_params = rel_escale_parameters(database)
+    rel_escale_params = rel_escale_parameters(database, config.rel_escale_source)
 
     input_osc_params = default_osc_params
 
@@ -623,7 +624,7 @@ def multiplicity_efficiency(database):
         to_return[hall, det] = efficiency
     return to_return
 
-def rel_escale_parameters(database):
+def rel_escale_parameters(database, source):
     """Load the shape distortion parameters for the relative energy scale.
 
     Return a dict keyed by hall
@@ -650,11 +651,11 @@ def rel_escale_parameters(database):
                     AND
                         Hall = ?
                     AND
-                        Source LIKE "%nH%"
+                        Source = ?
                 ORDER BY
                     BinIndex
                 ''',
-                (hall,)
+                (hall, source)
             )
             params = np.array(cursor.fetchall())
             result[hall] = params[:, :2]/params[:, 2:]  # divide by last column

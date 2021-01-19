@@ -15,12 +15,14 @@ def one_file(run_key, data_file_path, energy_lookup):
     ad_events = data_file.Get('ad_events')
     delayed_min, delayed_max = energy_lookup['nominal', site, ad]
     num_coincidences_nominal = ad_events.Draw('energy[0]',
+        f'multiplicity == 2 && '
         f'energy[1] > {delayed_min} && energy[1] < {delayed_max} && '
         f'{delayeds._NH_THU_DIST_TIME_CUT_STR}',
         'goff'
     )
     delayed_min, delayed_max = energy_lookup['adtime', site, ad]
     num_coincidences_adtime = ad_events.Draw('energy[0]',
+        f'multiplicity == 2 && '
         f'energy[1] > {delayed_min} && energy[1] < {delayed_max} && '
         f'dr_to_prompt_AdTime[1] + {delayeds._NH_THU_DIST_TIME_CONST} '
         f' * dt_to_prompt[1] < {delayeds._NH_THU_DIST_TIME_MAX}',
@@ -58,7 +60,7 @@ def main(main_database, energy_cuts_database, data_file_path, update_db):
     for site, ad, low_bound, up_bound in adtime_energy_bounds:
         energy_lookup['adtime', site, ad] = (low_bound, up_bound)
 
-    with multiprocessing.Pool(63) as pool:
+    with multiprocessing.Pool() as pool:
         results = pool.starmap(one_file, zip(run_keys, it.repeat(data_file_path),
             it.repeat(energy_lookup)))
     if update_db:
@@ -68,6 +70,8 @@ def main(main_database, energy_cuts_database, data_file_path, update_db):
             cursor = conn.cursor()
             cursor.executemany('''INSERT OR REPLACE INTO num_coincidences_by_run
                 VALUES (?, ?, ?, ?)''', results_nominal + results_adtime)
+    else:
+        print(results[:10])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

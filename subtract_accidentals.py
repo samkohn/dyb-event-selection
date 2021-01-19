@@ -5,6 +5,9 @@ import argparse
 import json
 import logging
 import os.path
+import sqlite3
+
+import tenacity
 
 import common
 from delayeds import (_NH_THU_DIST_TIME_CUT_STR as DT_CUT_LITERAL, _NH_THU_DIST_TIME_STR
@@ -22,6 +25,11 @@ def coinc_rate(rs, rmu, tc):
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 
+@tenacity.retry(
+    reraise=True,
+    wait=tenacity.wait_random_exponential(max=60),
+    retry=tenacity.retry_if_exception_type(sqlite3.Error),
+)
 def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         acc_rate, run_number, database, label):
     import ROOT

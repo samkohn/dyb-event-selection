@@ -301,7 +301,8 @@ class Config:
     database: str
     period: Any
     backgrounds: Any
-    backgrounds_source: str
+    background_counts_source: str
+    background_spectra_source: str
     background_types: list
     background_errors: list
     mult_eff: Any
@@ -434,12 +435,17 @@ def load_constants(config_file):
         )
 
     # Parse backgrounds: Nominal, 0, hard-coded, or alternate database
-    backgrounds_source = config.backgrounds_source
+    bg_counts_source = config.background_counts_source
+    bg_spec_source = config.background_spectra_source
     bg_types = config.background_types
     if config.backgrounds is True:
-        nominal_bgs, bg_errors = backgrounds_per_AD(database, backgrounds_source, types=bg_types)
+        nominal_bgs, bg_errors = backgrounds_per_AD(
+            database, bg_counts_source, bg_spec_source, types=bg_types
+        )
     elif config.backgrounds is False:
-        nominal_bgs, bg_errors = backgrounds_per_AD(None, None, return_zero=True, types=bg_types)
+        nominal_bgs, bg_errors = backgrounds_per_AD(
+            None, None, None, return_zero=True, types=bg_types
+        )
     elif isinstance(config.backgrounds, list):
         # List of lists to get each AD's spectrum
         # List of floats to get each AD's absolute error (then divide by sum(count) for
@@ -448,14 +454,17 @@ def load_constants(config_file):
         bg_errors_input = [
             err / sum(count) for err, count in zip(config.background_errors, bg_arrays)
         ]
-        nominal_bgs, bg_errors = backgrounds_per_AD(None, None, return_zero=True, types=bg_types[0])
+        nominal_bgs, bg_errors = backgrounds_per_AD(
+            None, None, None, return_zero=True, types=bg_types[0]
+        )
         # Assign supplied backgrounds to be the first type given in background_types
         nominal_bgs[bg_types[0]] = dict(zip(all_ads, bg_arrays))
         bg_errors[bg_types[0]] = dict(zip(all_ads, bg_errors_input))
     elif isinstance(config.backgrounds, str):
         nominal_bgs, bg_errors = backgrounds_per_AD(
             config.backgrounds,
-            backgrounds_source,
+            bg_counts_source,
+            bg_spec_source,
             types=bg_types,
         )
     else:
@@ -1022,7 +1031,9 @@ def efficiency_weighted_counts(constants, fit_params, halls='all'):
     return to_return
 
 
-def backgrounds_per_AD(database, source, return_zero=False, types=None):
+def backgrounds_per_AD(
+    database, counts_source, spectra_source, return_zero=False, types=None
+):
     """Retrieve the number of predicted background events and rate errors in each AD.
 
     Returns a tuple of (spectra, errors).
@@ -1099,7 +1110,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                         AND DetNo = ?
                     ORDER BY BinIndex
                     ''',
-                    (source, hall, det),
+                    (spectra_source, hall, det),
                 )
                 acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
                 cursor.execute('''
@@ -1112,7 +1123,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND Label = ?
                     AND Hall = ?
                     AND DetNo = ?
-                ''', (source, hall, det)
+                ''', (counts_source, hall, det)
                 )
                 count, error = cursor.fetchone()
                 acc_data[hall, det] *= count
@@ -1129,7 +1140,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     Label = ?
                 ORDER BY BinIndex
                 ''',
-                (source,),
+                (spectra_source,),
             )
             li9_spectrum = np.array(cursor.fetchall()).reshape(-1)
             li9_data = {}
@@ -1145,7 +1156,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND Label = ?
                     AND Hall = ?
                     AND DetNo = ?
-                ''', (source, hall, det)
+                ''', (counts_source, hall, det)
                 )
                 count, error = cursor.fetchone()
                 li9_data[hall, det] = count * li9_spectrum
@@ -1162,7 +1173,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     Label = ?
                 ORDER BY BinIndex
                 ''',
-                (source,),
+                (spectra_source,),
             )
             fast_neutron_spectrum = np.array(cursor.fetchall()).reshape(-1)
             fast_neutron_data = {}
@@ -1178,7 +1189,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND Label = ?
                     AND Hall = ?
                     AND DetNo = ?
-                ''', (source, hall, det)
+                ''', (counts_source, hall, det)
                 )
                 count, error = cursor.fetchone()
                 fast_neutron_data[hall, det] = count * fast_neutron_spectrum
@@ -1195,7 +1206,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     Label = ?
                 ORDER BY BinIndex
                 ''',
-                (source,),
+                (spectra_source,),
             )
             amc_spectrum = np.array(cursor.fetchall()).reshape(-1)
             amc_data = {}
@@ -1211,7 +1222,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND Label = ?
                     AND Hall = ?
                     AND DetNo = ?
-                ''', (source, hall, det)
+                ''', (counts_source, hall, det)
                 )
                 count, error = cursor.fetchone()
                 amc_data[hall, det] = count * amc_spectrum
@@ -1233,7 +1244,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                         AND DetNo = ?
                     ORDER BY BinIndex
                     ''',
-                    (source, hall, det),
+                    (spectra_source, hall, det),
                 )
                 alpha_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
                 cursor.execute('''
@@ -1246,7 +1257,7 @@ def backgrounds_per_AD(database, source, return_zero=False, types=None):
                     AND Label = ?
                     AND Hall = ?
                     AND DetNo = ?
-                ''', (source, hall, det)
+                ''', (counts_source, hall, det)
                 )
                 count, error = cursor.fetchone()
                 alpha_n_data[hall, det] *= count

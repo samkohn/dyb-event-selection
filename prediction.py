@@ -172,6 +172,10 @@ class FitParams:
         default_factory=lambda: ad_dict(lambda: np.zeros(34), halls='near', factory=True)
         # TODO binning
     )
+
+    def clone(self):
+        return FitParams.from_list(self.to_list())
+
     @staticmethod
     def index_map():
         to_return = {}

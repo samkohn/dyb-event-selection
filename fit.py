@@ -1,4 +1,5 @@
 import argparse
+import multiprocessing
 from pprint import pprint
 import sys
 
@@ -361,66 +362,78 @@ def save_result(database, source, index, theta13_best, theta13_low_err, theta13_
         cursor.execute('''INSERT OR REPLACE INTO toymc_tests
         VALUES (?, ?, ?, ?, ?, ?, ?)''',
         (source, index, sin2_best, chi_square, 3, sin2_up, sin2_low))
+    return
 
-pull_choices = (
-    'reactor',
-    'efficiency',
-    'rel-escale',
-    'accidental',
-    'li9',
-    'fast-neutron',
-    'amc',
-    'alpha-n',
-    'near-stat',
-    'theta12',
-    'm2_21',
-)
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config")
-    parser.add_argument("--no-fit", action='store_true')
-    parser.add_argument("--scan", action='store_true')
-    parser.add_argument("--source")
-    parser.add_argument("--source-index", type=int)
-    parser.add_argument("--update-db")
-    parser.add_argument("--shape", action='store_true')
-    parser.add_argument("--dm2ee", type=float)
-    parser.add_argument("--debug", action='store_true')
-    parser.add_argument("--avg-near", action='store_true')
-    parser.add_argument("--freeze-sin2-2theta13", type=float)
-    parser.add_argument(
-        "--pulls", nargs='*', choices=pull_choices+('all',), default=[]
-    )
-    args = parser.parse_args()
-    rate_only = not args.shape
-    pulls = args.pulls
-    near_ads = None
-    constants = pred.load_constants(args.config)
-    if rate_only or args.dm2ee is not None:
-        starting_dm2 = args.dm2ee
-    else:
-        starting_dm2 = 2.48e-3
-    starting_params = pred.FitParams(
-        0.15,
-        starting_dm2,
-    )
-    n_total_params = len(starting_params.to_list())
-    index_map = starting_params.index_map()
+def grid(
+    theta13_values,
+    constants,
+    starting_params,
+    frozen_params,
+    near_ads,
+    rate_only,
+    avg_near,
+):
+    """Run fits with a list of different theta13 starting values.
+
+    The starting_params object is modified in-place but restored to its
+    original state at the end of the function.
+
+    fit_lsq_frozen_kwargs are passed directly to fit_lsq_frozen.
+    """
+    def fit_args_generator():
+        for theta13_value in theta13_values:
+            new_params = starting_params.clone()
+            new_params.theta13 = theta13_value
+            yield (
+                new_params,
+                constants,
+                frozen_params,
+                near_ads,
+                rate_only,
+                avg_near,
+            )
+        return
+    def chi_square_args_generator(fit_params_list):
+        for fit_params_value in fit_params_list:
+            yield (
+                constants,
+                fit_params_value,
+                False,
+                False,
+                near_ads,
+                rate_only,
+                avg_near,
+                'poisson',
+            )
+        return
+    with multiprocessing.Pool() as pool:
+        fit_param_results = pool.starmap(fit_lsq_frozen, fit_args_generator())
+        min_chisquares = pool.starmap(
+            chi_square,
+            chi_square_args_generator(fit_param_results),
+        )
+    return min_chisquares
+
+def get_frozen_params(pulls, freeze_theta13, freeze_dm2ee, near_ads=None):
+    """Get the list of frozen params given the fitter configuration.
+
+    A list of near ADs can be provided, which will be used to freeze the
+    near-stat pull parameters of any near AD that is not being used in
+    the fit.
+    """
+    dummy_params = pred.FitParams(0, 0)
+    index_map = dummy_params.index_map()
     # decide whether to freeze any of the pull parameters
     # (and, if rate-only, also freeze dm2_ee)
     frozen_params = []
-    if args.freeze_sin2_2theta13 is None:
-        pass
-    else:
+    if freeze_theta13:
         frozen_params.append(index_map['theta13'])
-        starting_params.theta13 = 0.5 * np.arcsin(np.sqrt(args.freeze_sin2_2theta13))
-    if rate_only or args.dm2ee is not None:
+    if freeze_dm2ee:
         frozen_params.append(index_map['m2_ee'])
-    else:
-        pass
     if 'all' in pulls:
         pass
     elif len(pulls) == 0:
+        n_total_params = len(dummy_params.to_list())
         frozen_params.extend(list(range(2, n_total_params)))
     else:
         def freeze(name):
@@ -451,8 +464,70 @@ if __name__ == "__main__":
                     first_for_ad = first + i * n_bins
                     last_for_ad = first + (i + 1) * n_bins
                     frozen_params.extend(list(range(first_for_ad, last_for_ad)))
+    return frozen_params
+
+
+
+
+
+pull_choices = (
+    'reactor',
+    'efficiency',
+    'rel-escale',
+    'accidental',
+    'li9',
+    'fast-neutron',
+    'amc',
+    'alpha-n',
+    'near-stat',
+    'theta12',
+    'm2_21',
+)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+    parser.add_argument("--no-fit", action='store_true')
+    parser.add_argument("--scan", action='store_true')
+    parser.add_argument("--source")
+    parser.add_argument("--source-index", type=int)
+    parser.add_argument("--update-db")
+    parser.add_argument("--shape", action='store_true')
+    parser.add_argument("--dm2ee", type=float)
+    parser.add_argument("--debug", action='store_true')
+    parser.add_argument("--avg-near", action='store_true')
+    parser.add_argument("--freeze-sin2-2theta13", type=float, default=None)
+    parser.add_argument(
+        "--pulls", nargs='*', choices=pull_choices+('all',), default=[]
+    )
+    args = parser.parse_args()
+    rate_only = not args.shape
+    pulls = args.pulls
+    near_ads = None
+    constants = pred.load_constants(args.config)
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
+    elif rate_only or args.dm2ee is not None:
+        starting_dm2 = args.dm2ee
+        freeze_dm2ee = True
+    else:
+        starting_dm2 = 2.48e-3
+        freeze_dm2ee = False
+    if args.freeze_sin2_2theta13 is not None:
+        starting_theta13 = 0.5 * np.arcsin(np.sqrt(args.freeze_sin2_2theta13))
+        freeze_theta13 = True
+    else:
+        freeze_theta13 = False
+    starting_params = pred.FitParams(
+        starting_theta13,
+        starting_dm2,
+    )
+    frozen_params = get_frozen_params(
+        pulls,
+        freeze_theta13,
+        freeze_dm2ee,
+        near_ads,
+    )
+    print(frozen_params)
     if args.debug:
         print(starting_params)
     print(chi_square(constants, starting_params, rate_only=rate_only, debug=args.debug,
@@ -465,7 +540,7 @@ if __name__ == "__main__":
         fit_params, result = fit_lsq_frozen(starting_params, constants, frozen_params,
                 near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near,
                 raw_result=True)
-        print(repr(result.x))
+        #print(repr(result.x))
         print('sin22theta13 =', np.power(np.sin(2*fit_params.theta13), 2))
         print(f'Num function evals: {result.nfev}')
         print(f'Num jacobian evals: {result.njev}')
@@ -478,7 +553,7 @@ if __name__ == "__main__":
         if args.debug:
             print(chi_square(constants, fit_params, return_array=True, near_ads=near_ads,
                 rate_only=rate_only, avg_near=args.avg_near, variant='poisson'))
-        print(fit_params)
+        #print(fit_params)
         if args.debug:
             print("Observed & Predicted & Avg Predicted")
         min_chi2 = chi_square(constants, fit_params, debug=args.debug, near_ads=near_ads,

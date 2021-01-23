@@ -138,14 +138,14 @@ def main(database, data_file_path, update_db):
         adtime_hist[site, ad] += np.array(result[8])
     if update_db:
         # add Label field
-        #result_rows = [(*result[:6], '1/11/21') for result in results]
+        result_rows = [(*result[:6], '1/19/21') for result in results]
         spectrum_rows = []
         for (site, ad), spectrum in both_hist.items():
             for i, val in enumerate(spectrum):
                 spectrum_rows.append((
                     site,
                     ad,
-                    'both 1/11/21',
+                    'both 1/19/21',
                     HIST_BINNINGID,
                     i,
                     val,
@@ -155,7 +155,7 @@ def main(database, data_file_path, update_db):
                 spectrum_rows.append((
                     site,
                     ad,
-                    'adsimple only 1/11/21',
+                    'adsimple only 1/19/21',
                     HIST_BINNINGID,
                     i,
                     val,
@@ -165,7 +165,7 @@ def main(database, data_file_path, update_db):
                 spectrum_rows.append((
                     site,
                     ad,
-                    'adtime only 1/11/21',
+                    'adtime only 1/19/21',
                     HIST_BINNINGID,
                     i,
                     val,

@@ -49,23 +49,27 @@ def one_file(run_key, data_file_path, energy_lookup):
     )
     num_passes_both = ad_events.Draw(
         f'energy[0] >> both_eh{site}ad{ad}',
+        'multiplicity == 2 && '
         f'{PASSES_ADSIMPLE} && {PASSES_ADTIME}',
         'goff'
     )
     #print('num_passes_both:', num_passes_both)
     num_passes_only_adsimple = ad_events.Draw(
         f'energy[0] >> adsimple_only_eh{site}ad{ad}',
+        'multiplicity == 2 && '
         f'{PASSES_ADSIMPLE} && !{PASSES_ADTIME}',
         'goff'
     )
     #print('num_passes_only_adsimple:', num_passes_only_adsimple)
     num_passes_only_adtime = ad_events.Draw(
         f'energy[0] >> adtime_only_eh{site}ad{ad}',
+        'multiplicity == 2 && '
         f'!{PASSES_ADSIMPLE} && {PASSES_ADTIME}',
         'goff'
     )
     #print('num_passes_only_adtime:', num_passes_only_adtime)
     num_passes_neither = ad_events.Draw('energy[0]',
+        'multiplicity == 2 && '
         f'!{PASSES_ADSIMPLE} && !{PASSES_ADTIME}',
         'goff'
     )

@@ -21,6 +21,7 @@ import compute_singles
 import create_accidentals
 import create_accidentals_adtime
 import create_singles_adtime
+import extract_flasher_vars
 import first_pass_adtime
 import fit_delayed_adtime
 import job_producer
@@ -365,10 +366,47 @@ def _apply_first_pass(run, site, fileno, output_location):
 @time_execution
 def run_first_pass(run, site, filenos, raw_output_path):
     """Convert from NuWa to slimmed-down ROOT files."""
-    output_location = os.path.join(raw_output_path, f'EH{site}')
+    subdir = str(run)[0:3] + '00'  # e.g. 21221 -> 21200
+    output_location = os.path.join(raw_output_path, f'EH{site}', subdir)
     func_inputs = [(run, site, fileno, output_location) for fileno in filenos]
     with multiprocessing.Pool(NUM_MULTIPROCESSING) as pool:
         pool.starmap(_apply_first_pass, func_inputs)
+    return
+
+
+def _apply_extract_flashers(run, site, fileno, raw_output_path):
+    logging.debug('[extract_flashers] Running on Run %d, file %d', run, fileno)
+    subdir = str(run)[0:3] + '00'  # e.g. 21221 -> 21200
+    output_location = os.path.join(raw_output_path, f'EH{site}', subdir, 'flashers')
+    os.makedirs(output_location, exist_ok=True)
+    ads = common.dets_for(site, run)
+    events_files = [
+        os.path.join(
+            raw_output_path,
+            f'EH{site}',
+            subdir,
+            f'events_ad{ad}_{run}_{fileno:>04}.root'
+        ) for ad in ads
+    ]
+    num_events = -1
+    debug = False
+    infile_location = job_producer.get_file_location(run, fileno)
+    extract_flasher_vars.main(
+        num_events,
+        infile_location,
+        output_location,
+        (run, fileno, site),
+        events_files,
+        debug,
+    )
+    logging.debug('[extract_flashers] Finished Run %d, file %d', run, fileno)
+    return
+
+@time_execution
+def run_extract_flashers(run, site, filenos, raw_output_path):
+    func_inputs = [(run, site, fileno, raw_output_path) for fileno in filenos]
+    with multiprocessing.Pool(NUM_MULTIPROCESSING) as pool:
+        pool.starmap(_apply_extract_flashers, func_inputs)
     return
 
 
@@ -416,7 +454,8 @@ def _apply_process(run, site, fileno, input_prefix, processed_output_path):
 @time_execution
 def run_process(run, site, filenos, raw_output_path, processed_output_path):
     """Run the coincidence search and muon vetos."""
-    input_prefix = os.path.join(raw_output_path, f'EH{site}')
+    subdir = str(run)[0:3] + '00'
+    input_prefix = os.path.join(raw_output_path, f'EH{site}', subdir)
     func_inputs = []
     for fileno in filenos:
         func_inputs.append((
@@ -847,11 +886,18 @@ def many_runs(
     # Execute each run's first_pass and process in series since they already use
     # multiprocessing pools.
     for run, (site, filenos) in run_info.items():
+        if time.time() > stop_time:
+            return
         if _should_run(run, site, 'FirstPass', progress):
             run_first_pass(run, site, filenos, raw_output_path)
             _update_progress_db(database, run, site, None, 'FirstPass')
         else:
             logging.debug('[first_pass] Skipping Run %d based on db progress', run)
+        if _should_run(run, site, 'ExtractFlashers', progress):
+            run_extract_flashers(run, site, filenos, raw_output_path)
+            _update_progress_db(database, run, site, None, 'ExtractFlashers')
+        else:
+            logging.debug('[extract_flashers] Skipping Run %d based on db progress', run)
         if _should_run(run, site, 'Process', progress):
             run_process(run, site, filenos, raw_output_path, processed_output_path)
             _update_progress_db(database, run, site, None, 'Process')

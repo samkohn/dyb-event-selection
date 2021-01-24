@@ -74,6 +74,7 @@ class EventsCombiner:
         if len(self.ttrees) == 1:
             ad = self.ads[0]
             status = self.ttrees[ad].GetEntry(self.entries[ad] + 1)
+            self.entries[ad] += 1
             if status <= 0:
                 raise StopIteration
             return (ad, self.ttrees[ad].loopIndex)

@@ -866,7 +866,7 @@ def _tasks_for_whole_run(
     return
 
 
-def many_runs(
+def main(
     start_run,
     end_run,
     run_list_file,
@@ -916,37 +916,6 @@ def many_runs(
         )
     return
 
-
-def main(
-    run, run_list_file, raw_output_path, processed_output_path, database,
-):
-    site, filenos = get_site_filenos_for_run(run, run_list_file)
-    run_first_pass(run, site, filenos, raw_output_path)
-    _update_progress_db(database, run, site, None, 'FirstPass')
-    run_process(run, site, filenos, raw_output_path, processed_output_path)
-    _update_progress_db(database, run, site, None, 'Process')
-    finished = []
-    run_hadd(run, site, filenos, processed_output_path)
-    finished.append('Hadd')
-    _update_progress_db(database, run, site, None, finished)
-    run_aggregate_stats(run, site, filenos, processed_output_path, database)
-    finished.append('AggregateStats')
-    _update_progress_db(database, run, site, None, finished)
-    run_create_singles(run, site, processed_output_path)
-    finished.append('CreateSingles')
-    _update_progress_db(database, run, site, None, finished)
-    run_compute_singles(run, site, processed_output_path, database)
-    finished.append('ComputeSingles')
-    _update_progress_db(database, run, site, None, finished)
-    run_create_accidentals(run, site, processed_output_path)
-    finished.append('CreateAccidentals')
-    _update_progress_db(database, run, site, None, finished)
-    run_subtract_accidentals(run, site, processed_output_path, database)
-    finished.append('SubtractAccidentals')
-    _update_progress_db(database, run, site, None, finished)
-    return
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-r', '--run', type=int)
@@ -974,7 +943,7 @@ if __name__ == '__main__':
     if args.database is not None and not os.path.isfile(args.database):
         setup_database(args.database)
     if args.end_run is not None:
-        many_runs(
+        main(
             args.run,
             args.end_run,
             args.run_list,
@@ -986,8 +955,10 @@ if __name__ == '__main__':
     else:
         main(
             args.run,
+            args.run,
             args.run_list,
             args.raw_output,
             args.processed_output,
             args.database,
+            args.max_runtime_sec,
         )

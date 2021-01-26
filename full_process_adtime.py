@@ -49,7 +49,7 @@ def time_execution(func):
         return result
     return inner_func
 
-def setup_database(database):
+def setup_database(database, progress_db):
     """Create the database tables to store the analysis results."""
     with common.get_db(database) as conn:
         cursor = conn.cursor()
@@ -146,7 +146,11 @@ def setup_database(database):
                 Spectrum REAL NOT NULL,
                 PRIMARY KEY(Label, Hall, DetNo, BinningId, BinIndex)
             );
-
+        '''
+        )
+    with common.get_db(progress_db) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
             CREATE TABLE processing_progress (
                 RunNo INTEGER NOT NULL,
                 Hall INTEGER NOT NULL,
@@ -810,6 +814,7 @@ def _tasks_for_whole_run(
     filenos,
     processed_output_path,
     database,
+    progress_db,
     stop_time,
     progress,
 ):
@@ -862,7 +867,7 @@ def _tasks_for_whole_run(
         logging.exception('Exception in Run %d', run)
     finally:
         if len(finished) > 0:
-            _update_progress_db(database, run, site, None, finished)
+            _update_progress_db(progress_db, run, site, None, finished)
     return
 
 
@@ -873,6 +878,7 @@ def main(
     raw_output_path,
     processed_output_path,
     database,
+    progress_db,
     max_runtime_sec,
 ):
     if max_runtime_sec == -1:
@@ -880,7 +886,7 @@ def main(
     else:
         stop_time = time.time() + max_runtime_sec
     run_info = get_site_filenos_for_run_range(start_run, end_run, run_list_file)
-    progress = _fetch_progress(database)
+    progress = _fetch_progress(progress_db)
     logging.info('Prepping for %d runs', len(run_info))
     logging.info('First few runs: %s', str(list(run_info.keys())[:5]))
     # Execute each run's first_pass and process in series since they already use
@@ -890,17 +896,17 @@ def main(
             return
         if _should_run(run, site, 'FirstPass', progress):
             run_first_pass(run, site, filenos, raw_output_path)
-            _update_progress_db(database, run, site, None, 'FirstPass')
+            _update_progress_db(progress_db, run, site, None, 'FirstPass')
         else:
             logging.debug('[first_pass] Skipping Run %d based on db progress', run)
         if _should_run(run, site, 'ExtractFlashers', progress):
             run_extract_flashers(run, site, filenos, raw_output_path)
-            _update_progress_db(database, run, site, None, 'ExtractFlashers')
+            _update_progress_db(progress_db, run, site, None, 'ExtractFlashers')
         else:
             logging.debug('[extract_flashers] Skipping Run %d based on db progress', run)
         if _should_run(run, site, 'Process', progress):
             run_process(run, site, filenos, raw_output_path, processed_output_path)
-            _update_progress_db(database, run, site, None, 'Process')
+            _update_progress_db(progress_db, run, site, None, 'Process')
         else:
             logging.debug('[process] Skipping Run %d based on db progress', run)
     if time.time() > stop_time:
@@ -909,7 +915,17 @@ def main(
     with multiprocessing.Pool(NUM_MULTIPROCESSING, maxtasksperchild=1) as pool:
         pool.starmap(
             _tasks_for_whole_run,
-            [(run, site, filenos, processed_output_path, database, stop_time, progress)
+            [
+                (
+                    run,
+                    site,
+                    filenos,
+                    processed_output_path,
+                    database,
+                    progress_db,
+                    stop_time,
+                    progress
+                )
                 for run, (site, filenos) in run_info.items()
             ],
             chunksize=2,  # Prioritize load balancing over optimizing overhead
@@ -925,6 +941,9 @@ if __name__ == '__main__':
     parser.add_argument('--database',
         help='database to store analysis outputs',
     )
+    parser.add_argument('--progress-db',
+        help='database storing progress. leave blank to use same as --database'
+    )
     parser.add_argument('--raw-output',
         help='base directory for output of raw "events" and "muons" files',
     )
@@ -938,10 +957,14 @@ if __name__ == '__main__':
         format='%(name)s - %(levelname)s - %(asctime)s - %(message)s',
         stream=sys.stdout,
     )
+    if args.progress_db is None:
+         progress_db = args.database
+     else:
+         progress_db = args.progress_db
     if args.setup_directories:
         setup_directory_structure(args.raw_output, args.processed_output)
     if args.database is not None and not os.path.isfile(args.database):
-        setup_database(args.database)
+        setup_database(args.database, progress_db)
     if args.end_run is not None:
         main(
             args.run,
@@ -950,6 +973,7 @@ if __name__ == '__main__':
             args.raw_output,
             args.processed_output,
             args.database,
+            progress_db,
             args.max_runtime_sec,
         )
     else:
@@ -960,5 +984,6 @@ if __name__ == '__main__':
             args.raw_output,
             args.processed_output,
             args.database,
+            progress_db,
             args.max_runtime_sec,
         )

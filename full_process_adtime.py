@@ -181,8 +181,10 @@ def setup_directory_structure(raw_output_path, processed_output_path):
         'processed_ad{det}',
         'hadded_ad{det}',
         'singles_ad{det}',
-        'acc_ad{det}',
-        'sub_ad{det}',
+        'acc_nominal_ad{det}',
+        'sub_nominal_ad{det}',
+        'acc_using_adtime_ad{det}',
+        'sub_using_adtime_ad{det}',
     ]
     paths = []
     for hall, det in ads:
@@ -608,7 +610,7 @@ def run_create_accidentals(run, site, processed_output_path):
         )
         outfile = os.path.join(
             path_prefix,
-            f'acc_ad{ad}/acc_ad{ad}_{run}.root',
+            f'acc_nominal_ad{ad}/acc_ad{ad}_{run}.root',
         )
         if create_accidentals.is_complete(infile, outfile):
             logging.debug(
@@ -664,7 +666,7 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
         )
         accfile = os.path.join(
             path_prefix,
-            f'acc_ad{ad}/acc_ad{ad}_{run}.root',
+            f'acc_nominal_ad{ad}/acc_ad{ad}_{run}.root',
         )
         outfile = os.path.join(
             path_prefix,
@@ -749,7 +751,7 @@ def run_compute_total_acc_efficiency(processed_output_path, database):
     infile_template = os.path.join(
         processed_output_path,
         'EH{site}',
-        'acc_ad{ad}',
+        'acc_nominal_ad{ad}',
         'acc_ad{ad}_{run}.root',
     )
     compute_acc_total_efficiency.main(

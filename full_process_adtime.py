@@ -432,6 +432,9 @@ def _apply_process(run, site, fileno, input_prefix, processed_output_path):
         events_location = os.path.join(
             input_prefix, f'events_ad{ad}_{run}_{fileno:>04}.root'
         )
+        flashers_location = os.path.join(
+            input_prefix, 'flashers', f'q1q2_ad{ad}_{run}_{fileno:>04}.root'
+        )
         output_location = os.path.join(
             processed_output_path,
             f'EH{site}',
@@ -446,6 +449,7 @@ def _apply_process(run, site, fileno, input_prefix, processed_output_path):
                     num_events,
                     events_location,
                     muons_location,
+                    flashers_location,
                     output_location,
                     (run, fileno),
                     ad,

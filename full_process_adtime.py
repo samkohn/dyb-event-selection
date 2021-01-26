@@ -420,7 +420,7 @@ def run_extract_flashers(run, site, filenos, raw_output_path):
 
 def _apply_process(run, site, fileno, input_prefix, processed_output_path):
     """Multiprocessing-friendly call of process (all ADs within a hall together)."""
-    logging.debug('[process] Running on Run %d, file %d', run, fileno)
+    logging.info('[process] Running on Run %d, file %d', run, fileno)
     muons_location = os.path.join(input_prefix, f'muons_{run}_{fileno:>04}.root')
     num_events = -1
     debug = False
@@ -460,7 +460,7 @@ def _apply_process(run, site, fileno, input_prefix, processed_output_path):
                     fileno, ad, muons_location
                 )
                 raise
-    logging.debug('[process] Finished Run %d, file %d', run, fileno)
+    logging.info('[process] Finished Run %d, file %d', run, fileno)
     return
 
 @time_execution
@@ -959,16 +959,18 @@ if __name__ == '__main__':
         help='base directory for output of processed files',
     )
     parser.add_argument('--max-runtime-sec', type=int, default=-1)
+    parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
+    level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(
-        level=logging.INFO,
+        level=level,
         format='%(name)s - %(levelname)s - %(asctime)s - %(message)s',
         stream=sys.stdout,
     )
     if args.progress_db is None:
-         progress_db = args.database
-     else:
-         progress_db = args.progress_db
+        progress_db = args.database
+    else:
+        progress_db = args.progress_db
     if args.setup_directories:
         setup_directory_structure(args.raw_output, args.processed_output)
     if args.database is not None and not os.path.isfile(args.database):
@@ -995,3 +997,4 @@ if __name__ == '__main__':
             progress_db,
             args.max_runtime_sec,
         )
+    print(f'Exiting runs {args.run} through {args.end_run}')

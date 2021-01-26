@@ -1,0 +1,224 @@
+"""Compute the change in prompt energy cut efficiency due to oscillation effects.
+
+The MC prompt spectrum is distorted by oscillation.
+The fraction of MC events passing the prompt energy cut is computed
+for no oscillation and for a variety of theta13 values
+and for baselines for each reactor-AD pair.
+An appropriate adjustment in detection efficiency should be made
+to compensate for these changes:
+    N_comparable = N_AD/(1 + correction)
+"""
+
+import argparse
+from array import array
+import itertools
+
+import numpy as np
+
+import common
+from prediction import survival_probability, default_osc_params
+import prediction as pred
+
+cores = range(1, 7)
+
+NUM_EVENTS = 100_000_000  # Max
+
+def get_p_sur_helpers(sin2_2theta13, m2_ee):
+    """Return a bunch of expressions to make the TTree::Draw expression sane."""
+    theta13 = 0.5 * np.arcsin(np.sqrt(sin2_2theta13))
+    theta12 = default_osc_params.theta12
+    m2_21 = default_osc_params.m2_21
+    # Hierarchy factor = 2 * int(hierarchy) - 1 (+1 if True, else -1)
+    hierarchy = 2 * int(default_osc_params.hierarchy) - 1
+    m2_32 = m2_ee - hierarchy * default_osc_params.m2_ee_conversion
+    m2_31 = m2_32 + hierarchy * m2_21
+    cos4theta13 = np.power(np.cos(theta13), 4)
+    cos2theta12 = np.power(np.cos(theta12), 2)
+    sin2theta12 = np.power(np.sin(theta12), 2)
+    sin2_2theta12 = np.power(np.sin(2*theta12), 2)
+    return (
+        cos4theta13,
+        cos2theta12,
+        sin2theta12,
+        sin2_2theta12,
+        m2_21,
+        m2_31,
+        m2_32,
+    )
+
+
+def main(
+    database, binning_id, mc_infile, source, m2_ee, sin2_values, nominal_eff, update_db
+):
+    import ROOT
+    infile = ROOT.TFile(mc_infile, 'READ')
+    mc_data = infile.Get('toy')
+    mc_data.SetBranchStatus('*', 0)
+    mc_data.SetBranchStatus('Ev', 1)
+    mc_data.SetBranchStatus('res_p', 1)
+    mc_data.SetBranchStatus('target', 1)
+    ## Extract each event's true antineutrino and prompt reco energy
+    #events = []
+    #n_entries = mc_data.GetEntries()
+    #for i in range(n_entries):
+        #mc_data.GetEntry(i)
+        #if mc_data.target == 1:
+            #events.append((
+                #mc_data.Ev,
+                #mc_data.res_p,
+            #))
+    #events = np.array(events)
+    outfile = ROOT.TFile('prompt_eff_tmp_core3.root', 'RECREATE')
+    # Read in the prompt energy bins
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                BinEdgeEnergy_keV/1000.0
+            FROM
+                reco_binnings
+            WHERE
+                Id = ?
+            ORDER BY
+                BinEdgeIndex
+            ''',
+            (binning_id,)
+        )
+        fine_bins = cursor.fetchall()
+    fine_bins = array('f', [bin_tuple[0] for bin_tuple in fine_bins])
+    n_fine_bins = len(fine_bins) - 1  # bins array includes upper bin edge
+    # Coarse bins split into "too small," "accepted," and "too large"
+    bins = array('f', [0, fine_bins[0], fine_bins[n_fine_bins], 20])
+    nbins = len(bins) - 1
+    if nominal_eff is None:
+        #nominal_values, _ = np.histogram(events[:, 1], bins=bins)
+        nominal_hist = ROOT.TH1F("nominal", "nominal", nbins, bins[0], bins[nbins])
+        mc_data.draw("res_p >> nominal", "target == 1", "goff", NUM_EVENTS)
+        # load the bin contents into numpy arrays for easy manipulation
+        nominal_values = np.zeros((nbins,))
+        for i in range(nbins):
+            nominal_values[i] = nominal_hist.getbincontent(i + 1)
+        nominal_eff = nominal_values[1]/sum(nominal_values)
+        print("no osc", nominal_eff)
+    if update_db:
+        with common.get_db(database) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE
+                INTO
+                    prompt_eff_osc_corrections
+                VALUES
+                    ("no osc", 0, 0, 0, 0, 0, ?, ?, 0)
+                ''',
+                (binning_id, nominal_eff)
+            )
+    osc_histograms = {}
+    osc_effs = {}
+    osc_corrections = {}
+    rows = []
+    for core, halldet, sin2_2theta13 in itertools.product(
+        cores, pred.all_ads, sin2_values
+    ):
+        hall, det = halldet
+        name = f'eh{hall}_ad{det}_core{core}_{sin2_2theta13:.4f}'
+        osc_hist = ROOT.TH1F(name, name, nbins, bins[0], bins[nbins])
+        osc_hist.GetXaxis().Set(nbins, bins)
+        osc_histograms[hall, det, core, sin2_2theta13] = osc_hist
+        # Prepare for survival probability computation
+        (
+            cos4theta13,
+            cos2theta12,
+            sin2theta12,
+            sin2_2theta12,
+            m2_21,
+            m2_31,
+            m2_32,
+        ) = get_p_sur_helpers(sin2_2theta13, m2_ee)
+        baseline = pred.distances[core][f'EH{hall}'][det - 1]  # Lookup in prediction
+        #theta13 = 0.5 * np.arcsin(np.sqrt(sin2_2theta13))
+        #weights = survival_probability(
+            #baseline,
+            #events[:, 0],
+            #theta13,
+            #default_osc_params,
+        #)
+        reco_var = 'res_p'
+        true_var = 'Ev'
+        p_sur_string = (
+            '('
+                '1'
+                f'- {cos4theta13 * sin2_2theta12} * TMath::Power('
+                f'    TMath::Sin({1.267 * m2_21 * baseline} / {true_var}),'
+                '     2'
+                ')'
+                f'- {cos2theta12 * sin2_2theta13} * TMath::Power('
+                f'    TMath::Sin({1.267 * m2_31 * baseline} / {true_var}),'
+                '     2'
+                ')'
+                f'- {sin2theta12 * sin2_2theta13} * TMath::Power('
+                f'    TMath::Sin({1.267 * m2_32 * baseline} / {true_var}),'
+                '     2'
+                ')'
+            ')'
+        )
+        selection_string = f'{p_sur_string} * (target == 1)'  # nH
+        mc_data.draw(f"{reco_var} >> {name}", selection_string, "goff", NUM_EVENTS)
+        # load the bin contents into numpy arrays for easy manipulation
+        values = np.zeros((nbins,))
+        for i in range(nbins):
+            values[i] = osc_hist.getbincontent(i + 1)
+        efficiency = values[1]/sum(values)
+        correction = efficiency/nominal_eff - 1
+        osc_effs[hall, det, core, sin2_2theta13] = efficiency
+        osc_corrections[hall, det, core, sin2_2theta13] = correction
+        row = (
+            source,
+            hall,
+            det,
+            core,
+            sin2_2theta13,
+            m2_ee,
+            binning_id,
+            efficiency,
+            correction,
+        )
+        rows.append(row)
+        print(row)
+        osc_hist.Write()
+    if update_db:
+        with common.get_db(database) as conn:
+            cursor = conn.cursor()
+            cursor.executemany('''
+                INSERT OR REPLACE
+                INTO
+                    prompt_eff_osc_corrections
+                VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                rows
+            )
+    outfile.Close()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('database')
+    parser.add_argument('binning_id', type=int, help='Used to determine energy bounds')
+    parser.add_argument('mc_infile')
+    parser.add_argument('source')
+    parser.add_argument('--sin2-values', type=float, nargs='+')
+    parser.add_argument('--dm2', type=float, required=True)
+    parser.add_argument('--no-osc-eff', type=float,
+        help='Use the provided efficiency rather than computing it again'
+    )
+    parser.add_argument('--update-db', action='store_true')
+    args = parser.parse_args()
+    main(
+        args.database,
+        args.binning_id,
+        args.mc_infile,
+        args.source,
+        args.dm2,
+        args.sin2_values,
+        args.no_osc_eff,
+        args.update_db
+    )

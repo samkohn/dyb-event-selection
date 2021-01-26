@@ -16,6 +16,8 @@ from muons import (
         _NH_SHOWER_MUON_VETO_LAST_NS as SHOWER_MUON_VETO
 )
 import delayeds
+import flashers
+import process
 from adevent import isADEvent_THU, isADEvent_THU_lowenergy
 import process
 from root_util import (TreeBuffer, float_value, assign_value,
@@ -64,6 +66,8 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     fill_buf.fPSD_t1 = float_value(buffer_depth)
     fill_buf.fPSD_t2 = float_value(buffer_depth)
     fill_buf.f2inch_maxQ = float_value(buffer_depth)
+    fill_buf.Q1 = float_value(buffer_depth)
+    fill_buf.Q2 = float_value(buffer_depth)
     fill_buf.energy = float_value(buffer_depth)
     fill_buf.x = float_value(buffer_depth)
     fill_buf.y = float_value(buffer_depth)
@@ -111,6 +115,8 @@ def create_computed_TTree(name, host_file, selection_name, title=None):
     branch_multiple('fPSD_t1', 'F')
     branch_multiple('fPSD_t2', 'F')
     branch_multiple('f2inch_maxQ', 'F')
+    branch_multiple('Q1', 'F')
+    branch_multiple('Q2', 'F')
     branch_multiple('energy', 'F')
     branch_multiple('x', 'F')
     branch_multiple('y', 'F')
@@ -135,6 +141,19 @@ def isValidEvent(indata, helpers):
     reasons = []
     detector = indata.detector
     energy = indata.energy
+    is_resid_flasher = flashers.isFlasher_nH_no_resid(
+        flashers.fID(indata.fMax, indata.fQuad),
+        None,
+        indata.f2inch_maxQ,
+        indata.detector,
+        indata.Q1,
+        indata.Q2,
+        indata.x,
+        indata.y,
+        indata.z,
+    )
+    if is_resid_flasher != 0:
+        reasons.append('residual_flasher')
     if not isADEvent_THU(detector, energy):
         reasons.append('not_adevent')
     return (len(reasons) == 0, reasons)
@@ -519,20 +538,9 @@ def copy_to_buffer(ttree, buf, index, name):
     return
 
 def assign_event(source, buf, index):
-    copy_to_buffer(source, buf, index, 'timestamp')
-    copy_to_buffer(source, buf, index, 'timestamp_seconds')
-    copy_to_buffer(source, buf, index, 'timestamp_nanoseconds')
-    copy_to_buffer(source, buf, index, 'detector')
-    copy_to_buffer(source, buf, index, 'triggerNumber')
-    copy_to_buffer(source, buf, index, 'triggerType')
-    copy_to_buffer(source, buf, index, 'nHit')
-    copy_to_buffer(source, buf, index, 'charge')
-    copy_to_buffer(source, buf, index, 'fQuad')
-    copy_to_buffer(source, buf, index, 'fMax')
-    copy_to_buffer(source, buf, index, 'fPSD_t1')
-    copy_to_buffer(source, buf, index, 'fPSD_t2')
-    copy_to_buffer(source, buf, index, 'f2inch_maxQ')
-    copy_to_buffer(source, buf, index, 'energy')
+    process.assign_event(source, buf, index)
+    copy_to_buffer(source, buf, index, 'Q1')
+    copy_to_buffer(source, buf, index, 'Q2')
     copy_to_buffer(source, buf, index, 'x')
     copy_to_buffer(source, buf, index, 'y')
     copy_to_buffer(source, buf, index, 'z')
@@ -541,15 +549,26 @@ def assign_event(source, buf, index):
     copy_to_buffer(source, buf, index, 'y_AdTime')
     copy_to_buffer(source, buf, index, 'z_AdTime')
 
-def main(entries, events_filename, muon_filename, out_filename, runfile,
-        detector, debug):
+def main(
+    entries,
+    events_filename,
+    muon_filename,
+    flashers_filename,
+    out_filename,
+    runfile,
+    detector,
+    debug
+):
     from ROOT import TFile
 
     run, fileno = runfile
     events_file = TFile(events_filename, 'READ')
     muon_file = TFile(muon_filename, 'READ')
+    flashers_file = TFile(flashers_filename, 'READ')
     in_events = events_file.Get('events')
     muons = muon_file.Get('muons')
+    flashers = flashers_file.Get('flashers')
+    in_events.AddFriend(flashers)
     outfile = TFile(out_filename, 'RECREATE')
     ttree_name = 'ad_events'
     ttree_description = 'AD events by Sam Kohn (git: %s)'
@@ -570,6 +589,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--adevents', help='Input AD events file name')
     parser.add_argument('--muons', help='Input muons file name')
+    parser.add_argument('--flashers', help='Input flashers file name')
     parser.add_argument('-o', '--output', help='Output file name')
     parser.add_argument('-d', '--debug', action='store_true')
     parser.add_argument('-n', '--events', type=int, default=-1)
@@ -583,5 +603,13 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.DEBUG)
     if args.lowenergy:
         isADEvent_THU = isADEvent_THU_lowenergy
-    main(args.events, args.adevents, args.muons, args.output, args.runfile,
-            args.det, args.debug)
+    main(
+        args.events,
+        args.adevents,
+        args.muons,
+        args.flashers,
+        args.output,
+        args.runfile,
+        args.det,
+        args.debug
+    )

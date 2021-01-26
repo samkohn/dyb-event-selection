@@ -2,7 +2,7 @@
 This module computes flasher cuts.
 
 '''
-from math import log10, pow
+from math import log10, pow, sqrt
 
 from common import *
 
@@ -40,3 +40,46 @@ def isFlasher_nH(event_fID, event_fPSD, f2inch_maxQ, event_detector):
     fID_cut = int(event_fID >= 0)
     f2inch_cut = int(f2inch_maxQ > 100) * 4
     return fID_cut + f2inch_cut
+
+RESID_FLASHER_TOP_RING_Z_MM = 2400
+RESID_FLASHER_TOP_RING_R2_MM2 = 250000
+RESID_FLASHER_QUN_R_MM = 2200
+RESID_FLASHER_Q1Q2 = 0.6
+RESID_FLASHER_FID = -0.3
+RESID_FLASHER_TRIANGLE_Q1Q2 = 0.5
+RESID_FLASHER_TRIANGLE_CONST = -0.8
+def isFlasher_nH_no_resid(
+    event_fID,
+    event_fPSD,
+    f2inch_maxQ,
+    event_detector,
+    event_Q1,
+    event_Q2,
+    event_x,
+    event_y,
+    event_z,
+):
+    is_nominal_flasher = isFlasher_nH(event_fID, event_fPSD, f2inch_maxQ, event_detector)
+    event_r2 = event_x * event_x + event_y * event_y
+    event_r = sqrt(event_r2)
+    event_Q1_by_Q2 = event_Q1/event_Q2
+    is_top_ring_flasher = (
+        event_z > RESID_FLASHER_TOP_RING_Z_MM
+        and event_r2 > RESID_FLASHER_TOP_RING_R2_MM2
+    )
+    is_qun_flasher = event_r > RESID_FLASHER_QUN_R_MM
+    is_other_resid_flasher = (
+        event_fID > RESID_FLASHER_FID
+        and event_Q1_by_Q2 > RESID_FLASHER_Q1Q2
+        and (
+            event_Q1_by_Q2 * RESID_FLASHER_Q1Q2
+            + RESID_FLASHER_TRIANGLE_CONST
+            - event_fID
+        ) < 0
+    )
+    return (
+        is_nominal_flasher
+        + is_top_ring_flasher * 8
+        + is_qun_flasher * 16
+        + is_other_resid_flasher * 32
+    )

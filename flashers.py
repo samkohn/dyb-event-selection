@@ -62,7 +62,11 @@ def isFlasher_nH_no_resid(
     is_nominal_flasher = isFlasher_nH(event_fID, event_fPSD, f2inch_maxQ, event_detector)
     event_r2 = event_x * event_x + event_y * event_y
     event_r = sqrt(event_r2)
-    event_Q1_by_Q2 = event_Q1/event_Q2
+    try:
+        event_Q1_by_Q2 = event_Q1/event_Q2
+    except ZeroDivisionError:
+        # Use a placeholder value that puts it in prime territory to be vetoed
+        event_Q1_by_Q2 = RESID_FLASHER_Q1Q2 * 1.1
     is_top_ring_flasher = (
         event_z > RESID_FLASHER_TOP_RING_Z_MM
         and event_r2 > RESID_FLASHER_TOP_RING_R2_MM2

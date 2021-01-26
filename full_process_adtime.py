@@ -31,6 +31,8 @@ import subtract_accidentals
 
 NUM_MULTIPROCESSING = 64
 
+NOMINAL_LABEL = "reject_resid_flash_nominal"
+ADTIME_LABEL = "reject_resid_flash_adtime"
 
 def time_execution(func):
     """Convention that first arg is always the run number"""
@@ -616,7 +618,7 @@ def run_create_accidentals(run, site, processed_output_path):
             logging.debug(
                 '[create_accidentals] Running file. %s', outfile
             )
-            pairing_note = 'nominal'
+            pairing_note = NOMINAL_LABEL
             create_accidentals.main(
                 infile,
                 outfile,
@@ -637,7 +639,7 @@ def run_create_accidentals(run, site, processed_output_path):
             logging.debug(
                 '[create_accidentals] Running file. %s', outfile
             )
-            pairing_note = 'adtime'
+            pairing_note = ADTIME_LABEL
             create_accidentals_adtime.main(
                 infile,
                 outfile,
@@ -673,7 +675,7 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
                 '[subtract_accidentals] Found existing file. Skipping. %s', outfile
             )
         else:
-            label = 'nominal'
+            label = NOMINAL_LABEL
             subtract_accidentals.main(
                 outfile,
                 datafile,
@@ -697,7 +699,7 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
                 '[subtract_accidentals] Found existing file. Skipping. %s', outfile
             )
         else:
-            label = 'adtime'
+            label = ADTIME_LABEL
             subtract_accidentals.main(
                 outfile,
                 datafile,
@@ -754,7 +756,7 @@ def run_compute_total_acc_efficiency(processed_output_path, database):
         database,
         database,
         infile_template,
-        'nominal',
+        NOMINAL_LABEL,
         True,
     )
     logging.info('beginning adtime acc efficiency')
@@ -768,7 +770,7 @@ def run_compute_total_acc_efficiency(processed_output_path, database):
         database,
         database,
         infile_template,
-        'adtime',
+        ADTIME_LABEL,
         True,
     )
     return
@@ -783,7 +785,7 @@ def run_fit_delayed(site, ad, processed_output_path, database):
         f'sub_ad{ad}.root',
     )
     outfile = f'fit_nominal_eh{site}_ad{ad}.pdf'
-    fit_delayed_adtime.main(infile, outfile, site, ad, 'nominal', database)
+    fit_delayed_adtime.main(infile, outfile, site, ad, NOMINAL_LABEL, database)
     infile = os.path.join(
         processed_output_path,
         f'EH{site}',
@@ -791,7 +793,7 @@ def run_fit_delayed(site, ad, processed_output_path, database):
         f'sub_ad{ad}.root',
     )
     outfile = f'fit_adtime_eh{site}_ad{ad}.pdf'
-    fit_delayed_adtime.main(infile, outfile, site, ad, 'adtime', database)
+    fit_delayed_adtime.main(infile, outfile, site, ad, ADTIME_LABEL, database)
     return
 
 

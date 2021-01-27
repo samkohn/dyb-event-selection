@@ -1,6 +1,7 @@
 import argparse
 import multiprocessing
 from pprint import pprint
+import sqlite3
 import sys
 
 import numpy as np
@@ -351,18 +352,160 @@ def chi_square_grid(starting_params, constants, theta13_values):
     starting_params.theta13 = best_theta13  # restore original value
     return result
 
-def save_result(database, source, index, theta13_best, theta13_low_err, theta13_up_err, chi_square):
+def save_result(
+    database,
+    description,
+    constants,
+    fit_params,
+    rate_only,
+    avg_near,
+    sin2_error_plus=None,
+    sin2_error_minus=None,
+    m2_ee_error_plus=None,
+    m2_ee_error_minus=None,
+):
     """Save the specified results to the database.
+
+    The FitConstants object is not saved to the db.
+    It is only used to compute the chi-squareds.
     """
+    chi2_poisson = chi_square(
+        constants, fit_params, rate_only=rate_only, avg_near=avg_near
+    )
+    chi2_pearson = chi_square(
+        constants, fit_params, rate_only=rate_only, avg_near=avg_near, variant='pearson'
+    )
+    fits_db_row = (
+        description,
+        int(rate_only),
+        int(avg_near),
+        np.power(np.sin(2 * fit_params.theta13), 2),
+        fit_params.m2_ee,
+        chi2_poisson,
+        chi2_pearson,
+        sin2_error_plus,
+        sin2_error_minus,
+        m2_ee_error_plus,
+        m2_ee_error_minus,
+        constants.input_osc_params.theta12,
+        constants.input_osc_params.m2_21,
+        int(constants.input_osc_params.hierarchy),
+        constants.input_osc_params.m2_ee_conversion,
+    )
+    params_list = fit_params.to_list()
+    params_rows = []
+    for name, index in fit_params.index_map().items():
+        if name in ('theta13', 'm2_ee'):
+            # The best-fit values get saved separately
+            continue
+        if isinstance(index, int):
+            # Only 1 value, not an array
+            param_value = params_list[index]
+            params_rows.append((name, None, param_value))
+        else:
+            # Multiple params in a list, index is a slice
+            param_values = params_list[index]
+            for param_index, param_value in enumerate(param_values):
+                params_rows.append((name, param_index, param_value))
     with common.get_db(database) as conn:
         cursor = conn.cursor()
-        sin2_best, sin2_low, sin2_up = np.power(np.sin(2*np.array(
-            [theta13_best, theta13_low_err, theta13_up_err]
-        )), 2)
-        cursor.execute('''INSERT OR REPLACE INTO toymc_tests
-        VALUES (?, ?, ?, ?, ?, ?, ?)''',
-        (source, index, sin2_best, chi_square, 3, sin2_up, sin2_low))
+        cursor.execute(f'''
+            INSERT INTO
+                fits (
+                    Description,
+                    IsRateOnly,
+                    IsAvgNear,
+                    FitSinSqT13,
+                    FitDM2ee,
+                    ChiSquareFit,
+                    ChiSquareGof,
+                    SinSqT13_ErrorPlus,
+                    SinSqT13_ErrorMinus,
+                    DM2ee_ErrorPlus,
+                    DM2ee_ErrorMinus,
+                    Theta12,
+                    DM2_21,
+                    Hierarchy,
+                    DM2ee_conversion
+                )
+            VALUES
+                ({", ".join("?"*15)}); -- 15 parameters
+            ''',
+            fits_db_row,
+        )
+        fit_id = cursor.lastrowid
+        # Update params_rows to include the fit_id
+        real_params_rows = []
+        for row in params_rows:
+            real_params_rows.append((fit_id, *row))
+        cursor.executemany('''
+            INSERT INTO
+                pulls
+            VALUES
+                (?, ?, ?, ?)
+            ''',
+            real_params_rows,
+        )
     return
+
+def load_result(database, id_or_description):
+    """Load saved results into (FitParams, dict of other attributes)."""
+    if isinstance(id_or_description, int):
+        use_id = True
+    else:
+        use_id = False
+    with common.get_db(database) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(f'''
+            SELECT
+                *
+            FROM
+                fits
+            WHERE
+                {"Id" if use_id else "Description"} = ?
+            LIMIT
+                1
+            ''',
+            (id_or_description,),
+        )
+        fit_info = dict(cursor.fetchone())
+        fit_info['IsRateOnly'] = bool(fit_info['IsRateOnly'])
+        fit_info['IsAvgNear'] = bool(fit_info['IsAvgNear'])
+        fit_info['Hierarchy'] = bool(fit_info['Hierarchy'])
+        fit_id = fit_info['Id']
+        fit_theta13 = 0.5 * np.arcsin(np.sqrt(fit_info['FitSinSqT13']))
+        cursor.execute('''
+            SELECT
+                ParamName,
+                ParamIndex,
+                ParamValue
+            FROM
+                pulls
+            WHERE
+                FitId = ?
+            ORDER BY
+                ParamName,
+                ParamIndex
+            ''',
+            (fit_id,),
+        )
+        rows = cursor.fetchall()
+        param_list = [None] * (2 + pred.FitParams.num_pulls)  # 2 for theta13, dm2
+        index_map = pred.FitParams.index_map()
+        param_list[index_map['theta13']] = fit_theta13
+        param_list[index_map['m2_ee']] = fit_info['FitDM2ee']
+        for row in rows:
+            index = index_map[row['ParamName']]
+            if isinstance(index, int):
+                param_list[index] = row['ParamValue']
+            else:
+                offset = row['ParamIndex']
+                real_index = index.start + offset
+                param_list[real_index] = row['ParamValue']
+        fit_params = pred.FitParams.from_list(param_list)
+        return fit_params, fit_info
+
 
 def grid(
     theta13_values,
@@ -499,11 +642,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pulls", nargs='*', choices=pull_choices+('all',), default=[]
     )
+    parser.add_argument("--save-db", help="db file to save the results")
+    parser.add_argument("--save-descr", help="verbose description to be saved")
     args = parser.parse_args()
+    if (args.save_db is None) != (args.save_descr is None):
+        raise ValueError("Must specify both or neither of --save-db and --save-descr")
     rate_only = not args.shape
     pulls = args.pulls
     near_ads = None
     constants = pred.load_constants(args.config)
+    starting_theta13 = 0.15  # Near-ish to expected fit value
     if args.dm2ee is None and rate_only:
         raise ValueError("Can't fit dm2_ee in rate-only")
     elif rate_only or args.dm2ee is not None:
@@ -561,3 +709,12 @@ if __name__ == "__main__":
         if args.scan:
             print("Chi-square scan")
             print(sigma_searcher(fit_params, constants))
+        if args.save_descr is not None:
+            save_result(
+                args.save_db,
+                args.save_descr,
+                constants,
+                fit_params,
+                rate_only,
+                args.avg_near,
+            )

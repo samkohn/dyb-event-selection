@@ -4,6 +4,7 @@ import argparse
 import itertools
 import subprocess
 import sys
+import time
 
 import common
 
@@ -83,4 +84,5 @@ if __name__ == '__main__':
 
         if args.srun:
             subprocess.run(f'{srun_command} {command} 2>&1 >> log_{first}_{last}.txt &', shell=True)
-
+    time.sleep(args.max_runtime_sec)
+    print(f'Just elapsed max_runtime_sec = {args.max_runtime_sec}')

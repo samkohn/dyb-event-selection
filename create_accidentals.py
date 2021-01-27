@@ -195,20 +195,23 @@ def is_complete(infilename, outfilename):
     if not os.path.isfile(outfilename):
         return False
     import ROOT
-    infile = ROOT.TFile(infilename, 'READ')
-    in_singles = infile.Get('singles')
-    in_entries = in_singles.GetEntries()
-    infile.Close()
-    outfile = ROOT.TFile(outfilename, 'READ')
-    out_acc = outfile.Get('all_pairs')
-    if not out_acc:  # PyROOT-speak for null pointer test
+    try:
+        infile = ROOT.TFile(infilename, 'READ')
+        in_singles = infile.Get('singles')
+        in_entries = in_singles.GetEntries()
+        infile.Close()
+        outfile = ROOT.TFile(outfilename, 'READ')
+        out_acc = outfile.Get('all_pairs')
+        if not out_acc:  # PyROOT-speak for null pointer test
+            return False
+        out_entries = out_acc.GetEntries()
+        PAIRING_FACTOR = 0.48
+        threshold = in_entries * PAIRING_FACTOR
+        if out_entries < threshold:
+            return False
+        return True
+    except AttributeError:
         return False
-    out_entries = out_acc.GetEntries()
-    PAIRING_FACTOR = 0.48
-    threshold = in_entries * PAIRING_FACTOR
-    if out_entries < threshold:
-        return False
-    return True
 
 
 def main(infilename, outfile, ttree_name, pairing_algorithm, pairing_note, update_db):

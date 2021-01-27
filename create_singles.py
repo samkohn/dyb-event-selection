@@ -20,19 +20,22 @@ def is_complete(infilename, outfilename):
     if not os.path.isfile(outfilename):
         return False
     import ROOT
-    infile = ROOT.TFile(infilename, 'READ')
-    in_events = infile.Get('ad_events')
-    in_events.GetEntry(in_events.GetEntries() - 1)
-    last_timestamp = in_events.timestamp[0]
-    infile.Close()
-    outfile = ROOT.TFile(outfilename, 'READ')
-    out_events = outfile.Get('singles')
-    out_events.GetEntry(out_events.GetEntries() - 1)
-    singles_timestamp = out_events.timestamp
-    TIMESTAMP_CRITERION = 5000000000  # 5e9ns = 5s
-    if abs(singles_timestamp - last_timestamp) > TIMESTAMP_CRITERION:
+    try:
+        infile = ROOT.TFile(infilename, 'READ')
+        in_events = infile.Get('ad_events')
+        in_events.GetEntry(in_events.GetEntries() - 1)
+        last_timestamp = in_events.timestamp[0]
+        infile.Close()
+        outfile = ROOT.TFile(outfilename, 'READ')
+        out_events = outfile.Get('singles')
+        out_events.GetEntry(out_events.GetEntries() - 1)
+        singles_timestamp = out_events.timestamp
+        TIMESTAMP_CRITERION = 5000000000  # 5e9ns = 5s
+        if abs(singles_timestamp - last_timestamp) > TIMESTAMP_CRITERION:
+            return False
+        return True
+    except Exception:
         return False
-    return True
 
 
 def main(infilename, outfile, ttree_name):

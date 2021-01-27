@@ -513,7 +513,7 @@ def run_hadd(run, site, filenos, processed_output_path):
                     if infile_events == outfile_events:
                         logging.debug('[hadd] Found existing file. Skipping. %s', outfile)
                         continue
-            except ReferenceError:  # If file doesn't have correct TTree
+            except (ReferenceError, AttributeError):  # If file doesn't have correct TTree
                 pass
             finally:
                 outfile_opened.Close()

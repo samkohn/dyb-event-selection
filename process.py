@@ -539,6 +539,9 @@ def is_complete(infilename, outfilename):
     try:
         if not os.path.isfile(outfilename):
             return False
+        json_name = os.path.splitext(outfilename)[0] + '.json'
+        if not os.path.isfile(json_name):
+            return False
         from ROOT import TFile
         infile = TFile(infilename, 'READ')
         in_events = infile.Get('events')

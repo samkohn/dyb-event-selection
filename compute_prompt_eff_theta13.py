@@ -21,7 +21,7 @@ import prediction as pred
 
 cores = range(1, 7)
 
-NUM_EVENTS = 100_000_000  # Max
+NUM_EVENTS = 100_000_000
 
 def get_p_sur_helpers(sin2_2theta13, m2_ee):
     """Return a bunch of expressions to make the TTree::Draw expression sane."""
@@ -57,17 +57,18 @@ def main(
     mc_data.SetBranchStatus('Ev', 1)
     mc_data.SetBranchStatus('res_p', 1)
     mc_data.SetBranchStatus('target', 1)
-    ## Extract each event's true antineutrino and prompt reco energy
-    #events = []
-    #n_entries = mc_data.GetEntries()
-    #for i in range(n_entries):
-        #mc_data.GetEntry(i)
-        #if mc_data.target == 1:
-            #events.append((
-                #mc_data.Ev,
-                #mc_data.res_p,
-            #))
-    #events = np.array(events)
+    # Extract each event's true antineutrino and prompt reco energy
+    events = []
+    n_entries = mc_data.GetEntries()
+    for i in range(min(n_entries, NUM_EVENTS)):
+        mc_data.GetEntry(i)
+        if mc_data.target == 1:
+            events.append((
+                mc_data.Ev,
+                mc_data.res_p,
+            ))
+    events = np.array(events)
+    print("Loaded up event array")
     outfile = ROOT.TFile('prompt_eff_tmp_core3.root', 'RECREATE')
     # Read in the prompt energy bins
     with common.get_db(database) as conn:
@@ -91,15 +92,16 @@ def main(
     bins = array('f', [0, fine_bins[0], fine_bins[n_fine_bins], 20])
     nbins = len(bins) - 1
     if nominal_eff is None:
-        #nominal_values, _ = np.histogram(events[:, 1], bins=bins)
-        nominal_hist = ROOT.TH1F("nominal", "nominal", nbins, bins[0], bins[nbins])
-        mc_data.draw("res_p >> nominal", "target == 1", "goff", NUM_EVENTS)
-        # load the bin contents into numpy arrays for easy manipulation
-        nominal_values = np.zeros((nbins,))
-        for i in range(nbins):
-            nominal_values[i] = nominal_hist.getbincontent(i + 1)
+        nominal_values, _ = np.histogram(events[:, 1], bins=bins)
         nominal_eff = nominal_values[1]/sum(nominal_values)
         print("no osc", nominal_eff)
+        nominal_hist = ROOT.TH1F("nominal", "nominal", nbins, bins[0], bins[nbins])
+        nominal_hist.GetXaxis().Set(nbins, bins)
+        # load the bin contents into numpy arrays for easy manipulation
+        for i in range(nbins):
+            nominal_hist.SetBinContent(i + 1, nominal_values[i])
+        nominal_hist.Write()
+    print("Filled nominal histogram")
     if update_db:
         with common.get_db(database) as conn:
             cursor = conn.cursor()
@@ -120,54 +122,23 @@ def main(
         cores, pred.all_ads, sin2_values
     ):
         hall, det = halldet
+        baseline = pred.distances[core][f'EH{hall}'][det - 1]  # Lookup in prediction
+        theta13 = 0.5 * np.arcsin(np.sqrt(sin2_2theta13))
+        weights = survival_probability(
+            baseline,
+            events[:, 0],
+            theta13,
+            m2_ee,
+            default_osc_params,
+        )
+        osc_values, _ = np.histogram(events[:, 1], bins=bins, weights=weights)
         name = f'eh{hall}_ad{det}_core{core}_{sin2_2theta13:.4f}'
         osc_hist = ROOT.TH1F(name, name, nbins, bins[0], bins[nbins])
         osc_hist.GetXaxis().Set(nbins, bins)
         osc_histograms[hall, det, core, sin2_2theta13] = osc_hist
-        # Prepare for survival probability computation
-        (
-            cos4theta13,
-            cos2theta12,
-            sin2theta12,
-            sin2_2theta12,
-            m2_21,
-            m2_31,
-            m2_32,
-        ) = get_p_sur_helpers(sin2_2theta13, m2_ee)
-        baseline = pred.distances[core][f'EH{hall}'][det - 1]  # Lookup in prediction
-        #theta13 = 0.5 * np.arcsin(np.sqrt(sin2_2theta13))
-        #weights = survival_probability(
-            #baseline,
-            #events[:, 0],
-            #theta13,
-            #default_osc_params,
-        #)
-        reco_var = 'res_p'
-        true_var = 'Ev'
-        p_sur_string = (
-            '('
-                '1'
-                f'- {cos4theta13 * sin2_2theta12} * TMath::Power('
-                f'    TMath::Sin({1.267 * m2_21 * baseline} / {true_var}),'
-                '     2'
-                ')'
-                f'- {cos2theta12 * sin2_2theta13} * TMath::Power('
-                f'    TMath::Sin({1.267 * m2_31 * baseline} / {true_var}),'
-                '     2'
-                ')'
-                f'- {sin2theta12 * sin2_2theta13} * TMath::Power('
-                f'    TMath::Sin({1.267 * m2_32 * baseline} / {true_var}),'
-                '     2'
-                ')'
-            ')'
-        )
-        selection_string = f'{p_sur_string} * (target == 1)'  # nH
-        mc_data.draw(f"{reco_var} >> {name}", selection_string, "goff", NUM_EVENTS)
-        # load the bin contents into numpy arrays for easy manipulation
-        values = np.zeros((nbins,))
         for i in range(nbins):
-            values[i] = osc_hist.getbincontent(i + 1)
-        efficiency = values[1]/sum(values)
+            osc_hist.SetBinContent(i + 1, osc_values[i])
+        efficiency = osc_values[1]/sum(osc_values)
         correction = efficiency/nominal_eff - 1
         osc_effs[hall, det, core, sin2_2theta13] = efficiency
         osc_corrections[hall, det, core, sin2_2theta13] = correction
@@ -183,7 +154,8 @@ def main(
             correction,
         )
         rows.append(row)
-        print(row)
+        if not update_db:
+            print(row)
         osc_hist.Write()
     if update_db:
         with common.get_db(database) as conn:

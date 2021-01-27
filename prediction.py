@@ -125,6 +125,9 @@ class FitConstants:
     m2_21_err: float
     muon_eff: dict
     multiplicity_eff: dict
+    efficiency_err: float
+    reactor_err: float
+    rel_escale_err: float
     masses: dict
     standard_mass: float
     cross_section: np.array
@@ -321,6 +324,9 @@ class Config:
     sin2_2theta12_error: Any
     m2_21_error: Any
     binning_id: int
+    efficiency_error: float
+    reactor_error: float
+    rel_escale_error: float
     lbnl_comparison: bool = False
 
 
@@ -540,6 +546,9 @@ def load_constants(config_file):
             m2_21_rel_err,
             muon_eff,
             multiplicity_eff,
+            config.efficiency_error,
+            config.reactor_error,
+            config.rel_escale_error,
             masses,
             masses[1, 1],
             cross_sec,

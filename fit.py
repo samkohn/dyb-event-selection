@@ -127,19 +127,19 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     for core in range(1, 7):
         pull = fit_params.pull_reactor[core]
         numerator = pull * pull
-        denominator = 0.008 * 0.008
+        denominator = constants.reactor_err**2
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1
     for halldet, pull in fit_params.pull_efficiency.items():
         numerator = pull * pull
-        denominator = 0.006 * 0.006  #TODO nH
+        denominator = constants.efficiency_err**2
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1
     for halldet, pull in fit_params.pull_rel_escale.items():
         numerator = pull * pull
-        denominator = 0.005 * 0.005
+        denominator = constants.rel_escale_err**2
         chi_square += numerator/denominator
         return_array_values[term_index] = numerator/denominator
         term_index += 1

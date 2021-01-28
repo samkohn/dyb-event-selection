@@ -12,6 +12,7 @@ to compensate for these changes:
 import argparse
 from array import array
 import itertools
+import multiprocessing
 
 import numpy as np
 
@@ -48,28 +49,39 @@ def get_p_sur_helpers(sin2_2theta13, m2_ee):
 
 
 def main(
-    database, binning_id, mc_infile, source, m2_ee, sin2_values, nominal_eff, update_db
+    database,
+    binning_id,
+    mc_infile,
+    source,
+    m2_ee_values,
+    sin2_values,
+    nominal_eff,
+    toymc_extracted,
+    update_db,
 ):
     import ROOT
-    infile = ROOT.TFile(mc_infile, 'READ')
-    mc_data = infile.Get('toy')
-    mc_data.SetBranchStatus('*', 0)
-    mc_data.SetBranchStatus('Ev', 1)
-    mc_data.SetBranchStatus('res_p', 1)
-    mc_data.SetBranchStatus('target', 1)
-    # Extract each event's true antineutrino and prompt reco energy
-    events = []
-    n_entries = mc_data.GetEntries()
-    for i in range(min(n_entries, NUM_EVENTS)):
-        mc_data.GetEntry(i)
-        if mc_data.target == 1:
-            events.append((
-                mc_data.Ev,
-                mc_data.res_p,
-            ))
-    events = np.array(events)
+    if toymc_extracted is None:
+        infile = ROOT.TFile(mc_infile, 'READ')
+        mc_data = infile.Get('toy')
+        mc_data.SetBranchStatus('*', 0)
+        mc_data.SetBranchStatus('Ev', 1)
+        mc_data.SetBranchStatus('res_p', 1)
+        mc_data.SetBranchStatus('target', 1)
+        # Extract each event's true antineutrino and prompt reco energy
+        events = []
+        n_entries = mc_data.GetEntries()
+        for i in range(min(n_entries, NUM_EVENTS)):
+            mc_data.GetEntry(i)
+            if mc_data.target == 1:
+                events.append((
+                    mc_data.Ev,
+                    mc_data.res_p,
+                ))
+        events = np.array(events)
+        np.save('prompt_eff_osc_toymc.npy', events)
+    else:
+        events = np.load(toymc_extracted)
     print("Loaded up event array")
-    outfile = ROOT.TFile('prompt_eff_tmp_core3.root', 'RECREATE')
     # Read in the prompt energy bins
     with common.get_db(database) as conn:
         cursor = conn.cursor()
@@ -100,7 +112,6 @@ def main(
         # load the bin contents into numpy arrays for easy manipulation
         for i in range(nbins):
             nominal_hist.SetBinContent(i + 1, nominal_values[i])
-        nominal_hist.Write()
     print("Filled nominal histogram")
     if update_db:
         with common.get_db(database) as conn:
@@ -118,8 +129,8 @@ def main(
     osc_effs = {}
     osc_corrections = {}
     rows = []
-    for core, halldet, sin2_2theta13 in itertools.product(
-        cores, pred.all_ads, sin2_values
+    for core, halldet, sin2_2theta13, m2_ee in itertools.product(
+        cores, pred.all_ads, sin2_values, m2_ee_values
     ):
         hall, det = halldet
         baseline = pred.distances[core][f'EH{hall}'][det - 1]  # Lookup in prediction
@@ -156,7 +167,6 @@ def main(
         rows.append(row)
         if not update_db:
             print(row)
-        osc_hist.Write()
     if update_db:
         with common.get_db(database) as conn:
             cursor = conn.cursor()
@@ -169,7 +179,7 @@ def main(
                 ''',
                 rows
             )
-    outfile.Close()
+    print('finished')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -178,19 +188,37 @@ if __name__ == '__main__':
     parser.add_argument('mc_infile')
     parser.add_argument('source')
     parser.add_argument('--sin2-values', type=float, nargs='+')
-    parser.add_argument('--dm2', type=float, required=True)
+    parser.add_argument('--dm2-values', type=float, nargs='+')
     parser.add_argument('--no-osc-eff', type=float,
         help='Use the provided efficiency rather than computing it again'
     )
+    parser.add_argument('--toymc-npy')
     parser.add_argument('--update-db', action='store_true')
+    parser.add_argument('--multiprocessing', action='store_true')
     args = parser.parse_args()
+    if args.multiprocessing:
+        with multiprocessing.Pool(6) as pool:
+            pool.starmap(main, [(
+                args.database,
+                args.binning_id,
+                args.mc_infile,
+                args.source,
+                [dm2],
+                [sin2],
+                args.no_osc_eff,
+                args.toymc_npy,
+                args.update_db,
+            ) for sin2, dm2 in itertools.product(args.sin2_values, args.dm2_values)
+            ])
+
     main(
         args.database,
         args.binning_id,
         args.mc_infile,
         args.source,
-        args.dm2,
+        args.dm2_values,
         args.sin2_values,
         args.no_osc_eff,
+        args.toymc_npy,
         args.update_db
     )

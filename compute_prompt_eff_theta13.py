@@ -107,11 +107,11 @@ def main(
         nominal_values, _ = np.histogram(events[:, 1], bins=bins)
         nominal_eff = nominal_values[1]/sum(nominal_values)
         print("no osc", nominal_eff)
-        nominal_hist = ROOT.TH1F("nominal", "nominal", nbins, bins[0], bins[nbins])
-        nominal_hist.GetXaxis().Set(nbins, bins)
+        #nominal_hist = ROOT.TH1F("nominal", "nominal", nbins, bins[0], bins[nbins])
+        #nominal_hist.GetXaxis().Set(nbins, bins)
         # load the bin contents into numpy arrays for easy manipulation
-        for i in range(nbins):
-            nominal_hist.SetBinContent(i + 1, nominal_values[i])
+        #for i in range(nbins):
+            #nominal_hist.SetBinContent(i + 1, nominal_values[i])
     print("Filled nominal histogram")
     if update_db:
         with common.get_db(database) as conn:
@@ -125,7 +125,7 @@ def main(
                 ''',
                 (binning_id, nominal_eff)
             )
-    osc_histograms = {}
+    #osc_histograms = {}
     osc_effs = {}
     osc_corrections = {}
     rows = []
@@ -144,11 +144,11 @@ def main(
         )
         osc_values, _ = np.histogram(events[:, 1], bins=bins, weights=weights)
         name = f'eh{hall}_ad{det}_core{core}_{sin2_2theta13:.4f}'
-        osc_hist = ROOT.TH1F(name, name, nbins, bins[0], bins[nbins])
-        osc_hist.GetXaxis().Set(nbins, bins)
-        osc_histograms[hall, det, core, sin2_2theta13] = osc_hist
-        for i in range(nbins):
-            osc_hist.SetBinContent(i + 1, osc_values[i])
+        #osc_hist = ROOT.TH1F(name, name, nbins, bins[0], bins[nbins])
+        #osc_hist.GetXaxis().Set(nbins, bins)
+        #osc_histograms[hall, det, core, sin2_2theta13] = osc_hist
+        #for i in range(nbins):
+            #osc_hist.SetBinContent(i + 1, osc_values[i])
         efficiency = osc_values[1]/sum(osc_values)
         correction = efficiency/nominal_eff - 1
         osc_effs[hall, det, core, sin2_2theta13] = efficiency
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('--multiprocessing', action='store_true')
     args = parser.parse_args()
     if args.multiprocessing:
-        with multiprocessing.Pool(6) as pool:
+        with multiprocessing.Pool(10) as pool:
             pool.starmap(main, [(
                 args.database,
                 args.binning_id,

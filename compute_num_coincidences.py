@@ -59,7 +59,15 @@ def one_file(run_key, data_file_path, energy_lookup, bin_edges):
         adtime_spec_list,
     )
 
-def main(main_database, data_file_path, binning_id, spectrum, total, labels, update_db):
+def main(
+    main_database,
+    data_file_path,
+    binning_id,
+    save_spectrum,
+    save_total,
+    labels,
+    update_db
+):
     import ROOT
     # Fetch all triplets of RunNo, Hall, DetNo to use to find files
     with common.get_db(main_database) as conn:
@@ -142,10 +150,10 @@ def main(main_database, data_file_path, binning_id, spectrum, total, labels, upd
         results_adtime = [(*result[:2], result[3], labels['adtime']) for result in results]
         with common.get_db(main_database) as conn:
             cursor = conn.cursor()
-            if args.total:
+            if save_total:
                 cursor.executemany('''INSERT OR REPLACE INTO num_coincidences_by_run
                     VALUES (?, ?, ?, ?)''', results_nominal + results_adtime)
-            if args.spectrum:
+            if save_spectrum:
                 cursor.executemany('''
                     INSERT OR REPLACE INTO
                         num_coincidences

@@ -134,6 +134,7 @@ class FitConstants:
     rebin_matrix: np.array
     lbnl_comparison: bool
     rel_escale_parameters: dict
+    prompt_eff_baseline_corrs: dict
     _rebin_cache: RebinCache
 
 @dataclass
@@ -528,6 +529,9 @@ def load_constants(config_file):
     # Compute m2_21 relative error
     m2_21_rel_err = config.m2_21_error/input_osc_params.m2_21
 
+    prompt_eff_baseline_corrs = load_prompt_eff_baseline_corr(database, 'nominal',
+            config.binning_id)
+
     return FitConstants(
             matrix,
             true_bins_response,
@@ -555,6 +559,7 @@ def load_constants(config_file):
             rebin_matrix,
             config.lbnl_comparison,
             rel_escale_params,
+            prompt_eff_baseline_corrs,
             RebinCache(),
     )
 
@@ -673,6 +678,46 @@ def rel_escale_parameters(database, source):
             params = np.array(cursor.fetchall())
             result[hall] = params[:, :2]/params[:, 2:]  # divide by last column
     return result
+
+
+def load_prompt_eff_baseline_corr(database, source, binning_id):
+    """Load the corrections to prompt efficiency due to baseline / oscillation.
+
+    Return a dict keyed by (halldet, core) whose values are the relative
+    correction to the efficiency.
+    To convert from observed counts to comparable counts,
+    divide by (1 + correction).
+    """
+    result = defaultdict(dict)  # temporary -- cast to normal dict at the end
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                Hall,
+                DetNo,
+                Core,
+                SinSq2T13,
+                DM2ee,
+                Correction
+            FROM
+                prompt_eff_osc_corrections
+            WHERE
+                    BinningId = ?
+                AND
+                    Source = ?
+            ORDER BY
+                Hall,
+                DetNo,
+                Core
+            ''',
+            (binning_id, source)
+        )
+        rows = cursor.fetchall()
+    for hall, det, core, sin2, dm2, correction in rows:
+        result[sin2, dm2][(hall, det), core] = correction
+    result = dict(result)  # Get rid of defaultdict behavior
+    return result
+
 
 def reactor_spectrum(database, core):
     """Returns (spectrum, weekly_time_bins, energy_bins).
@@ -878,6 +923,22 @@ def xsec_weighted_spec(database):
             to_return[(hall, det), core] = total_spectrum * xsec
     return to_return, energy_bins_xsec
 
+def prompt_eff_baseline_corrs_for_params(constants, fit_params):
+    """Return a dict of ((hall, det), core) -> correction.
+
+    As usual, the correction should be applied as (1 + val).
+    """
+    current_sin2 = np.power(np.sin(2 * fit_params.theta13), 2)
+    current_dm2 = fit_params.m2_ee
+    # Values provided as dict of (sin2, dm2) -> (dict of what we want).
+    # This gets the dict keys and puts them into a 2D numpy array
+    all_precomputed_keys = np.array(list(constants.prompt_eff_baseline_corrs))
+    closest_sin2_arg = np.argmin(np.abs(all_precomputed_keys[:, 0] - current_sin2))
+    closest_sin2 = all_precomputed_keys[closest_sin2_arg, 0]
+    closest_dm2_arg = np.argmin(np.abs(all_precomputed_keys[:, 1] - current_dm2))
+    closest_dm2 = all_precomputed_keys[closest_dm2_arg, 1]
+    return constants.prompt_eff_baseline_corrs[closest_sin2, closest_dm2]
+
 def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
         include_osc=True):
     """Return a dict of flux fractions for near ADs.
@@ -1008,9 +1069,10 @@ def efficiency_weighted_counts(constants, fit_params, halls='all'):
 
     This includes the muon and multiplicity efficiencies,
     detection efficiency pull parameter, target masses,
-    oscillation-dependent changes in efficiency,
     and changes due to relative energy scale variation.
     The actual absolute detection efficiency is not included since it is common to all ADs.
+    The change in prompt efficiency due to oscillation effects is applied in
+    num_near_IBDs_from_core since it varies by core.
 
     Returns a dict mapping (hall, det) to a 1D array of N_coincidences.
     """
@@ -1490,8 +1552,12 @@ def num_near_IBDs_from_core(constants, fit_params):
     Return a dict of ((hall, det), core) -> N_ij.
     (N_ij from Eq. 2 of DocDB-8774.)
     N_ij is a 2D array with index [true_index, reco_index]
+
+    This method also applies the prompt efficiency baseline/oscillation
+    correction for near ADs.
     """
     true_bins_spec = constants.true_bins_spectrum
+    prompt_eff_corrections = prompt_eff_baseline_corrs_for_params(constants, fit_params)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     true_bins_resp = constants.true_bins_response
@@ -1505,6 +1571,7 @@ def num_near_IBDs_from_core(constants, fit_params):
         # Must expand dims so that the shape of the arrays is
         # (N_true, 1) * (N_true, N_reco)
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_spectra[halldet]
+        n_ij[halldet, core] /= (1 + prompt_eff_corrections[halldet, core])
     return n_ij
 
 def predict_far_IBD_true_energy(constants, fit_params):
@@ -1514,11 +1581,15 @@ def predict_far_IBD_true_energy(constants, fit_params):
     Return f_kji, a dict of
     ((far_hall, far_det), core, (near_hall, near_det)) -> N,
     with core indexed from 1 and N[true_index, reco_index].
+
+    This method also applies the prompt efficiency baseline/oscillation
+    correction for far ADs.
     """
     true_bins = constants.true_bins_response
     reco_bins = constants.reco_bins
     num_from_core = num_near_IBDs_from_core(constants, fit_params)
     extrap_factors = extrapolation_factor(constants, fit_params)
+    prompt_eff_corrections = prompt_eff_baseline_corrs_for_params(constants, fit_params)
     f_kji = {}
     for (far_halldet, core, near_halldet), extrap_fact in extrap_factors.items():
         rebinned_extrap_fact = constants._rebin_cache.extrap_fact(extrap_fact,
@@ -1526,6 +1597,9 @@ def predict_far_IBD_true_energy(constants, fit_params):
         n_ij = num_from_core[near_halldet, core]
         f_kji[far_halldet, core, near_halldet] = (
                 np.expand_dims(rebinned_extrap_fact, axis=1) * n_ij
+        )
+        f_kji[far_halldet, core, near_halldet] *= (
+            1 + prompt_eff_corrections[far_halldet, core]
         )
     return f_kji
 

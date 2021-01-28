@@ -59,7 +59,7 @@ def one_file(run_key, data_file_path, energy_lookup, bin_edges):
         adtime_spec_list,
     )
 
-def main(main_database, data_file_path, binning_id, spectrum, total, update_db):
+def main(main_database, data_file_path, binning_id, spectrum, total, labels, update_db):
     import ROOT
     # Fetch all triplets of RunNo, Hall, DetNo to use to find files
     with common.get_db(main_database) as conn:
@@ -89,12 +89,12 @@ def main(main_database, data_file_path, binning_id, spectrum, total, update_db):
         cursor.execute('''SELECT Hall, DetNo, Peak - 3 * Resolution,
             Peak + 3 * Resolution
             FROM delayed_energy_fits
-            WHERE Source = "nominal"''')
+            WHERE Source = ?''', (labels['nominal'],))
         nominal_energy_bounds = cursor.fetchall()
         cursor.execute('''SELECT Hall, DetNo, Peak - 3 * Resolution,
             Peak + 3 * Resolution
             FROM delayed_energy_fits
-            WHERE Source = "adtime"''')
+            WHERE Source = ?''', (labels['adtime'],))
         adtime_energy_bounds = cursor.fetchall()
 
     energy_lookup = {}
@@ -128,7 +128,7 @@ def main(main_database, data_file_path, binning_id, spectrum, total, update_db):
                 ad,
                 binning_id,
                 json.dumps(spectrum.tolist()),
-                "adsimple 1/18/2021",
+                "adsimple 1/27/2021",
             ))
         for (site, ad), spectrum in adtime_hist.items():
             spectrum_rows.append((
@@ -136,10 +136,10 @@ def main(main_database, data_file_path, binning_id, spectrum, total, update_db):
                 ad,
                 binning_id,
                 json.dumps(spectrum.tolist()),
-                "adtime 1/18/2021",
+                "adtime 1/27/2021",
             ))
-        results_nominal = [(*result[:3], 'new nominal') for result in results]
-        results_adtime = [(*result[:2], result[3], 'new adtime') for result in results]
+        results_nominal = [(*result[:3], labels['nominal']) for result in results]
+        results_adtime = [(*result[:2], result[3], labels['adtime']) for result in results]
         with common.get_db(main_database) as conn:
             cursor = conn.cursor()
             if args.total:
@@ -168,8 +168,13 @@ if __name__ == '__main__':
     parser.add_argument('--spectrum', action='store_true')
     parser.add_argument('--total', action='store_true')
     parser.add_argument('--update-db', action='store_true')
+    parser.add_argument('--label-nominal', required=True)
+    parser.add_argument('--label-adtime', required=True)
     args = parser.parse_args()
     if not (args.total or args.spectrum):
         raise ValueError("Must specify at least one of --total or --spectrum")
     main(args.main_database, args.data_file_path,
-        args.binning_id, args.spectrum, args.total, args.update_db)
+        args.binning_id, args.spectrum, args.total,
+        {'nominal': args.label_nominal, 'adtime': args.label_adtime},
+        args.update_db
+    )

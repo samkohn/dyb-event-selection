@@ -745,7 +745,20 @@ def run_compute_num_coincidences(processed_output_path, database):
         'hadded_ad{ad}',
         'out_ad{ad}_{run}.root',
     )
-    compute_num_coincidences.main(database, database, infile_template, True)
+    binning_id = 1
+    compute_spectrum = True
+    compute_total = True
+    update_db = True
+    labels = {'nominal': NOMINAL_LABEL, 'adtime': ADTIME_LABEL}
+    compute_num_coincidences.main(
+        database,
+        infile_template,
+        binning_id,
+        compute_spectrum,
+        compute_total,
+        labels,
+        update_db,
+    )
     return
 
 

@@ -1793,7 +1793,8 @@ def generate_bin_averaging_matrix(bins_fine, bins_coarse):
 
 
 
-
+def get_baseline(hall, det, core):
+    return distances[core][f'EH{hall}'][det-1]
 
 distance_conversion = {
     1: 'D1',

@@ -7,6 +7,7 @@ import argparse
 from collections import defaultdict
 from dataclasses import dataclass, field as dc_field
 from datetime import datetime
+import itertools
 import json
 import logging
 import pdb
@@ -14,6 +15,7 @@ import sqlite3
 from typing import Any, ClassVar
 
 import numpy as np
+import scipy.interpolate
 
 import common
 
@@ -30,6 +32,7 @@ near_ads = [(1, 1), (1, 2), (2, 1), (2, 2)]
 far_ads = [(3, 1), (3, 2), (3, 3), (3, 4)]
 all_ads = near_ads + far_ads
 sites = [1, 2, 3]
+cores = range(1, 7)
 
 def ad_dict(initial_value, halls='all', factory=False):
     if halls == 'all':
@@ -176,6 +179,13 @@ class FitParams:
         default_factory=lambda: ad_dict(lambda: np.zeros(34), halls='near', factory=True)
         # TODO binning
     )
+    @property
+    def sin2_2theta13(self):
+        return np.power(np.sin(2 * self.theta13), 2)
+
+    @sin2_2theta13.setter
+    def sin2_2theta13(self, new):
+        self.theta13 = 0.5 * np.arcsin(np.sqrt(new))
 
     def clone(self):
         return FitParams.from_list(self.to_list())
@@ -328,6 +338,7 @@ class Config:
     efficiency_error: float
     reactor_error: float
     rel_escale_error: float
+    prompt_eff_corr_source: str
     lbnl_comparison: bool = False
 
 
@@ -529,8 +540,15 @@ def load_constants(config_file):
     # Compute m2_21 relative error
     m2_21_rel_err = config.m2_21_error/input_osc_params.m2_21
 
-    prompt_eff_baseline_corrs = load_prompt_eff_baseline_corr(database, 'nominal',
-            config.binning_id)
+    if config.prompt_eff_corr_source is None:
+        prompt_eff_baseline_corrs = {
+            (halldet, core): lambda x, y: 0
+            for halldet, core in itertools.product(all_ads, range(1, 7))
+        }
+    else:
+        prompt_eff_baseline_corrs = load_prompt_eff_baseline_corr(
+            database, config.prompt_eff_corr_source, config.binning_id
+        )
 
     return FitConstants(
             matrix,
@@ -683,39 +701,110 @@ def rel_escale_parameters(database, source):
 def load_prompt_eff_baseline_corr(database, source, binning_id):
     """Load the corrections to prompt efficiency due to baseline / oscillation.
 
-    Return a dict keyed by (halldet, core) whose values are the relative
-    correction to the efficiency.
+    Return a dict keyed by (halldet, core) whose values are
+    scipy.interpolate.BivariateSpline objects which, given (sin2_2theta13, dm2_ee),
+    produce the approximate correction for the given baseline.
+
+    >>> corrections_for_baseline = result[(1, 2), 3]  # EH1-AD2 core 3
+    >>> specific_correction = corrections_for_baseline(0.734, 0.00273)  # sin2, dm2
+    >>> corrected_number = num_events/(1 + specific_correction)
+
     To convert from observed counts to comparable counts,
     divide by (1 + correction).
     """
-    result = defaultdict(dict)  # temporary -- cast to normal dict at the end
+    result = {}
     with common.get_db(database) as conn:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT
-                Hall,
-                DetNo,
-                Core,
-                SinSq2T13,
-                DM2ee,
-                Correction
-            FROM
-                prompt_eff_osc_corrections
-            WHERE
-                    BinningId = ?
-                AND
-                    Source = ?
-            ORDER BY
-                Hall,
-                DetNo,
-                Core
-            ''',
-            (binning_id, source)
-        )
-        rows = cursor.fetchall()
-    for hall, det, core, sin2, dm2, correction in rows:
-        result[sin2, dm2][(hall, det), core] = correction
-    result = dict(result)  # Get rid of defaultdict behavior
+        for hall, det in all_ads:
+            for core in cores:
+                cursor.execute('''
+                    SELECT
+                        SinSq2T13
+                    FROM
+                        prompt_eff_osc_corrections
+                    WHERE
+                            BinningId = ?
+                        AND
+                            Source = ?
+                        AND
+                            Hall = ?
+                        AND
+                            DetNo = ?
+                        AND
+                            Core = ?
+                    GROUP BY
+                        SinSq2T13
+                    ORDER BY
+                        SinSq2T13
+                    ''',
+                    (binning_id, source, hall, det, core)
+                )
+                sin2_values = np.array(cursor.fetchall()).reshape(-1)
+                cursor.execute('''
+                    SELECT
+                        DM2ee
+                    FROM
+                        prompt_eff_osc_corrections
+                    WHERE
+                            BinningId = ?
+                        AND
+                            Source = ?
+                        AND
+                            Hall = ?
+                        AND
+                            DetNo = ?
+                        AND
+                            Core = ?
+                    GROUP BY
+                        DM2ee
+                    ORDER BY
+                        DM2ee
+                    ''',
+                    (binning_id, source, hall, det, core)
+                )
+                m2_ee_values = np.array(cursor.fetchall()).reshape(-1)
+                cursor.execute('''
+                    SELECT
+                        SinSq2T13,
+                        DM2ee,
+                        Correction
+                    FROM
+                        prompt_eff_osc_corrections
+                    WHERE
+                            BinningId = ?
+                        AND
+                            Source = ?
+                        AND
+                            Hall = ?
+                        AND
+                            DetNo = ?
+                        AND
+                            Core = ?
+                    ORDER BY
+                        SinSq2T13,
+                        DM2ee
+                    ''',
+                    (binning_id, source, hall, det, core)
+                )
+                rows = np.array(cursor.fetchall())
+                # Validate that there is a (dense) grid in parameter space
+                pairs_in_rows = set(tuple(pair) for pair in rows[:, :2])
+                for grid_pair in itertools.product(sin2_values, m2_ee_values):
+                    if grid_pair not in pairs_in_rows:
+                        raise ValueError(
+                            f"Couldn't find {grid_pair} in data for "
+                            f"EH{hall}-AD{det} Core {core} prompt eff corrections"
+                        )
+                # For each (halldet, core) pair, construct an interpolator
+                gridded_corrections = rows[:, 2].reshape((len(sin2_values),
+                    len(m2_ee_values)))
+                interpolator = scipy.interpolate.RectBivariateSpline(
+                    sin2_values,
+                    m2_ee_values,
+                    gridded_corrections,
+                    kx=1, ky=1,  # interpolation degree = 1 ==> linear
+                )
+                result[(hall, det), core] = interpolator
     return result
 
 
@@ -923,21 +1012,6 @@ def xsec_weighted_spec(database):
             to_return[(hall, det), core] = total_spectrum * xsec
     return to_return, energy_bins_xsec
 
-def prompt_eff_baseline_corrs_for_params(constants, fit_params):
-    """Return a dict of ((hall, det), core) -> correction.
-
-    As usual, the correction should be applied as (1 + val).
-    """
-    current_sin2 = np.power(np.sin(2 * fit_params.theta13), 2)
-    current_dm2 = fit_params.m2_ee
-    # Values provided as dict of (sin2, dm2) -> (dict of what we want).
-    # This gets the dict keys and puts them into a 2D numpy array
-    all_precomputed_keys = np.array(list(constants.prompt_eff_baseline_corrs))
-    closest_sin2_arg = np.argmin(np.abs(all_precomputed_keys[:, 0] - current_sin2))
-    closest_sin2 = all_precomputed_keys[closest_sin2_arg, 0]
-    closest_dm2_arg = np.argmin(np.abs(all_precomputed_keys[:, 1] - current_dm2))
-    closest_dm2 = all_precomputed_keys[closest_dm2_arg, 1]
-    return constants.prompt_eff_baseline_corrs[closest_sin2, closest_dm2]
 
 def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
         include_osc=True):
@@ -1557,7 +1631,6 @@ def num_near_IBDs_from_core(constants, fit_params):
     correction for near ADs.
     """
     true_bins_spec = constants.true_bins_spectrum
-    prompt_eff_corrections = prompt_eff_baseline_corrs_for_params(constants, fit_params)
     # reactor flux bins don't include the upper edge of 12 MeV
     true_bins_spec = np.concatenate((true_bins_spec, [12]))
     true_bins_resp = constants.true_bins_response
@@ -1571,7 +1644,9 @@ def num_near_IBDs_from_core(constants, fit_params):
         # Must expand dims so that the shape of the arrays is
         # (N_true, 1) * (N_true, N_reco)
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_spectra[halldet]
-        n_ij[halldet, core] /= (1 + prompt_eff_corrections[halldet, core])
+        n_ij[halldet, core] /= (1 + constants.prompt_eff_baseline_corrs[halldet, core](
+            fit_params.sin2_2theta13, fit_params.m2_ee
+        ))
     return n_ij
 
 def predict_far_IBD_true_energy(constants, fit_params):
@@ -1589,7 +1664,6 @@ def predict_far_IBD_true_energy(constants, fit_params):
     reco_bins = constants.reco_bins
     num_from_core = num_near_IBDs_from_core(constants, fit_params)
     extrap_factors = extrapolation_factor(constants, fit_params)
-    prompt_eff_corrections = prompt_eff_baseline_corrs_for_params(constants, fit_params)
     f_kji = {}
     for (far_halldet, core, near_halldet), extrap_fact in extrap_factors.items():
         rebinned_extrap_fact = constants._rebin_cache.extrap_fact(extrap_fact,
@@ -1599,7 +1673,9 @@ def predict_far_IBD_true_energy(constants, fit_params):
                 np.expand_dims(rebinned_extrap_fact, axis=1) * n_ij
         )
         f_kji[far_halldet, core, near_halldet] *= (
-            1 + prompt_eff_corrections[far_halldet, core]
+            1 + constants.prompt_eff_baseline_corrs[far_halldet, core](
+                fit_params.sin2_2theta13, fit_params.m2_ee
+            )
         )
     return f_kji
 

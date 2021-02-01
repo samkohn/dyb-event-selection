@@ -13,8 +13,10 @@ import argparse
 from array import array
 import itertools
 import multiprocessing
+import sqlite3
 
 import numpy as np
+import tenacity
 
 import common
 from prediction import survival_probability, default_osc_params
@@ -79,6 +81,7 @@ def main(
                 ))
         events = np.array(events)
         np.save('prompt_eff_osc_toymc.npy', events)
+        infile.Close()
     else:
         events = np.load(toymc_extracted)
     print("Loaded up event array")
@@ -132,6 +135,7 @@ def main(
     for core, halldet, sin2_2theta13, m2_ee in itertools.product(
         cores, pred.all_ads, sin2_values, m2_ee_values
     ):
+        print('starting', core, halldet, sin2_2theta13, m2_ee)
         hall, det = halldet
         baseline = pred.distances[core][f'EH{hall}'][det - 1]  # Lookup in prediction
         theta13 = 0.5 * np.arcsin(np.sqrt(sin2_2theta13))
@@ -168,18 +172,30 @@ def main(
         if not update_db:
             print(row)
     if update_db:
-        with common.get_db(database) as conn:
-            cursor = conn.cursor()
-            cursor.executemany('''
-                INSERT OR REPLACE
-                INTO
-                    prompt_eff_osc_corrections
-                VALUES
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''',
-                rows
-            )
+        print('updating db')
+        fill_db(database, rows)
     print('finished')
+    return
+
+
+@tenacity.retry(
+    reraise=True,
+    wait=tenacity.wait_random_exponential(max=60),
+    retry=tenacity.retry_if_exception_type(sqlite3.Error),
+)
+def fill_db(database, rows):
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        cursor.executemany('''
+            INSERT OR REPLACE
+            INTO
+                prompt_eff_osc_corrections
+            VALUES
+                (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            rows
+        )
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -622,6 +622,7 @@ pull_choices = (
     'fast-neutron',
     'amc',
     'alpha-n',
+    'rad-n',
     'near-stat',
     'theta12',
     'm2_21',
@@ -653,7 +654,10 @@ if __name__ == "__main__":
     constants = pred.load_constants(args.config)
     starting_theta13 = 0.15  # Near-ish to expected fit value
     if args.dm2ee is None and rate_only:
-        raise ValueError("Can't fit dm2_ee in rate-only")
+        starting_dm2 = 2.48e-3
+        freeze_dm2ee = False
+        pass
+        #raise ValueError("Can't fit dm2_ee in rate-only")
     elif rate_only or args.dm2ee is not None:
         starting_dm2 = args.dm2ee
         freeze_dm2ee = True

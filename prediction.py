@@ -172,6 +172,7 @@ class FitParams:
     pull_fast_neutron: dict = dc_field(default_factory=lambda: site_dict(0))
     pull_amc: float = 0
     pull_alpha_n: dict = dc_field(default_factory=lambda: ad_dict(0))
+    pull_rad_n: dict = dc_field(default_factory=lambda: ad_dict(0))
     pull_theta12: float = 0
     pull_m2_21: float = 0
     pull_near_stat: dict = dc_field(
@@ -203,12 +204,13 @@ class FitParams:
         to_return['fast-neutron'] = slice(35, 38)
         to_return['amc'] = 38
         to_return['alpha-n'] = slice(39, 47)
-        to_return['pull_theta12'] = 47
-        to_return['pull_m2_21'] = 48
+        to_return['rad-n'] = slice(47, 55)
+        to_return['pull_theta12'] = 55
+        to_return['pull_m2_21'] = 56
         n_bins = 34  # TODO hard-coded
         n_near_ads = 4
         num_near_stat = n_bins * n_near_ads
-        to_return['near-stat'] = slice(49, 49 + num_near_stat)
+        to_return['near-stat'] = slice(57, 57 + num_near_stat)
         return to_return
 
     @classmethod
@@ -242,6 +244,9 @@ class FitParams:
         pull_alpha_n = {}
         for pull, halldet in zip(in_list[indexes['alpha-n']], all_ads):
             pull_alpha_n[halldet] = pull
+        pull_rad_n = {}
+        for pull, halldet in zip(in_list[indexes['rad-n']], all_ads):
+            pull_rad_n[halldet] = pull
         pull_theta12 = in_list[indexes['pull_theta12']]
         pull_m2_21 = in_list[indexes['pull_m2_21']]
         # Near statistics pull parameters
@@ -266,6 +271,7 @@ class FitParams:
             pull_fastn,
             pull_amc,
             pull_alpha_n,
+            pull_rad_n,
             pull_theta12,
             pull_m2_21,
             pull_near_stat,
@@ -282,6 +288,7 @@ class FitParams:
             + [self.pull_fast_neutron[site] for site in sites]
             + [self.pull_amc]
             + [self.pull_alpha_n[halldet] for halldet in all_ads]
+            + [self.pull_rad_n[halldet] for halldet in all_ads]
             + [self.pull_theta12, self.pull_m2_21]
             + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
         )
@@ -298,6 +305,7 @@ class FitParams:
             'fast-neutron': self.pull_fast_neutron,
             'amc': self.pull_amc,
             'alpha-n': self.pull_alpha_n,
+            'rad-n': self.pull_rad_n,
         }
         if all:
             return bg_dict
@@ -1215,6 +1223,7 @@ def backgrounds_per_AD(
      - "fast-neutron"
      - "amc"
      - "alpha-n"
+     - "rad-n" (radiogenic neutrons)
 
      If types is None, then the default of all types is used.
     """
@@ -1227,6 +1236,7 @@ def backgrounds_per_AD(
                     'fast-neutron': ad_dict(0),
                     'amc': ad_dict(0),
                     'alpha-n': ad_dict(0),
+                    'rad-n': ad_dict(0),
                 },
                 {
                     'accidental': 1,
@@ -1234,6 +1244,7 @@ def backgrounds_per_AD(
                     'fast-neutron': 1,
                     'amc': 1,
                     'alpha-n': 1,
+                    'rad-n': 1,
                 },
             )
         else:
@@ -1414,6 +1425,41 @@ def backgrounds_per_AD(
                 alpha_n_errors[hall, det] = error/count
             result['alpha-n'] = alpha_n_data
             errors['alpha-n'] = alpha_n_errors
+        if 'rad-n' in types:
+            rad_n_data = {}
+            rad_n_errors = {}
+            for hall, det in all_ads:
+                cursor.execute('''
+                    SELECT
+                        Spectrum
+                    FROM
+                        rad_n_spectrum
+                    WHERE
+                        Label = ?
+                        AND Hall = ?
+                        AND DetNo = ?
+                    ORDER BY BinIndex
+                    ''',
+                    (spectra_source, hall, det),
+                )
+                rad_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
+                cursor.execute('''
+                SELECT
+                    Count, Error
+                FROM
+                    bg_counts
+                WHERE
+                    BgName = "rad-n"
+                    AND Label = ?
+                    AND Hall = ?
+                    AND DetNo = ?
+                ''', (counts_source, hall, det)
+                )
+                count, error = cursor.fetchone()
+                rad_n_data[hall, det] *= count
+                rad_n_errors[hall, det] = error/count
+            result['rad-n'] = rad_n_data
+            errors['rad-n'] = rad_n_errors
     return (result, errors)
 
 
@@ -1482,6 +1528,16 @@ def bg_with_pulls(constants, fit_params, halls='all'):
             pull = bg_pulls[halldet]
             bg_dict[halldet] = bg_spec * (1 + pull)
         pulled_bg['alpha-n'] = bg_dict
+    if 'rad-n' in nominal_bg:
+        # Uncorrelated between ADs
+        bg_specs = nominal_bg['rad-n']
+        bg_pulls = fit_params.pull_rad_n
+        bg_dict = {}
+        for halldet in ads:
+            bg_spec = bg_specs[halldet]
+            pull = bg_pulls[halldet]
+            bg_dict[halldet] = bg_spec * (1 + pull)
+        pulled_bg['rad-n'] = bg_dict
     return pulled_bg
 
 

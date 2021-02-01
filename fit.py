@@ -300,7 +300,7 @@ def sigma_searcher(fit_params, constants, side='both'):
     If side is 'both', the 2 entries are always returned [upper, lower]
     """
     best_theta13 = fit_params.theta13
-    best_sin2 = np.power(np.sin(2 * best_theta13), 2)
+    best_sin2 = fit_params.sin2_2theta13
     guess_1sigma_sin2 = 0.0045
     guess_upper_sin2 = best_sin2 + guess_1sigma_sin2
     guess_lower_sin2 = best_sin2 - guess_1sigma_sin2
@@ -379,7 +379,7 @@ def save_result(
         description,
         int(rate_only),
         int(avg_near),
-        np.power(np.sin(2 * fit_params.theta13), 2),
+        fit_params.sin2_2theta13,
         fit_params.m2_ee,
         chi2_poisson,
         chi2_pearson,
@@ -689,7 +689,8 @@ if __name__ == "__main__":
                 near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near,
                 raw_result=True)
         #print(repr(result.x))
-        print('sin22theta13 =', np.power(np.sin(2*fit_params.theta13), 2))
+        print('sin22theta13 =', fit_params.sin2_2theta13)
+        print('dm2_ee = ', fit_params.m2_ee)
         print(f'Num function evals: {result.nfev}')
         print(f'Num jacobian evals: {result.njev}')
         print(result.message)

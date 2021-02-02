@@ -548,15 +548,9 @@ def load_constants(config_file):
     # Compute m2_21 relative error
     m2_21_rel_err = config.m2_21_error/input_osc_params.m2_21
 
-    if config.prompt_eff_corr_source is None:
-        prompt_eff_baseline_corrs = {
-            (halldet, core): lambda x, y: 0
-            for halldet, core in itertools.product(all_ads, range(1, 7))
-        }
-    else:
-        prompt_eff_baseline_corrs = load_prompt_eff_baseline_corr(
-            database, config.prompt_eff_corr_source, config.binning_id
-        )
+    prompt_eff_baseline_corrs = load_prompt_eff_baseline_corr(
+        database, config.prompt_eff_corr_source, config.binning_id
+    )
 
     return FitConstants(
             matrix,
@@ -706,6 +700,10 @@ def rel_escale_parameters(database, source):
     return result
 
 
+def _prompt_eff_baseline_corr_zeros(sin2, dm2):
+    """Return only zeros."""
+    return 0
+
 def load_prompt_eff_baseline_corr(database, source, binning_id):
     """Load the corrections to prompt efficiency due to baseline / oscillation.
 
@@ -725,6 +723,9 @@ def load_prompt_eff_baseline_corr(database, source, binning_id):
         cursor = conn.cursor()
         for hall, det in all_ads:
             for core in cores:
+                if source is None:
+                    result[(hall, det), core] = _prompt_eff_baseline_corr_zeros
+                    continue
                 cursor.execute('''
                     SELECT
                         SinSq2T13

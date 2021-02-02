@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import multiprocessing
 from pprint import pprint
 import sqlite3
@@ -509,6 +510,7 @@ def load_result(database, id_or_description):
 
 def grid(
     theta13_values,
+    m2_ee_values,
     constants,
     starting_params,
     frozen_params,
@@ -516,17 +518,23 @@ def grid(
     rate_only,
     avg_near,
 ):
-    """Run fits with a list of different theta13 starting values.
+    """Run fits with a list of different theta13 and m2_ee starting values.
 
-    The starting_params object is modified in-place but restored to its
-    original state at the end of the function.
+    The starting_params object is not modified.
 
-    fit_lsq_frozen_kwargs are passed directly to fit_lsq_frozen.
+    To get a real "grid" with fixed/frozen theta13 and/or m2_ee,
+    you must specify 0 and/or 1 (respectively) in the frozen_params list.
+
+    Returns chisquare values according to the parameter order of
+    itertools.product(theta13_values, m2_ee_values).
     """
     def fit_args_generator():
-        for theta13_value in theta13_values:
+        for theta13_value, m2_ee_value in itertools.product(
+            theta13_values, m2_ee_values
+        ):
             new_params = starting_params.clone()
             new_params.theta13 = theta13_value
+            new_params.m2_ee = m2_ee_value
             yield (
                 new_params,
                 constants,

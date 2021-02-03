@@ -33,6 +33,7 @@ NUM_MULTIPROCESSING = 64
 
 NOMINAL_LABEL = "reject_resid_flash_nominal"
 ADTIME_LABEL = "reject_resid_flash_adtime"
+GENERAL_LABEL = "reject_resid_flash"
 
 def time_execution(func):
     """Convention that first arg is always the run number"""
@@ -523,6 +524,11 @@ def run_hadd(run, site, filenos, processed_output_path):
 
 
 @time_execution
+@tenacity.retry(
+    reraise=True,
+    wait=tenacity.wait_random_exponential(max=120),
+    retry=tenacity.retry_if_exception_type(sqlite3.Error),
+)
 def run_aggregate_stats(run, site, filenos, processed_output_path, database):
     """Aggregate the muon / livetime statistics for each run."""
     path_prefix = os.path.join(processed_output_path, f'EH{site}')
@@ -540,10 +546,10 @@ def run_aggregate_stats(run, site, filenos, processed_output_path, database):
         for fileno in filenos:
             infiles.append(input_template.format(ad=ad, fileno=fileno))
         outfile = output_template.format(ad=ad)
-        if aggregate_stats.is_complete(run, ad, outfile, database):
+        if aggregate_stats.is_complete(run, ad, outfile, GENERAL_LABEL, database):
             logging.debug('[aggregate_stats] Found existing file. Skipping. %s', outfile)
         else:
-            aggregate_stats.main2(run, infiles, site, ad, outfile, database)
+            aggregate_stats.main2(run, infiles, site, ad, outfile, GENERAL_LABEL, database)
     return
 
 
@@ -572,7 +578,7 @@ def run_create_singles(run, site, processed_output_path):
 @time_execution
 @tenacity.retry(
     reraise=True,
-    wait=tenacity.wait_random_exponential(max=60),
+    wait=tenacity.wait_random_exponential(max=120),
     retry=tenacity.retry_if_exception_type(sqlite3.Error),
 )
 def run_compute_singles(run, site, processed_output_path, database):
@@ -592,6 +598,7 @@ def run_compute_singles(run, site, processed_output_path, database):
         compute_singles.main(
             infile,
             database,
+            GENERAL_LABEL,
             update_db,
             iteration,
             extra_cut,

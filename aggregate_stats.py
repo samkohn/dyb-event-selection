@@ -10,7 +10,7 @@ import json
 
 import common
 
-def main2(run, files, site, ad, outfile, db):
+def main2(run, files, site, ad, outfile, label, db):
     daq_livetime = 0
     usable_livetime = 0
     num_veto_windows = 0
@@ -36,12 +36,12 @@ def main2(run, files, site, ad, outfile, db):
         with common.get_db(db) as conn:
             cursor = conn.cursor()
             cursor.execute('INSERT OR REPLACE INTO muon_rates '
-                    'VALUES (?, ?, ?, ?, ?, ?)',
-                    (run, ad, num_veto_windows, usable_livetime,
+                    'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    (run, ad, label, num_veto_windows, usable_livetime,
                         rate, efficiency))
     return
 
-def is_complete(run, ad, outfilename, db):
+def is_complete(run, ad, outfilename, label, db):
     """Check to ensure the outfile exists and the run has been logged to db."""
     if not os.path.isfile(outfilename):
         return False
@@ -55,8 +55,9 @@ def is_complete(run, ad, outfilename, db):
             WHERE
                 RunNo = ?
                 AND DetNo = ?
+                AND Label = ?
             ''',
-            (run, ad),
+            (run, ad, label),
         )
         num_rows, = cursor.fetchone()
     if num_rows == 1:
@@ -73,10 +74,11 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--run', type=int)
     parser.add_argument('--site', type=int)
     parser.add_argument('--ad', type=int)
+    parser.add_argument('--label', required=True)
     parser.add_argument('-o', '--output')
     parser.add_argument('--update-db',
             help='Optional, register the run info and muon rate with the given '
             'database')
     args = parser.parse_args()
-    main2(args.run, args.files, args.site, args.ad, args.output, args.update_db)
+    main2(args.run, args.files, args.site, args.ad, args.output, args.label, args.update_db)
 

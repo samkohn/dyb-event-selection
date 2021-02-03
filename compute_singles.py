@@ -126,7 +126,7 @@ def subterm(sum_term, Tc):
     return (1 - math.exp(-sum_term * Tc)) / sum_term
 
 
-def main(infile, database, update_db, iteration, extra_cut):
+def main(infile, database, label, update_db, iteration, extra_cut):
     import ROOT
     ch = ROOT.TChain('ad_events')
     ch.Add(infile)
@@ -167,9 +167,10 @@ def main(infile, database, update_db, iteration, extra_cut):
         with common.get_db(database, timeout=20) as conn:
             cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO singles_rates
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
                 runNo,
                 ad,
+                label,
                 iteration,
                 underlying_uncorr_rate,
                 uncorr_rate_error,
@@ -189,6 +190,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('infile')
     parser.add_argument('database')
+    parser.add_argument('--label', required=True)
     parser.add_argument('--update-db', action='store_true',
             help='If present, store the results in the given db file')
     parser.add_argument('--iteration', type=int, default=0,
@@ -196,4 +198,11 @@ if __name__ == '__main__':
                 'the calculation')
     parser.add_argument('--extra-cut', default='1')
     args = parser.parse_args()
-    main(args.infile, args.database, args.update_db, args.iteration, args.extra_cut)
+    main(
+        args.infile,
+        args.database,
+        args.label,
+        args.update_db,
+        args.iteration,
+        args.extra_cut,
+    )

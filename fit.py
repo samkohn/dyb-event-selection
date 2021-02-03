@@ -360,6 +360,7 @@ def save_result(
     fit_params,
     rate_only,
     avg_near,
+    fit_config_filename,
     sin2_error_plus=None,
     sin2_error_minus=None,
     m2_ee_error_plus=None,
@@ -369,6 +370,9 @@ def save_result(
 
     The FitConstants object is not saved to the db.
     It is only used to compute the chi-squareds.
+
+    The fit configuration used to generate the constants
+    is saved via the fit config file.
     """
     chi2_poisson = chi_square(
         constants, fit_params, rate_only=rate_only, avg_near=avg_near
@@ -408,8 +412,29 @@ def save_result(
             param_values = params_list[index]
             for param_index, param_value in enumerate(param_values):
                 params_rows.append((name, param_index, param_value))
+    with open(fit_config_filename, 'r') as fit_config_file:
+        fit_config_contents = fit_config_file.read()
     with common.get_db(database) as conn:
         cursor = conn.cursor()
+        cursor.execute(f'''
+            INSERT OR IGNORE INTO
+                fit_configs (Contents)
+            VALUES
+                (?)
+            ''',
+            (fit_config_contents,)
+        )
+        cursor.execute(f'''
+            SELECT
+                Id
+            FROM
+                fit_configs
+            WHERE
+                Contents = ?
+            ''',
+            (fit_config_contents,)
+        )
+        fit_config_id,  = cursor.fetchone()
         cursor.execute(f'''
             INSERT INTO
                 fits (
@@ -427,12 +452,13 @@ def save_result(
                     Theta12,
                     DM2_21,
                     Hierarchy,
-                    DM2ee_conversion
+                    DM2ee_conversion,
+                    FitConfigId
                 )
             VALUES
-                ({", ".join("?"*15)}); -- 15 parameters
+                ({", ".join("?"*16)}); -- 15 parameters
             ''',
-            fits_db_row,
+            fits_db_row + (fit_config_id,),
         )
         fit_id = cursor.lastrowid
         # Update params_rows to include the fit_id
@@ -730,4 +756,5 @@ if __name__ == "__main__":
                 fit_params,
                 rate_only,
                 args.avg_near,
+                args.config,
             )

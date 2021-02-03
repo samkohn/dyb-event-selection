@@ -3,7 +3,7 @@ import numpy as np
 
 import common
 
-def daq_livetime_s(database):
+def daq_livetime_s(database, label):
     """Return an array of DAQ livetimes ordered from EH1-AD1 to EH3-AD4."""
     with common.get_db(database) as conn:
         cursor = conn.cursor()
@@ -15,23 +15,26 @@ def daq_livetime_s(database):
                 muon_rates
             NATURAL JOIN
                 runs
+            WHERE
+                Label = ?
             GROUP BY
                 Hall,
                 DetNo
             ORDER BY
                 Hall,
                 DetNo
-            '''
+            ''',
+            (label,)
         )
         livetimes_s = np.array(cursor.fetchall()).reshape(-1)
     return livetimes_s
 
-def daq_livetime_days(database):
+def daq_livetime_days(database, label):
     """Return an array of DAQ livetimes in days from EH1-AD1 to EH3-AD4."""
-    livetime_s = daq_livetime_s(database)
+    livetime_s = daq_livetime_s(database, label)
     return livetime_s/60/60/24
 
-def muon_efficiency(database):
+def muon_efficiency(database, label):
     """Return an array of muon efficiencies from EH1-AD1 to EH3-AD4."""
     with common.get_db(database) as conn:
         cursor = conn.cursor()
@@ -42,18 +45,21 @@ def muon_efficiency(database):
                 muon_rates
             NATURAL JOIN
                 runs
+            WHERE
+                Label = ?
             GROUP BY
                 Hall,
                 DetNo
             ORDER BY
                 Hall,
                 DetNo
-            '''
+            ''',
+            (label,)
         )
         muon_effs = np.array(cursor.fetchall()).reshape(-1)
     return muon_effs
 
-def multiplicity_efficiency(database):
+def multiplicity_efficiency(database, label):
     """Return an array of multiplicity efficiencies from EH1-AD1 to EH3-AD4."""
     with common.get_db(database) as conn:
         cursor = conn.cursor()
@@ -69,15 +75,19 @@ def multiplicity_efficiency(database):
                 muon_rates
             USING (
                 RunNo,
-                DetNo
+                DetNo,
+                Label
             )
+            WHERE
+                Label = ?
             GROUP BY
                 Hall,
                 DetNo
             ORDER BY
                 Hall,
                 DetNo
-            '''
+            ''',
+            (label,)
         )
         mult_effs = np.array(cursor.fetchall()).reshape(-1)
     return mult_effs

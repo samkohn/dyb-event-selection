@@ -10,7 +10,7 @@ import compute_dataset_summary as summary
 
 ERROR_COEFFICIENT = 1.1
 
-def baserate_uncertainty(database):
+def baserate_uncertainty(database, label, general_label):
     with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''
@@ -25,11 +25,19 @@ def baserate_uncertainty(database):
                 acc.BaseRate_Hz
             FROM
                 singles_rates AS singles
-            NATURAL JOIN
+            INNER JOIN
                 accidental_subtraction AS acc
+            USING (
+                RunNo,
+                DetNo
+            )
             NATURAL JOIN
                 runs
-            '''
+            WHERE
+                acc.Label = ?
+                AND singles.Label = ?
+            ''',
+            (label, general_label)
         )
         inputs = np.array(cursor.fetchall())
     # Annoying casts because of numpy's homogeneous array types
@@ -61,7 +69,7 @@ def baserate_uncertainty(database):
             result_rows
         )
 
-def count_errors(database, label):
+def count_errors(database, label, general_label):
     """Return the statistical error on the number of accidentals in each AD.
 
     Return value is an array sorted from EH1-AD1 to EH3-AD4.
@@ -84,13 +92,18 @@ def count_errors(database, label):
                     )
                 )
             FROM
-                accidental_subtraction
-            NATURAL JOIN
-                muon_rates
+                accidental_subtraction AS acc
+            INNER JOIN
+                muon_rates as mu
+            USING (
+                RunNo,
+                DetNo
+            )
             NATURAL JOIN
                 runs
             WHERE
-                Label = ?
+                acc.Label = ?
+                AND mu.Label = ?
             GROUP BY
                 Hall,
                 DetNo
@@ -98,12 +111,12 @@ def count_errors(database, label):
                 Hall,
                 DetNo
             ''',
-            (label,)
+            (label, general_label)
         )
         result = np.sqrt(np.array(cursor.fetchall()).reshape(-1))
     return result
 
-def counts(database, label):
+def counts(database, label, general_label):
     """Return an array of predicted accidentals counts."""
     with common.get_db(database) as conn:
         cursor = conn.cursor()
@@ -115,13 +128,14 @@ def counts(database, label):
             NATURAL JOIN
                 runs
             INNER JOIN
-                muon_rates
+                muon_rates as mu
             USING (
                 RunNo,
                 DetNo
             )
             WHERE
-                Label = ?
+                acc.Label = ?
+                AND mu.Label = ?
             GROUP BY
                 Hall,
                 DetNo
@@ -129,46 +143,46 @@ def counts(database, label):
                 Hall,
                 DetNo
             ''',
-            (label,)
+            (label, general_label)
         )
         counts = np.array(cursor.fetchall()).reshape(-1)
     return counts
 
-def rates(database, label):
+def rates(database, label, general_label):
     """Return a 2D array of accidentals rates, corrected for eps_mu and eps_m.
 
     The resulting rates should be multiplied by DAQ_livetime * eps_mu * eps_m
     to get back the predicted counts.
     """
-    acc_counts = counts(database, label)
-    daq_livetime = summary.daq_livetime_days(database)
-    muon_eff = summary.muon_efficiency(database)
-    multiplicity_eff = summary.multiplicity_efficiency(database)
+    acc_counts = counts(database, label, general_label)
+    daq_livetime = summary.daq_livetime_days(database, general_label)
+    muon_eff = summary.muon_efficiency(database, general_label)
+    multiplicity_eff = summary.multiplicity_efficiency(database, general_label)
 
     corrected_counts = acc_counts / muon_eff / multiplicity_eff
     corrected_rates = corrected_counts / daq_livetime
 
     return corrected_rates
 
-def rate_errors(database, label):
+def rate_errors(database, label, general_label):
     """Return a 2D array of accidentals rate errors, corrected for eps_mu and eps_m.
 
     The resulting rate errors should be multiplied by DAQ_livetime * eps_mu * eps_m
     to get back the predicted count errors.
     """
-    errors = count_errors(database, label)
-    daq_livetime = summary.daq_livetime_days(database)
-    muon_eff = summary.muon_efficiency(database)
-    multiplicity_eff = summary.multiplicity_efficiency(database)
+    errors = count_errors(database, label, general_label)
+    daq_livetime = summary.daq_livetime_days(database, general_label)
+    muon_eff = summary.muon_efficiency(database, general_label)
+    multiplicity_eff = summary.multiplicity_efficiency(database, general_label)
 
     corrected_errors = errors / muon_eff / multiplicity_eff
     corrected_rate_errors = corrected_errors / daq_livetime
 
     return corrected_rate_errors
 
-def dump_accidentals_json(database, label, filename):
-    acc_rates = rates(database, label)
-    acc_rate_errors = rate_errors(database, label)
+def dump_accidentals_json(database, label, general_label, filename):
+    acc_rates = rates(database, label, general_label)
+    acc_rate_errors = rate_errors(database, label, general_label)
     print(acc_rates)
     print(acc_rate_errors)
     acc_dict = defaultdict(dict)

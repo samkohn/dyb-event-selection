@@ -29,11 +29,11 @@ def parse_hall_det(eh_ad_str):
     """Convert "EHX-ADY" into (X, Y) (as ints)."""
     return (int(eh_ad_str[2]), int(eh_ad_str[6]))
 
-def main(infilename, bg_database, main_database, label):
+def main(infilename, bg_database, main_database, label, rates_label):
     # Get muon and multiplicity efficiencies and livetimes
-    daq_livetime_days = summary.daq_livetime_days(main_database)
-    muon_effs = summary.muon_efficiency(main_database)
-    mult_effs = summary.multiplicity_efficiency(main_database)
+    daq_livetime_days = summary.daq_livetime_days(main_database, rates_label)
+    muon_effs = summary.muon_efficiency(main_database, rates_label)
+    mult_effs = summary.multiplicity_efficiency(main_database, rates_label)
 
     with open(infilename, 'r') as infile:
         bgs_rates = json.load(infile)
@@ -79,5 +79,8 @@ if __name__ == '__main__':
     parser.add_argument('bg_database', help='Destination')
     parser.add_argument('main_database', help='Source for livetimes & effs')
     parser.add_argument('--label')
+    parser.add_argument('--rates-label',
+        help='Label for lookup of singles and muon rates'
+    )
     args = parser.parse_args()
-    main(args.infile, args.bg_database, args.main_database, args.label)
+    main(args.infile, args.bg_database, args.main_database, args.label, args.rates_label)

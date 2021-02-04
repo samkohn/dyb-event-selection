@@ -77,7 +77,8 @@ def main(
     with common.get_db(main_database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT RunNo, Hall, DetNo
-            FROM runs NATURAL JOIN muon_rates
+            FROM runs NATURAL JOIN hall_dets
+            WHERE (RunNo, DetNo) IN (SELECT RunNo, DetNo FROM muon_rates)
             ORDER BY RunNo, Hall, DetNo''')
         run_keys = cursor.fetchall()
         cursor.execute('''

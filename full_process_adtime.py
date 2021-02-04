@@ -34,6 +34,10 @@ NUM_MULTIPROCESSING = 64
 NOMINAL_LABEL = "reject_resid_flash_nominal"
 ADTIME_LABEL = "reject_resid_flash_adtime"
 GENERAL_LABEL = "reject_resid_flash"
+NUM_COINCS_LABELS = {
+    "adsimple": "reject resid flashers 2/3/2021",
+    "adtime": "reject resid flashers adtime 2/3/2021",
+}
 
 def time_execution(func):
     """Convention that first arg is always the run number"""
@@ -764,6 +768,7 @@ def run_compute_num_coincidences(processed_output_path, database):
         compute_spectrum,
         compute_total,
         labels,
+        NUM_COINCS_LABELS,
         update_db,
     )
     return

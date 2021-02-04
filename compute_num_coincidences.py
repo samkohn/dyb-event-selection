@@ -69,6 +69,7 @@ def main(
     save_spectrum,
     save_total,
     labels,
+    spectrum_labels,
     update_db
 ):
     import ROOT
@@ -139,7 +140,7 @@ def main(
                 ad,
                 binning_id,
                 json.dumps(spectrum.tolist()),
-                "adsimple 1/27/2021",
+                spectrum_labels['adsimple'],
             ))
         for (site, ad), spectrum in adtime_hist.items():
             spectrum_rows.append((
@@ -147,7 +148,7 @@ def main(
                 ad,
                 binning_id,
                 json.dumps(spectrum.tolist()),
-                "adtime 1/27/2021",
+                spectrum_labels['adtime'],
             ))
         results_nominal = [(*result[:3], labels['nominal']) for result in results]
         results_adtime = [(*result[:2], result[3], labels['adtime']) for result in results]

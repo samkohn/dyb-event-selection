@@ -14,6 +14,7 @@ def isADEvent(event_detector, event_energy):
             and event_energy >= _EMIN)
 
 _EMIN_THU = 1.5
+_EMAX_THU = 12
 def isADEvent_THU(event_detector, event_energy):
     return (event_detector in AD_DETECTORS
             and event_energy >= _EMIN_THU)

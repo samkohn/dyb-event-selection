@@ -10,6 +10,7 @@ import numpy as np
 
 import common
 import delayeds
+import adevent
 
 def one_file(run_key, data_file_path, energy_lookup, bin_edges):
     import ROOT
@@ -32,6 +33,7 @@ def one_file(run_key, data_file_path, energy_lookup, bin_edges):
     delayed_min, delayed_max = energy_lookup['nominal', site, ad]
     num_coincidences_nominal = ad_events.Draw('energy[0] >> nominal_hist',
         'multiplicity == 2 && '
+        f'energy[0] < {adevent._EMAX_THU} && '
         f'energy[1] > {delayed_min} && energy[1] < {delayed_max} && '
         f'{delayeds._NH_THU_DIST_TIME_CUT_STR}',
         'goff'
@@ -39,6 +41,7 @@ def one_file(run_key, data_file_path, energy_lookup, bin_edges):
     delayed_min, delayed_max = energy_lookup['adtime', site, ad]
     num_coincidences_adtime = ad_events.Draw('energy[0] >> adtime_hist',
         'multiplicity == 2 && '
+        f'energy[0] < {adevent._EMAX_THU} && '
         f'energy[1] > {delayed_min} && energy[1] < {delayed_max} && '
         f'dr_to_prompt_AdTime[1] + {delayeds._NH_THU_DIST_TIME_CONST} '
         f' * dt_to_prompt[1] < {delayeds._NH_THU_DIST_TIME_MAX}',

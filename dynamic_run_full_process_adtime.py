@@ -57,6 +57,9 @@ if __name__ == '__main__':
     parser.add_argument('--processed-output', required=True,
         help='base directory for output of processed files',
     )
+    parser.add_argument('--shifter',
+        help='Use the given shifter image in srun',
+    )
     parser.add_argument('--max-runtime-sec', type=int, default=-1)
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
@@ -71,6 +74,7 @@ if __name__ == '__main__':
     run_range_by_node = [(x[0], x[-1] if x[-1] is not None else max(y for y in x if y is
         not None)) for x in runs_by_node]
     srun_command = 'srun --no-kill --ntasks=1 -N 1 --wait=0'
+    shifter_command = f'shifter --image={args.shifter}' if args.shifter else ''
     for first, last in run_range_by_node:
         command = (
             f'python full_process_adtime.py -r {first} --end-run {last} '
@@ -83,6 +87,10 @@ if __name__ == '__main__':
         print(command)
 
         if args.srun:
-            subprocess.run(f'{srun_command} {command} 2>&1 >> log_{first}_{last}.txt &', shell=True)
+            subprocess.run(
+                f'{srun_command} {shifter_command} {command} 2>&1 >> '
+                f'log_{first}_{last}.txt &',
+                shell=True
+            )
     time.sleep(args.max_runtime_sec)
     print(f'Just elapsed max_runtime_sec = {args.max_runtime_sec}')

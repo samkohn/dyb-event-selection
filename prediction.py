@@ -162,7 +162,7 @@ class FitParams:
         This parameter impacts both the shape of the prompt spectrum
         and the efficiency (via prompt energy cut).
     """
-    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 1 + 1 + 1 + 4 * 34  # TODO binning
+    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 8 + 1 + 1 + 1 + 4 * 34  # TODO binning
     theta13: float
     m2_ee: float
     pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))

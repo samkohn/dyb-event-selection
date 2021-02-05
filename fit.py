@@ -156,6 +156,12 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     chi_square += numerator/denominator
     return_array_values[term_index] = numerator/denominator
     term_index += 1
+    m2_ee_error = constants.m2_ee_err
+    numerator = fit_params.pull_m2_ee**2
+    denominator = m2_ee_error**2
+    chi_square += numerator/denominator
+    return_array_values[term_index] = numerator/denominator
+    term_index += 1
     if return_array:
         return return_array_values
     else:
@@ -591,39 +597,55 @@ def grid(
         )
     return min_chisquares
 
-def get_frozen_params(pulls, freeze_theta13, freeze_dm2ee, near_ads=None):
+def get_frozen_params(pulls, freeze_theta13, dm2ee_behavior, near_ads=None):
     """Get the list of frozen params given the fitter configuration.
 
     A list of near ADs can be provided, which will be used to freeze the
     near-stat pull parameters of any near AD that is not being used in
     the fit.
+
+    If dm2ee_behavior == 'free', then m2_ee will be treated as a free
+    fit parameter (i.e. no pull term constraint).
+
+    If dm2ee_behavior == 'pulled', then m2_ee will be constrained by
+    a pull term. The FitParams.m2_ee parameter will be frozen but a
+    separate FitParams.pull_m2_ee will be allowed to vary subject to a
+    chi2 constraint.
+
+    If dm2ee_behavior == 'frozen', then m2_ee will be frozen, not allowed to vary,
+    and there will be no pull term or chi2 constraint. This is as if m2_ee were
+    specified by edict with no uncertainty.
     """
     dummy_params = pred.FitParams(0, 0)
     index_map = dummy_params.index_map()
-    # decide whether to freeze any of the pull parameters
-    # (and, if rate-only, also freeze dm2_ee)
     frozen_params = []
+    # Decide whether to freeze m2_ee or theta13
     if freeze_theta13:
         frozen_params.append(index_map['theta13'])
-    if freeze_dm2ee:
+    if dm2ee_behavior == 'frozen':
         frozen_params.append(index_map['m2_ee'])
+        frozen_params.append(index_map['pull_m2_ee'])
+    elif dm2ee_behavior == 'pulled':
+        frozen_params.append(index_map['m2_ee'])
+    elif dm2ee_behavior == 'free':
+        frozen_params.append(index_map['pull_m2_ee'])
+    else:
+        raise ValueError(f'Unknown dm2ee_behavior: {dm2ee_behavior}')
+    # decide whether to freeze any of the pull parameters
+    def freeze(name):
+        if name in ('theta12', 'm2_21'):
+            name = 'pull_' + name
+        pull_slice = index_map[name]
+        if isinstance(pull_slice, slice):  # range of values
+            indices = list(range(pull_slice.start, pull_slice.stop))
+            frozen_params.extend(indices)
+        elif isinstance(pull_slice, int):  # just a single value
+            frozen_params.append(pull_slice)
+        else:
+            raise ValueError(f"Can't parse starting_params.index_map()[{name!r}]")
     if 'all' in pulls:
         pass
-    elif len(pulls) == 0:
-        n_total_params = len(dummy_params.to_list())
-        frozen_params.extend(list(range(2, n_total_params)))
     else:
-        def freeze(name):
-            if name in ('theta12', 'm2_21'):
-                name = 'pull_' + name
-            pull_slice = index_map[name]
-            if isinstance(pull_slice, slice):  # range of values
-                indices = list(range(pull_slice.start, pull_slice.stop))
-                frozen_params.extend(indices)
-            elif isinstance(pull_slice, int):  # just a single value
-                frozen_params.append(pull_slice)
-            else:
-                raise ValueError(f"Can't parse starting_params.index_map()[{name!r}]")
         for pull_name in pull_choices:
             if pull_name not in pulls:
                 freeze(pull_name)
@@ -641,7 +663,7 @@ def get_frozen_params(pulls, freeze_theta13, freeze_dm2ee, near_ads=None):
                     first_for_ad = first + i * n_bins
                     last_for_ad = first + (i + 1) * n_bins
                     frozen_params.extend(list(range(first_for_ad, last_for_ad)))
-    return frozen_params
+    return sorted(frozen_params)
 
 
 
@@ -670,7 +692,10 @@ if __name__ == "__main__":
     parser.add_argument("--source-index", type=int)
     parser.add_argument("--update-db")
     parser.add_argument("--shape", action='store_true')
-    parser.add_argument("--dm2ee", type=float)
+    parser.add_argument('--dm2ee', type=float)
+    parser.add_argument(
+        "--dm2ee-behavior", choices=('free', 'pulled', 'frozen'), required=True
+    )
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--avg-near", action='store_true')
     parser.add_argument("--freeze-sin2-2theta13", type=float, default=None)
@@ -687,17 +712,17 @@ if __name__ == "__main__":
     near_ads = None
     constants = pred.load_constants(args.config)
     starting_theta13 = 0.15  # Near-ish to expected fit value
-    if args.dm2ee is None and rate_only:
+    if args.dm2ee is None and args.dm2ee_behavior in ('pulled', 'frozen'):
+        raise ValueError('Must specify --dm2ee if you want to freeze or pull it')
+    if args.dm2ee_behavior == 'free':
         starting_dm2 = 2.48e-3
-        freeze_dm2ee = False
-        pass
-        #raise ValueError("Can't fit dm2_ee in rate-only")
-    elif rate_only or args.dm2ee is not None:
+    elif args.dm2ee_behavior == 'pulled':
         starting_dm2 = args.dm2ee
-        freeze_dm2ee = True
+    elif args.dm2ee_behavior == 'frozen':
+        starting_dm2 = args.dm2ee
     else:
-        starting_dm2 = 2.48e-3
-        freeze_dm2ee = False
+        # Should never get here
+        raise RuntimeError('Corruption in --dm2ee-behavior')
     if args.freeze_sin2_2theta13 is not None:
         starting_theta13 = 0.5 * np.arcsin(np.sqrt(args.freeze_sin2_2theta13))
         freeze_theta13 = True
@@ -710,7 +735,7 @@ if __name__ == "__main__":
     frozen_params = get_frozen_params(
         pulls,
         freeze_theta13,
-        freeze_dm2ee,
+        args.dm2ee_behavior,
         near_ads,
     )
     print(frozen_params)

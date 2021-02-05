@@ -126,6 +126,7 @@ class FitConstants:
     input_osc_params: InputOscParams
     theta12_err: float
     m2_21_err: float
+    m2_ee_err: float
     muon_eff: dict
     multiplicity_eff: dict
     efficiency_err: float
@@ -161,7 +162,7 @@ class FitParams:
         This parameter impacts both the shape of the prompt spectrum
         and the efficiency (via prompt energy cut).
     """
-    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 1 + 1 + 4 * 34  # TODO binning
+    num_pulls: ClassVar = 6 + 8 + 8 + 8 + 3 + 3 + 1 + 8 + 1 + 1 + 1 + 4 * 34  # TODO binning
     theta13: float
     m2_ee: float
     pull_reactor: dict = dc_field(default_factory=lambda: core_dict(0))
@@ -175,6 +176,7 @@ class FitParams:
     pull_rad_n: dict = dc_field(default_factory=lambda: ad_dict(0))
     pull_theta12: float = 0
     pull_m2_21: float = 0
+    pull_m2_ee: float = 0
     pull_near_stat: dict = dc_field(
         # initialize an ad_dict with independent numpy arrays
         default_factory=lambda: ad_dict(lambda: np.zeros(34), halls='near', factory=True)
@@ -207,10 +209,11 @@ class FitParams:
         to_return['rad-n'] = slice(47, 55)
         to_return['pull_theta12'] = 55
         to_return['pull_m2_21'] = 56
+        to_return['pull_m2_ee'] = 57
         n_bins = 34  # TODO hard-coded
         n_near_ads = 4
         num_near_stat = n_bins * n_near_ads
-        to_return['near-stat'] = slice(57, 57 + num_near_stat)
+        to_return['near-stat'] = slice(58, 58 + num_near_stat)
         return to_return
 
     @classmethod
@@ -249,6 +252,7 @@ class FitParams:
             pull_rad_n[halldet] = pull
         pull_theta12 = in_list[indexes['pull_theta12']]
         pull_m2_21 = in_list[indexes['pull_m2_21']]
+        pull_m2_ee = in_list[indexes['pull_m2_ee']]
         # Near statistics pull parameters
         near_stat_slice = indexes['near-stat']
         first_entry = near_stat_slice.start
@@ -274,6 +278,7 @@ class FitParams:
             pull_rad_n,
             pull_theta12,
             pull_m2_21,
+            pull_m2_ee,
             pull_near_stat,
         )
 
@@ -289,7 +294,7 @@ class FitParams:
             + [self.pull_amc]
             + [self.pull_alpha_n[halldet] for halldet in all_ads]
             + [self.pull_rad_n[halldet] for halldet in all_ads]
-            + [self.pull_theta12, self.pull_m2_21]
+            + [self.pull_theta12, self.pull_m2_21, self.pull_m2_ee]
             + [x for halldet in near_ads for x in self.pull_near_stat[halldet]]
         )
 
@@ -342,6 +347,7 @@ class Config:
     rel_escale_source: str
     sin2_2theta12_error: Any
     m2_21_error: Any
+    m2_ee_relative_error: Any
     binning_id: int
     efficiency_error: float
     reactor_error: float
@@ -568,6 +574,7 @@ def load_constants(config_file):
             input_osc_params,
             theta12_rel_err,
             m2_21_rel_err,
+            config.m2_ee_relative_error,
             muon_eff,
             multiplicity_eff,
             config.efficiency_error,
@@ -1048,7 +1055,7 @@ def flux_fraction(constants, fit_params, week_range=slice(None, None, None),
                         distance_m,
                         constants.true_bins_spectrum + get_to_bin_centers_hack,
                         fit_params.theta13,
-                        fit_params.m2_ee,
+                        fit_params.m2_ee * (1 + fit_params.pull_m2_ee),
                         input_osc_params=pulled_osc_params
                 )
             else:
@@ -1084,7 +1091,7 @@ def extrapolation_factor(constants, fit_params):
                     distance_m,
                     constants.true_bins_spectrum + get_to_bin_centers_hack,
                     fit_params.theta13,
-                    fit_params.m2_ee,
+                    fit_params.m2_ee * (1 + fit_params.pull_m2_ee),
                     input_osc_params=pulled_osc_params
             )
             denominators[:, core-1] = spec * p_osc / distance_m**2
@@ -1102,7 +1109,7 @@ def extrapolation_factor(constants, fit_params):
                             distance_m,
                             constants.true_bins_spectrum + get_to_bin_centers_hack,
                             fit_params.theta13,
-                            fit_params.m2_ee,
+                            fit_params.m2_ee * (1 + fit_params.pull_m2_ee),
                             input_osc_params=pulled_osc_params
                     )
                     far_osc_probs[(far_hall, far_det), core] = p_osc
@@ -1632,7 +1639,7 @@ def true_to_reco_near_matrix_with_osc(constants, fit_params):
             distance_m,
             true_bin_fluxfrac_centers,
             fit_params.theta13,
-            fit_params.m2_ee,
+            fit_params.m2_ee * (1 + fit_params.pull_m2_ee),
             input_osc_params=pulled_osc_params
         )
         weighted_fluxfrac = flux_frac_no_osc * p_sur
@@ -1702,7 +1709,7 @@ def num_near_IBDs_from_core(constants, fit_params):
         # (N_true, 1) * (N_true, N_reco)
         n_ij[halldet, core] = np.expand_dims(rebinned_fluxfrac, axis=1) * true_spectra[halldet]
         n_ij[halldet, core] /= (1 + constants.prompt_eff_baseline_corrs[halldet, core](
-            fit_params.sin2_2theta13, fit_params.m2_ee
+            fit_params.sin2_2theta13, fit_params.m2_ee * (1 + fit_params.pull_m2_ee)
         ))
     return n_ij
 
@@ -1731,7 +1738,7 @@ def predict_far_IBD_true_energy(constants, fit_params):
         )
         f_kji[far_halldet, core, near_halldet] *= (
             1 + constants.prompt_eff_baseline_corrs[far_halldet, core](
-                fit_params.sin2_2theta13, fit_params.m2_ee
+                fit_params.sin2_2theta13, fit_params.m2_ee * (1 + fit_params.pull_m2_ee)
             )
         )
     return f_kji

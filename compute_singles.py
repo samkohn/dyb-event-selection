@@ -139,35 +139,35 @@ def main(infile, database, label, update_db, iteration, extra_cut):
     multiplicity_1_count = ch.Draw('energy', f'detector == {ad} && '
         f'multiplicity == 1 && energy < {_EMAX_THU} && ({extra_cut})',
         'goff')
-    with common.get_db(database) as conn:
+    with common.get_db(database, timeout=0.5) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE
             RunNo = ? AND DetNo = ?''', (runNo, ad))
         muon_rate, livetime_s = cursor.fetchone()
-    multiplicity_1_count_error = math.sqrt(multiplicity_1_count)
-    multiplicity_1_rate_Hz = multiplicity_1_count / livetime_s
-    uncorr_rate_error = multiplicity_1_count_error/livetime_s * UNCERTAINTY_MULTIPLIER
+        multiplicity_1_count_error = math.sqrt(multiplicity_1_count)
+        multiplicity_1_rate_Hz = multiplicity_1_count / livetime_s
+        uncorr_rate_error = multiplicity_1_count_error/livetime_s * UNCERTAINTY_MULTIPLIER
 
-    # convert to seconds and subtract off 1us
-    window_size = _NH_THU_MAX_TIME/1e9 - 1e-6
-    if iteration > 0:
-        raise NotImplementedError("Haven't connected to database")
-    else:
-        R_corr = 0
-        neutron_efficiency = None
-        tau_Gd = None
-        tau_LS = None
-        alpha = None
+        # convert to seconds and subtract off 1us
+        window_size = _NH_THU_MAX_TIME/1e9 - 1e-6
+        if iteration > 0:
+            raise NotImplementedError("Haven't connected to database")
+        else:
+            R_corr = 0
+            neutron_efficiency = None
+            tau_Gd = None
+            tau_LS = None
+            alpha = None
 
-    parameters = (R_corr, muon_rate, window_size, neutron_efficiency, tau_Gd,
-            tau_LS, alpha)
-    underlying_uncorr_rate = fsolve(lambda x: single_rate(x, *parameters) -
-            multiplicity_1_rate_Hz, multiplicity_1_rate_Hz)[0]
-    multiplicity_eff = multiplicity_efficiency(underlying_uncorr_rate,
-            R_corr, muon_rate, window_size)
-    if update_db:
-        with common.get_db(database, timeout=20) as conn:
-            cursor = conn.cursor()
+        parameters = (R_corr, muon_rate, window_size, neutron_efficiency, tau_Gd,
+                tau_LS, alpha)
+        underlying_uncorr_rate = fsolve(lambda x: single_rate(x, *parameters) -
+                multiplicity_1_rate_Hz, multiplicity_1_rate_Hz)[0]
+        multiplicity_eff = multiplicity_efficiency(underlying_uncorr_rate,
+                R_corr, muon_rate, window_size)
+        if update_db:
+            #with common.get_db(database, timeout=0.5) as conn:
+                #cursor = conn.cursor()
             cursor.execute('''INSERT OR REPLACE INTO singles_rates
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
                 runNo,
@@ -181,11 +181,11 @@ def main(infile, database, label, update_db, iteration, extra_cut):
                 R_corr,
                 multiplicity_eff,
             ))
-    else:
-        print(f'multiplicity-1 rate: {multiplicity_1_rate_Hz} Hz')
-        print(f'relative error: {100/multiplicity_1_count_error:.2f}%')
-        print(f'underlying uncorr. rate: {underlying_uncorr_rate} Hz')
-        print(f'multiplicity efficiency: {multiplicity_eff}')
+        else:
+            print(f'multiplicity-1 rate: {multiplicity_1_rate_Hz} Hz')
+            print(f'relative error: {100/multiplicity_1_count_error:.2f}%')
+            print(f'underlying uncorr. rate: {underlying_uncorr_rate} Hz')
+            print(f'multiplicity efficiency: {multiplicity_eff}')
     return
 
 if __name__ == '__main__':

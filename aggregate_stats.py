@@ -33,7 +33,7 @@ def main2(run, files, site, ad, outfile, label, db):
             'num_veto_windows': num_veto_windows,
             }, f)
     if db is not None:
-        with common.get_db(db) as conn:
+        with common.get_db(db, timeout=0.5) as conn:
             cursor = conn.cursor()
             cursor.execute('INSERT OR REPLACE INTO muon_rates '
                     'VALUES (?, ?, ?, ?, ?, ?, ?)',

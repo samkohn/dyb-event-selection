@@ -26,11 +26,6 @@ def coinc_rate(rs, rmu, tc):
     prefactor = rs * rs * tc * math.exp(-rs*tc)
     return prefactor * (term1 + term2 + term3)
 
-@tenacity.retry(
-    reraise=True,
-    wait=tenacity.wait_random_exponential(max=60),
-    retry=tenacity.retry_if_exception_type(sqlite3.Error),
-)
 def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         acc_rate, run_number, database, label):
     import ROOT
@@ -70,7 +65,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     if num_acc_events == 0:
         logging.info('Found run with 0 acc events passing DT cut: Run %d, %s', run_number, accfilename)
         if database is not None:
-            with common.get_db(database, timeout=60) as conn:
+            with common.get_db(database, timeout=0.5) as conn:
                 c = conn.cursor()
                 # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
                 # DistanceCrossCheck, DistanceCrossCheck_error
@@ -191,7 +186,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     outfile.Write()
     datafile.Close()
     if database is not None:
-        with common.get_db(database) as conn:
+        with common.get_db(database, timeout=0.5) as conn:
             c = conn.cursor()
             # RunNo, DetNo, BaseRate, DistanceEff, AccScaleFactor,
             # DistanceCrossCheck, DistanceCrossCheck_error

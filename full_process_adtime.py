@@ -209,6 +209,7 @@ def setup_directory_structure(raw_output_path, processed_output_path):
     reraise=True,
     wait=tenacity.wait_random_exponential(max=60),
     retry=tenacity.retry_if_exception_type(sqlite3.Error),
+    before_sleep=tenacity.before_sleep_log(logging, logging.DEBUG),
 )
 def _update_progress_db(database, run, site, ad, column):
     """Update the progress tracker by checking off the given column.
@@ -528,11 +529,6 @@ def run_hadd(run, site, filenos, processed_output_path):
 
 
 @time_execution
-@tenacity.retry(
-    reraise=True,
-    wait=tenacity.wait_random_exponential(max=120),
-    retry=tenacity.retry_if_exception_type(sqlite3.Error),
-)
 def run_aggregate_stats(run, site, filenos, processed_output_path, database):
     """Aggregate the muon / livetime statistics for each run."""
     path_prefix = os.path.join(processed_output_path, f'EH{site}')
@@ -553,7 +549,14 @@ def run_aggregate_stats(run, site, filenos, processed_output_path, database):
         if aggregate_stats.is_complete(run, ad, outfile, GENERAL_LABEL, database):
             logging.debug('[aggregate_stats] Found existing file. Skipping. %s', outfile)
         else:
-            aggregate_stats.main2(run, infiles, site, ad, outfile, GENERAL_LABEL, database)
+            for attempt in tenacity.Retrying(
+                reraise=True,
+                wait=tenacity.wait_random_exponential(max=60),
+                retry=tenacity.retry_if_exception_type(sqlite3.Error),
+                before_sleep=tenacity.before_sleep_log(logging, logging.DEBUG),
+            ):
+                with attempt:
+                    aggregate_stats.main2(run, infiles, site, ad, outfile, GENERAL_LABEL, database)
     return
 
 
@@ -580,11 +583,6 @@ def run_create_singles(run, site, processed_output_path):
 
 
 @time_execution
-@tenacity.retry(
-    reraise=True,
-    wait=tenacity.wait_random_exponential(max=120),
-    retry=tenacity.retry_if_exception_type(sqlite3.Error),
-)
 def run_compute_singles(run, site, processed_output_path, database):
     """Compute the singles (underlying uncorrelated) rate."""
     path_prefix = os.path.join(processed_output_path, f'EH{site}')
@@ -599,14 +597,21 @@ def run_compute_singles(run, site, processed_output_path, database):
         )
         # Ideally should check to see if rate has been computed before.
         # But, this is so fast that I will just re-compute every time.
-        compute_singles.main(
-            infile,
-            database,
-            GENERAL_LABEL,
-            update_db,
-            iteration,
-            extra_cut,
-        )
+        for attempt in tenacity.Retrying(
+            reraise=True,
+            wait=tenacity.wait_random_exponential(max=60),
+            retry=tenacity.retry_if_exception_type(sqlite3.Error),
+            before_sleep=tenacity.before_sleep_log(logging, logging.DEBUG),
+        ):
+            with attempt:
+                compute_singles.main(
+                    infile,
+                    database,
+                    GENERAL_LABEL,
+                    update_db,
+                    iteration,
+                    extra_cut,
+                )
     return
 
 
@@ -693,16 +698,24 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
             )
         else:
             label = NOMINAL_LABEL
-            subtract_accidentals.main(
-                outfile,
-                datafile,
-                accfile,
-                database,
-                ad,
-                override_acc_rate,
-                label,
-                update_db,
-            )
+            for attempt in tenacity.Retrying(
+                reraise=True,
+                wait=tenacity.wait_random_exponential(max=60),
+                retry=tenacity.retry_if_exception_type(sqlite3.Error),
+                before_sleep=tenacity.before_sleep_log(logging, logging.DEBUG),
+            ):
+                with attempt:
+                    subtract_accidentals.main(
+                        outfile,
+                        datafile,
+                        accfile,
+                        database,
+                        ad,
+                        override_acc_rate,
+                        label,
+                        GENERAL_LABEL,
+                        update_db,
+                    )
         outfile = os.path.join(
             path_prefix,
             f'sub_using_adtime_ad{ad}/sub_ad{ad}_{run}.root',
@@ -717,16 +730,24 @@ def run_subtract_accidentals(run, site, processed_output_path, database):
             )
         else:
             label = ADTIME_LABEL
-            subtract_accidentals.main(
-                outfile,
-                datafile,
-                accfile,
-                database,
-                ad,
-                override_acc_rate,
-                label,  # Label containing 'adtime' will use AdTime positions
-                update_db,
-            )
+            for attempt in tenacity.Retrying(
+                reraise=True,
+                wait=tenacity.wait_random_exponential(max=60),
+                retry=tenacity.retry_if_exception_type(sqlite3.Error),
+                before_sleep=tenacity.before_sleep_log(logging, logging.DEBUG),
+            ):
+                with attempt:
+                    subtract_accidentals.main(
+                        outfile,
+                        datafile,
+                        accfile,
+                        database,
+                        ad,
+                        override_acc_rate,
+                        label,  # Label containing 'adtime' will use AdTime positions
+                        GENERAL_LABEL,
+                        update_db,
+                    )
     return
 
 def run_hadd_sub_files(site, processed_output_path):
@@ -945,7 +966,7 @@ def main(
     if time.time() > stop_time:
         return
     # Execute all runs' remaining tasks in parallel to take advantage of many cores.
-    with multiprocessing.Pool(NUM_MULTIPROCESSING, maxtasksperchild=1) as pool:
+    with multiprocessing.Pool(NUM_MULTIPROCESSING) as pool:
         pool.starmap(
             _tasks_for_whole_run,
             [

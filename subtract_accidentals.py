@@ -80,7 +80,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
                     (run_number, ad, base_rate, 0, 0, 0, 0, 0, 0))
                 else:
                     c.execute('''INSERT OR REPLACE INTO accidental_subtraction
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)''',
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)''',
                     (run_number, ad, label, base_rate, 0, 0, 0, 0, 0, 0))
                     conn.commit()
         outfile.Write()
@@ -203,14 +203,24 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
                     distance_cross_check_value, distance_cross_check_error))
             else:
                 c.execute('''INSERT OR REPLACE INTO accidental_subtraction
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)''',
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)''',
                 (run_number, ad, label, base_rate, eps_distance, scale_factor,
                     DT_cross_check_value, DT_cross_check_error,
                     distance_cross_check_value, distance_cross_check_error))
                 conn.commit()
 
 
-def main(output, datafile, accfile, database, ad, override_acc_rate, label, update_db):
+def main(
+    output,
+    datafile,
+    accfile,
+    database,
+    ad,
+    override_acc_rate,
+    label,
+    general_label,
+    update_db,
+):
     try:
         with open(os.path.splitext(datafile)[0] + '.json', 'r') as f:
             stats = json.load(f)
@@ -225,16 +235,37 @@ def main(output, datafile, accfile, database, ad, override_acc_rate, label, upda
         run_number = ad_events.run
         site = ad_events.site
 
-    with common.get_db(database) as conn:
+    with common.get_db(database, timeout=0.5) as conn:
         c = conn.cursor()
         if override_acc_rate:
             singles_rate = None
         else:
-            c.execute('SELECT Rate_Hz FROM singles_rates WHERE '
-                    'RunNo = ? AND DetNo = ?', (run_number, ad))
+            c.execute('''
+                SELECT
+                    Rate_Hz
+                FROM
+                    singles_rates
+                WHERE
+                    RunNo = ?
+                    AND DetNo = ?
+                    AND Label = ?
+                ''',
+                (run_number, ad, general_label)
+            )
             singles_rate, = c.fetchone()
-        c.execute('SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE '
-                'RunNo = ? AND DetNo = ?', (run_number, ad))
+        c.execute('''
+            SELECT
+                Rate_Hz,
+                Livetime_ns/1e9
+            FROM
+                muon_rates
+            WHERE
+                RunNo = ?
+                AND DetNo = ?
+                AND Label = ?
+            ''',
+            (run_number, ad, general_label)
+        )
         muon_rate, livetime = c.fetchone()
     database = database if update_db else None
     subtract(output, datafile, accfile, ad, singles_rate, muon_rate, livetime,
@@ -252,6 +283,9 @@ if __name__ == '__main__':
     parser.add_argument('--update-db', action='store_true')
     parser.add_argument('--label',
         help='Label in DB - if absent, will assume no Label column in schema')
+    parser.add_argument('--general-label',
+        help='Lookup label for singles rates and muon rates'
+    )
     args = parser.parse_args()
     main(
         args.output,
@@ -261,5 +295,6 @@ if __name__ == '__main__':
         args.ad,
         args.override_acc_rate,
         args.label,
+        args.general_label,
         args.update_db,
     )

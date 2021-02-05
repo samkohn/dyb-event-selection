@@ -10,6 +10,7 @@ import sqlite3
 import tenacity
 
 import common
+from adevent import _EMAX_THU
 from delayeds import (_NH_THU_DIST_TIME_CUT_STR as DT_CUT_LITERAL, _NH_THU_DIST_TIME_STR
         as DT_VALUE_LITERAL, _NH_THU_MAX_TIME, _NH_THU_MIN_TIME)
 
@@ -46,13 +47,15 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         DT_VALUE = DT_VALUE_LITERAL
         DT_CUT = DT_CUT_LITERAL
         DR_VALUE = DR_VALUE_LITERAL
+    EMAX_CUT = f'(energy[0] < {_EMAX_THU} && energy[1] < {_EMAX_THU})'
     hist_parameters = (2100, 1.5, 12, 2100, 1.5, 12)
     datafile = ROOT.TFile(datafilename, 'READ')
     raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', *hist_parameters)
     raw_spectrum.Sumw2()
     ad_events = datafile.Get('ad_events')
     ad_events.Draw('energy[1]:energy[0] >> raw_spec',
-            f'multiplicity == 2 && {DT_CUT} && {DR_VALUE} >= 0', 'goff')
+            f'multiplicity == 2 && {DT_CUT} && {DR_VALUE} >= 0 && {EMAX_CUT}',
+            'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
     acc_entries = accfile.Get('accidentals')
     acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
@@ -132,7 +135,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     ed_vs_DT_sub = ROOT.TH2F('ed_DT_sub', 'ed_DT_sub',
             *distance_axis_parameters, *energy_axis_parameters)
     ad_events.Draw(f'{DR_VALUE} >> dr_data', 'multiplicity == 2 && '
-            f'{DR_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
+            f'{EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
     scale_factor = base_rate * eps_distance * livetime / num_acc_events
     bg_pairs = accfile.Get('all_pairs')
     bg_pairs.Draw(f'{DR_VALUE_LITERAL} >> dr_bg', (str(scale_factor) +
@@ -140,7 +143,8 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             f'{DR_VALUE_LITERAL} >= 0)'), 'same goff')
     dr_spectrum_sub.Add(dr_spectrum_actual, dr_spectrum_bg, 1, -1)
     ad_events.Draw(f'{DT_VALUE} >> DT_data',
-        f'multiplicity == 2 && {DT_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
+        f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
+        'goff')
     bg_pairs.Draw(f'{DT_VALUE_LITERAL} >> DT_bg',
         f'{scale_factor} * 2 * ({DT_VALUE_LITERAL} < 5000 && {DR_VALUE_LITERAL} >= 0)', 'goff')
     DT_spectrum_sub.Add(DT_spectrum_actual, DT_spectrum_bg, 1, -1)
@@ -153,10 +157,10 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         DT_cross_check_value = fit_result.Parameter(0)
         DT_cross_check_error = fit_result.ParError(0)
     ad_events.Draw(f'energy[1]:{DR_VALUE} >> ed_dr_data',
-            f'multiplicity == 2 && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
+            f'multiplicity == 2 && {EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
     ad_events.Draw(f'energy[0]:{DR_VALUE} >> ep_dr_data',
-            f'multiplicity == 2 && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
+            f'multiplicity == 2 && {EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
     bg_pairs.Draw(f'energy[0]:{DR_VALUE_LITERAL} >> ed_dr_bg',
             f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
@@ -169,10 +173,10 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1,
             -base_rate*eps_distance*livetime/num_acc_events)
     ad_events.Draw(f'energy[1]:{DT_VALUE} >> ed_DT_data',
-            f'multiplicity == 2 && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
+            f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
     ad_events.Draw(f'energy[0]:{DT_VALUE} >> ep_DT_data',
-            f'multiplicity == 2 && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
+            f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
     bg_pairs.Draw(f'energy[0]:{DT_VALUE_LITERAL} >> ed_DT_bg',
             f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '

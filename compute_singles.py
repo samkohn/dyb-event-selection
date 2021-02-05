@@ -5,6 +5,7 @@ import os
 from scipy.optimize import fsolve
 
 import common
+from adevent import _EMAX_THU
 from delayeds import _NH_THU_MAX_TIME
 
 # Numerically-evaluated uncertainty of R_s relative to R_1-fold.
@@ -136,7 +137,8 @@ def main(infile, database, label, update_db, iteration, extra_cut):
     ad = ch.detector[0]
     start_time = ch.timestamp[0]
     multiplicity_1_count = ch.Draw('energy', f'detector == {ad} && '
-        f'multiplicity == 1 && ({extra_cut})', 'goff')
+        f'multiplicity == 1 && energy < {_EMAX_THU} && ({extra_cut})',
+        'goff')
     with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.execute('''SELECT Rate_Hz, Livetime_ns/1e9 FROM muon_rates WHERE

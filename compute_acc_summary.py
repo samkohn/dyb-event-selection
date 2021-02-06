@@ -53,7 +53,6 @@ def baserate_uncertainty(database, label, general_label):
         r_ss * (ERROR_COEFFICIENT * r_1fold / singles_rate + 1) / np.sqrt(n_1fold)
     )
     result_rows = np.vstack((base_rate_error, runs, dets, labels)).T
-    print(result_rows.shape)
     with common.get_db(database) as conn:
         cursor = conn.cursor()
         cursor.executemany('''

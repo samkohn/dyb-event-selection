@@ -874,6 +874,8 @@ def _tasks_for_whole_run(
 ):
     """Execute all the tasks that involve the entire run, i.e. not first_pass or
     process."""
+    if time.time() > stop_time:
+        return
     finished = []
     try:
         if _should_run(run, site, 'Hadd', progress):
@@ -886,21 +888,21 @@ def _tasks_for_whole_run(
             finished.append('AggregateStats')
         else:
             logging.debug('[aggregate_stats] Skipping Run %d based on db progress', run)
-        if time.time() + 20 * 60 > stop_time:
-            return
         if _should_run(run, site, 'CreateSingles', progress):
+            if time.time() + 20 * 60 > stop_time:
+                return
             run_create_singles(run, site, processed_output_path)
             finished.append('CreateSingles')
         else:
             logging.debug('[create_singles] Skipping Run %d based on db progress', run)
-        if time.time() + 20 * 60 > stop_time:
-            return
         if _should_run(run, site, 'ComputeSingles', progress):
             run_compute_singles(run, site, processed_output_path, database)
             finished.append('ComputeSingles')
         else:
             logging.debug('[compute_singles] Skipping Run %d based on db progress', run)
         if _should_run(run, site, 'CreateAccidentals', progress):
+            if time.time() + 20 * 60 > stop_time:
+                return
             run_create_accidentals(run, site, processed_output_path)
             finished.append('CreateAccidentals')
         else:

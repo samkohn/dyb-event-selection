@@ -18,6 +18,7 @@ import numpy as np
 import scipy.interpolate
 
 import common
+import compute_dataset_summary
 
 @dataclass
 class InputOscParams:
@@ -337,7 +338,9 @@ class Config:
     background_types: list
     background_errors: list
     mult_eff: Any
+    mult_eff_label: str
     muon_eff: Any
+    muon_eff_label: str
     masses: Any
     num_coincs: Any
     num_coincs_source: str
@@ -507,27 +510,46 @@ def load_constants(config_file):
     else:
         raise ValueError(f"Invalid backgrounds specification: {config.backgrounds}")
 
+    def zip_ads(list_of_values):
+        return dict(zip(all_ads, list_of_values))
+
     # Parse muon_eff: Nominal, 1, hard-coded, or alternate database
     if config.muon_eff is True:
-        muon_eff = muon_veto_efficiency(database)
+        muon_eff = zip_ads(
+            compute_dataset_summary.muon_efficiency(
+                database, config.muon_eff_label
+            )
+        )
     elif config.muon_eff is False:
         muon_eff = ad_dict(1)
     elif isinstance(config.muon_eff, list):
-        muon_eff = dict(zip(all_ads, config.muon_eff))
+        muon_eff = zip_ads(config.muon_eff)
     elif isinstance(config.muon_eff, str):
-        muon_eff = muon_veto_efficiency(config.muon_eff)
+        muon_eff = zip_ads(
+            compute_dataset_summary.muon_efficiency(
+                config.muon_eff, config.muon_eff_label
+            )
+        )
     else:
         raise ValueError(f"Invalid muon_eff specification: {config.muon_eff}")
 
     # Parse mult_eff: Nominal, 1, hard-coded, or alternate database
     if config.mult_eff is True:
-        multiplicity_eff = multiplicity_efficiency(database)
+        multiplicity_eff = zip_ads(
+            compute_dataset_summary.multiplicity_efficiency(
+                database, config.mult_eff_label
+            )
+        )
     elif config.mult_eff is False:
         multiplicity_eff = ad_dict(1)
     elif isinstance(config.mult_eff, list):
-        multiplicity_eff = dict(zip(all_ads, config.mult_eff))
+        multiplicity_eff = zip_ads(config.mult_eff)
     elif isinstance(config.mult_eff, str):
-        multiplicity_eff = multiplicity_efficiency(config.mult_eff)
+        multiplicity_eff = zip_ads(
+            compute_dataset_summary.multiplicity_efficiency(
+                config.mult_eff, config.mult_eff_label
+            )
+        )
     else:
         raise ValueError(f"Invalid mult_eff specification: {config.mult_eff}")
 

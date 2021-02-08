@@ -15,6 +15,7 @@ import tenacity
 
 import aggregate_stats
 import common
+import compute_acc_summary
 import compute_acc_total_efficiency
 import compute_num_coincidences
 import compute_singles
@@ -849,6 +850,20 @@ def run_fit_delayed(site, ad, processed_output_path, database):
     return
 
 
+def run_baserate_uncertainty(database):
+    """Compute the uncertainty on R_ss (base accidentals rate)."""
+    compute_acc_summary.baserate_uncertainty(
+        database,
+        NOMINAL_LABEL,
+        GENERAL_LABEL,
+    )
+    compute_acc_summary.baserate_uncertainty(
+        database,
+        ADTIME_LABEL,
+        GENERAL_LABEL,
+    )
+
+
 def post_processing(processed_output_path, database):
     """Run the scripts that rely on all data being processed through many_runs."""
     sites = (1, 2, 3)
@@ -859,6 +874,7 @@ def post_processing(processed_output_path, database):
             run_fit_delayed(site, det, processed_output_path, database)
     run_compute_num_coincidences(processed_output_path, database)
     run_compute_total_acc_efficiency(processed_output_path, database)
+    run_baserate_uncertainty(database)
     return
 
 

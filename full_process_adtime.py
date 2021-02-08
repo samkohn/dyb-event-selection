@@ -898,7 +898,7 @@ def _tasks_for_whole_run(
             run_hadd(run, site, filenos, processed_output_path)
             finished.append('Hadd')
         else:
-            logging.debug('[compute_singles] Skipping Run %d based on db progress', run)
+            logging.debug('[hadd] Skipping Run %d based on db progress', run)
         if _should_run(run, site, 'AggregateStats', progress):
             run_aggregate_stats(run, site, filenos, processed_output_path, database)
             finished.append('AggregateStats')

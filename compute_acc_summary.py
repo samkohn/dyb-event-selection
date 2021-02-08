@@ -1,5 +1,4 @@
 """Compute the statistical uncertainty for accidentals."""
-import argparse
 from collections import defaultdict
 import json
 
@@ -179,25 +178,17 @@ def rate_errors(database, label, general_label):
 
     return corrected_rate_errors
 
-def dump_accidentals_json(database, label, general_label, filename):
+def accidentals_dict(database, label, general_label):
     acc_rates = rates(database, label, general_label)
     acc_rate_errors = rate_errors(database, label, general_label)
-    print(acc_rates)
-    print(acc_rate_errors)
     acc_dict = defaultdict(dict)
     for (hall, det), rate, error in zip(common.all_ads, acc_rates, acc_rate_errors):
         acc_dict[f'EH{hall}-AD{det}']['rate'] = rate
         acc_dict[f'EH{hall}-AD{det}']['error'] = error
+    return dict(acc_dict)
+
+def dump_accidentals_json(database, label, general_label, filename):
+    acc_dict = accidentals_dict(database, label, general_label)
     with open(filename, 'w') as fout:
         json.dump({'accidental': acc_dict}, fout, indent=2)
 
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('database')
-    parser.add_argument('--base-rate', action='store_true')
-    parser.add_argument('--update-db')
-    args = parser.parse_args()
-    if args.base_rate:
-        baserate_uncertainty(args.database)

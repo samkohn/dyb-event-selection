@@ -11,8 +11,13 @@ import tenacity
 
 import common
 from adevent import _EMAX_THU
-from delayeds import (_NH_THU_DIST_TIME_CUT_STR as DT_CUT_LITERAL, _NH_THU_DIST_TIME_STR
-        as DT_VALUE_LITERAL, _NH_THU_MAX_TIME, _NH_THU_MIN_TIME)
+from delayeds import (
+    _NH_THU_DIST_TIME_CUT_STR as DT_CUT_LITERAL,
+    _NH_THU_DIST_TIME_STR as DT_VALUE_LITERAL,
+    _NH_THU_DIST_TIME_MAX as DT_CUT_MAX,
+    _NH_THU_MAX_TIME,
+    _NH_THU_MIN_TIME
+)
 
 DR_VALUE_LITERAL = '(dr_to_prompt[1])'
 
@@ -36,7 +41,9 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         base_rate = acc_rate
     if 'adtime' in label:
         DT_VALUE = '(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1])'
-        DT_CUT = '(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1] < 800)'
+        DT_CUT = (
+            f'(dr_to_prompt_AdTime[1] + 1000/600e3 * dt_to_prompt[1] < {DT_CUT_MAX})'
+        )
         DR_VALUE = '(dr_to_prompt_AdTime[1])'
     else:
         DT_VALUE = DT_VALUE_LITERAL
@@ -52,11 +59,11 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             f'multiplicity == 2 && {DT_CUT} && {DR_VALUE} >= 0 && {EMAX_CUT}',
             'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
-    acc_entries = accfile.Get('accidentals')
+    all_acc_pairs = accfile.Get('all_pairs')
     acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
     acc_spectrum.Sumw2()
-    acc_entries.Draw('energy[1]:energy[0] >> acc_spectrum', '', 'goff')
-    acc_entries.Draw('energy[0]:energy[1] >>+acc_spectrum', '', 'goff')
+    all_acc_pairs.Draw('energy[1]:energy[0] >> acc_spectrum', DT_CUT, 'goff')
+    all_acc_pairs.Draw('energy[0]:energy[1] >>+acc_spectrum', DT_CUT, 'goff')
     num_acc_events = acc_spectrum.GetEntries()
     DT_cut_fails = accfile.Get('DT_cut_fails')
     eps_distance = num_acc_events/(

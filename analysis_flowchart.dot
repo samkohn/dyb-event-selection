@@ -1,0 +1,114 @@
+digraph G {
+    {
+        // Datasets and intermediate values
+        node [shape=box];
+        raw_data;
+        muon_like;
+        muon_rate;
+        muon_adjusted_livetime;
+        event_like;
+        coincidence_groups [shape="record",label="{Coincidence groups |{<multiplicity1> 1-fold | <multiplicity2> 2-fold | <other> other}}"];
+        singles_rate;
+        acc_base_rate_rss;
+        singles_sample;
+        synthetic_sample;
+        eps_DT_acc;
+        acc_counts_no_delayed_cut;
+        acc_spectrum_no_delayed_cut;
+        acc_subtracted_spec_no_delayed_cut;
+        eps_total_acc;
+        MC_IBD_dataset;
+    }
+    {
+        // Analysis outputs and values
+        node [shape=box, peripheries=2];
+        eps_muon;
+        eps_multiplicity;
+        delayed_cut_eff_uncertainty;
+        rel_e_scale_uncertainty;
+        delayed_energy_bounds;
+        acc_counts;
+        acc_spectrum;
+        observed_prompt_counts_and_spectrum;
+        prompt_eff_corrections;
+        prompt_eff_uncertainty;
+        rel_e_scale_coefficients;
+    }
+    {
+        // Cuts
+        node [shape=invhouse];
+        nominal_flasher_veto;
+        muon_veto [label="Muon veto"];
+        resid_flasher_veto [label="Resid. flasher veto"];
+        isolation_cut;
+        {
+            // DT cuts
+            node [label="DT cut"];
+            DT_cut_1;
+            DT_cut_2;
+            DT_cut_3;
+            DT_cut_4;
+            DT_cut_5;
+        }
+        {
+            // Delayed energy cuts
+            node [label="Delayed energy cut"];
+            delayed_energy_cut_1;
+            delayed_energy_cut_2;
+            //delayed_energy_cut_3;
+        }
+    }
+    {
+        // Procedures
+        node [shape=ellipse];
+        coincidence_search;
+        synthetic_pairing;
+        delayed_eff_study;
+        delayed_fits;
+        poisson_statistics;
+    }
+
+    { rank=same; raw_data, MC_IBD_dataset }
+    { rank=same; acc_counts, acc_spectrum, observed_prompt_counts_and_spectrum }
+    { rank=same; DT_cut_1, DT_cut_2, DT_cut_3, DT_cut_4, DT_cut_5 }
+
+    raw_data -> muon_like;
+    raw_data -> nominal_flasher_veto -> event_like -> resid_flasher_veto -> muon_veto;
+    muon_like -> muon_veto;
+    muon_veto -> muon_rate;
+    muon_veto -> muon_adjusted_livetime;
+    muon_veto -> eps_muon;
+    muon_veto -> coincidence_search -> coincidence_groups;
+    coincidence_groups:multiplicity1 -> singles_rate;
+    singles_rate -> poisson_statistics -> acc_base_rate_rss;
+    muon_rate -> singles_rate;
+    muon_rate -> eps_multiplicity;
+    singles_rate -> eps_multiplicity;
+    muon_adjusted_livetime -> singles_rate;
+    coincidence_groups:multiplicity1 -> isolation_cut -> singles_sample -> synthetic_pairing -> synthetic_sample;
+    synthetic_sample -> DT_cut_1 -> eps_DT_acc -> acc_counts_no_delayed_cut;
+    muon_adjusted_livetime -> acc_counts_no_delayed_cut;
+    acc_base_rate_rss -> acc_counts_no_delayed_cut;
+    synthetic_sample -> DT_cut_4 -> acc_spectrum_no_delayed_cut;
+    acc_counts_no_delayed_cut -> acc_subtracted_spec_no_delayed_cut;
+    acc_spectrum_no_delayed_cut -> acc_subtracted_spec_no_delayed_cut;
+    coincidence_groups:multiplicity2 -> DT_cut_5 -> acc_subtracted_spec_no_delayed_cut;
+    acc_subtracted_spec_no_delayed_cut -> delayed_fits;
+    delayed_fits -> rel_e_scale_uncertainty;
+    delayed_fits -> delayed_energy_bounds;
+    delayed_energy_bounds -> delayed_eff_study -> delayed_cut_eff_uncertainty;
+    delayed_energy_bounds -> { delayed_energy_cut_1, delayed_energy_cut_2 };
+    synthetic_sample -> DT_cut_2 -> delayed_energy_cut_1 -> eps_total_acc;
+    acc_base_rate_rss -> acc_counts;
+    muon_adjusted_livetime -> acc_counts;
+    eps_total_acc -> acc_counts;
+    singles_sample -> acc_spectrum;
+    coincidence_groups:multiplicity2 -> DT_cut_3 -> delayed_energy_cut_2 -> observed_prompt_counts_and_spectrum;
+
+    MC_IBD_dataset -> prompt_eff_corrections;
+    MC_IBD_dataset -> prompt_eff_uncertainty;
+    rel_e_scale_uncertainty -> prompt_eff_uncertainty;
+    MC_IBD_dataset -> rel_e_scale_coefficients;
+    rel_e_scale_uncertainty -> rel_e_scale_coefficients;
+
+}

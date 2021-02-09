@@ -36,13 +36,26 @@ def get_stat_error(n_passes_cut, n_fails_cut, error_passes, error_fails):
     power_term = pow(1 + value_ratio, 2)
     return value_ratio * quotient_propagation/power_term
 
-def main(input_basepath, database, update_db):
+def main(file_template, database, label, update_db):
     import ROOT
     with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, Peak, Resolution
-        FROM delayed_energy_fits WHERE Hall > 0 AND DetNo > 0''')
+        cursor.execute('''
+            SELECT
+                Hall,
+                DetNo,
+                Peak,
+                Resolution
+            FROM
+                delayed_energy_fits
+            WHERE
+                Hall > 0
+                AND DetNo > 0
+                AND Source = ?
+            ''',
+            (label,)
+        )
         results = cursor.fetchall()
     cut_lookup = {(row['Hall'], row['DetNo']): row for row in results}
     effs = {}
@@ -52,10 +65,7 @@ def main(input_basepath, database, update_db):
     DT_CUT_UP_BIN = 16  # 800mm
     DT_ALL_UP_BIN = 60  # 3000mm
     for (site, det), cuts in cut_lookup.items():
-        site_dir = 'EH{}'.format(site)
-        sub_dir = 'sub_ad{}'.format(det)
-        name = 'sub_ad{}.root'.format(det)
-        path = os.path.join(input_basepath, site_dir, sub_dir, name)
+        path = file_template.format(site=site, ad=det)
         print(path)
         infile = ROOT.TFile(path, 'READ')
         delayed_vs_DT = infile.Get('ed_DT_sub')
@@ -99,13 +109,16 @@ def main(input_basepath, database, update_db):
             for (site, det), eff in effs.items():
                 cursor.execute('''INSERT OR REPLACE INTO
                 distance_time_cut_efficiency VALUES
-                (?, ?, ?, ?, ?)''', (site, det, eff, stat_errors[site, det],
+                (?, ?, ?, ?, ?, ?)''', (site, det, label, eff, stat_errors[site, det],
                     binning_errors[site, det]))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('input', help='directory containing EH1, EH2, EH3')
+    parser.add_argument('file_template', help='template for .../EH{site}/sub_ad{ad}/etc.')
     parser.add_argument('database')
     parser.add_argument('--update-db', action='store_true')
+    parser.add_argument('--label',
+        help='database label for delayed fits and to store efficiency values'
+    )
     args = parser.parse_args()
-    main(args.input, args.database, args.update_db)
+    main(args.file_template, args.database, args.label, args.update_db)

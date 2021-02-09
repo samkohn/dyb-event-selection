@@ -984,6 +984,7 @@ def main(
     database,
     progress_db,
     max_runtime_sec,
+    run_initial_steps,
 ):
     if max_runtime_sec == -1:
         stop_time = time.time() + 100 * 24 * 60 * 60  # forever
@@ -993,26 +994,27 @@ def main(
     progress = _fetch_progress(progress_db)
     logging.info('Prepping for %d runs', len(run_info))
     logging.info('First few runs: %s', str(list(run_info.keys())[:5]))
-    # Execute each run's first_pass and process in series since they already use
-    # multiprocessing pools.
-    for run, (site, filenos) in run_info.items():
-        if time.time() > stop_time:
-            return
-        if _should_run(run, site, 'FirstPass', progress):
-            run_first_pass(run, site, filenos, raw_output_path)
-            _update_progress_db(progress_db, run, site, None, 'FirstPass')
-        else:
-            logging.debug('[first_pass] Skipping Run %d based on db progress', run)
-        if _should_run(run, site, 'ExtractFlashers', progress):
-            run_extract_flashers(run, site, filenos, raw_output_path)
-            _update_progress_db(progress_db, run, site, None, 'ExtractFlashers')
-        else:
-            logging.debug('[extract_flashers] Skipping Run %d based on db progress', run)
-        if _should_run(run, site, 'Process', progress):
-            run_process(run, site, filenos, raw_output_path, processed_output_path)
-            _update_progress_db(progress_db, run, site, None, 'Process')
-        else:
-            logging.debug('[process] Skipping Run %d based on db progress', run)
+    if run_initial_steps:
+        # Execute each run's first_pass and process in series since they already use
+        # multiprocessing pools.
+        for run, (site, filenos) in run_info.items():
+            if time.time() > stop_time:
+                return
+            if _should_run(run, site, 'FirstPass', progress):
+                run_first_pass(run, site, filenos, raw_output_path)
+                _update_progress_db(progress_db, run, site, None, 'FirstPass')
+            else:
+                logging.debug('[first_pass] Skipping Run %d based on db progress', run)
+            if _should_run(run, site, 'ExtractFlashers', progress):
+                run_extract_flashers(run, site, filenos, raw_output_path)
+                _update_progress_db(progress_db, run, site, None, 'ExtractFlashers')
+            else:
+                logging.debug('[extract_flashers] Skipping Run %d based on db progress', run)
+            if _should_run(run, site, 'Process', progress):
+                run_process(run, site, filenos, raw_output_path, processed_output_path)
+                _update_progress_db(progress_db, run, site, None, 'Process')
+            else:
+                logging.debug('[process] Skipping Run %d based on db progress', run)
     if time.time() > stop_time:
         return
     # Execute all runs' remaining tasks in parallel to take advantage of many cores.
@@ -1055,6 +1057,7 @@ if __name__ == '__main__':
         help='base directory for output of processed files',
     )
     parser.add_argument('--max-runtime-sec', type=int, default=-1)
+    parser.add_argument('--skip-initial-steps', action='store_true')
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
     level = logging.DEBUG if args.debug else logging.INFO
@@ -1081,6 +1084,7 @@ if __name__ == '__main__':
             args.database,
             progress_db,
             args.max_runtime_sec,
+            not args.skip_initial_steps,
         )
     else:
         main(
@@ -1092,5 +1096,6 @@ if __name__ == '__main__':
             args.database,
             progress_db,
             args.max_runtime_sec,
+            not args.skip_initial_steps,
         )
     print(f'Exiting runs {args.run} through {args.end_run}')

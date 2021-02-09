@@ -9,26 +9,32 @@ import common
 MAGIC_LOW_BOUND = 1.6
 MAGIC_UP_BOUND = 2.8
 
-def main(input_basepath, database, update_db):
+def main(file_template, database, label, pdf_output, update_db):
     import ROOT
     with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute('''SELECT Hall, DetNo, Peak, Resolution FROM
-            delayed_energy_fits
+        cursor.execute('''
+            SELECT
+                Hall,
+                DetNo,
+                Peak,
+                Resolution
+            FROM
+                delayed_energy_fits
             WHERE
                 Hall > 0
                 AND DetNo > 0
-                AND Source = "nominal"''')  #TODO hardcoded
+                AND Source = ?
+            ''',
+            (label,)
+        )
         results = cursor.fetchall()
     cut_lookup = {(row['Hall'], row['DetNo']): row for row in results}
     values_lookup = {}
     errors_lookup = {}
     for (site, det), cuts in cut_lookup.items():
-        site_dir = 'EH{}'.format(site)
-        sub_dir = 'sub_nominal_ad{}'.format(det)  #TODO hardcoded
-        name = 'sub_ad{}.root'.format(det)
-        path = os.path.join(input_basepath, site_dir, sub_dir, name)
+        path = file_template.format(site=site, ad=det)
         print(path)
         infile = ROOT.TFile(path, 'READ')
         spectrum_2d = infile.Get('final')
@@ -68,9 +74,14 @@ def main(input_basepath, database, update_db):
                 relative_deviation = 1 - model_value / nominal
                 print(site, det, model_value, relative_deviation)
                 error = errors_lookup[site, det][0] / nominal
-                cursor.execute('''INSERT OR REPLACE INTO delayed_energy_uncertainty_1
-                    VALUES (?, ?, ?, ?)''', (site, det, relative_deviation, error))
-        ROOT.gPad.Print('eff_uncertainty.pdf')
+                cursor.execute('''
+                    INSERT OR REPLACE
+                    INTO
+                        delayed_energy_uncertainty_1
+                    VALUES
+                        (?, ?, ?, ?, ?)
+                    ''',
+                    (site, det, label, relative_deviation, error))
     else:
         intercept_error = fit_result.ParError(0)
         slope_error = fit_result.ParError(1)
@@ -80,14 +91,17 @@ def main(input_basepath, database, update_db):
             model_value = y_intercept + slope * wide
             relative_deviation = 1 - model_value / nominal
             print(site, det, model_value, relative_deviation)
+    if pdf_output is not None:
+        ROOT.gPad.Print(pdf_output)
+    return
 
 
 if __name__ == '__main__':
-    raise RuntimeError("You better double check the Source and file path"
-        " and comment out this line before running for real.")
     parser = argparse.ArgumentParser()
-    parser.add_argument('input')
+    parser.add_argument('file_template', help='template for .../EH{site}/sub_ad{ad}/etc.')
     parser.add_argument('database')
+    parser.add_argument('--label')
+    parser.add_argument('-o', '--pdf-output')
     parser.add_argument('--update-db', action='store_true')
     args = parser.parse_args()
-    main(args.input, args.database, args.update_db)
+    main(args.input, args.database, args.label, args.pdf_output, args.update_db)

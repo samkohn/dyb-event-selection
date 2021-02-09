@@ -17,6 +17,7 @@ import aggregate_stats
 import common
 import compute_acc_summary
 import compute_acc_total_efficiency
+import compute_delayed_eff_uncertainty
 import compute_dist_time_eff
 import compute_num_coincidences
 import compute_singles
@@ -895,6 +896,39 @@ def run_dist_time_eff(processed_output_path, database):
     return
 
 
+def run_delayed_eff_uncertainty(processed_output_path, database):
+    """Compute the delayed energy cut efficiency uncertainty."""
+    update_db = True
+    pdf_output = False
+    nominal_file_template = os.path.join(
+        processed_output_path,
+        "EH{site}",
+        "sub_nominal_ad{ad}",
+        "sub_ad{ad}.root",
+    )
+    compute_delayed_eff_uncertainty.main(
+        nominal_file_template,
+        database,
+        NOMINAL_LABEL,
+        pdf_output,
+        update_db,
+    )
+    adtime_file_template = os.path.join(
+        processed_output_path,
+        "EH{site}",
+        "sub_using_adtime_ad{ad}",
+        "sub_ad{ad}.root",
+    )
+    compute_delayed_eff_uncertainty.main(
+        adtime_file_template,
+        database,
+        ADTIME_LABEL,
+        pdf_output,
+        update_db,
+    )
+    return
+
+
 def post_processing(processed_output_path, database):
     """Run the scripts that rely on all data being processed through many_runs."""
     sites = (1, 2, 3)
@@ -907,6 +941,7 @@ def post_processing(processed_output_path, database):
     run_compute_total_acc_efficiency(processed_output_path, database)
     run_baserate_uncertainty(database)
     run_dist_time_eff(processed_output_path, database)
+    run_delayed_eff_uncertainty(processed_output_path, database)
     return
 
 

@@ -92,3 +92,40 @@ def multiplicity_efficiency(database, label):
         mult_effs = np.array(cursor.fetchall()).reshape(-1)
     return mult_effs
 
+def coincidences_counts(database, label):
+    """Return an array of coincidence counts from EH1-AD1 to EH3-AD4."""
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                SUM(NumCoincidences)
+            FROM
+                num_coincidences_by_run
+            NATURAL JOIN
+                runs
+            WHERE
+                Label = ?
+            GROUP BY
+                Hall,
+                DetNo
+            ORDER BY
+                Hall,
+                DetNo
+            ''',
+            (label,)
+        )
+        counts = np.array(cursor.fetchall()).reshape(-1)
+    return counts
+
+def coincidences_rates(database, label, general_label):
+    """Return an array of coincidence rates (per day) from EH1-AD1 to EH3-AD4.
+
+    Rates are corrected for muon and multiplicity efficiency.
+    """
+    counts = coincidences_counts(database, label)
+    daq_livetimes = daq_livetime_days(database, general_label)
+    mult_effs = multiplicity_efficiency(database, general_label)
+    muon_effs = muon_efficiency(database, general_label)
+    rates = counts / mult_effs / muon_effs / daq_livetimes
+    return rates
+

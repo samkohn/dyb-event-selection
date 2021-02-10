@@ -61,6 +61,7 @@ if __name__ == '__main__':
         help='Use the given shifter image in srun',
     )
     parser.add_argument('--max-runtime-sec', type=int, default=-1)
+    parser.add_argument('--skip-initial-steps', action='store_true')
     parser.add_argument('-d', '--debug', action='store_true')
     args = parser.parse_args()
     if args.progress_db is None:
@@ -83,6 +84,7 @@ if __name__ == '__main__':
             f' --processed-output {args.processed_output} '
             f' --max-runtime-sec {args.max_runtime_sec} '
             f' {"-d" if args.debug else ""}'
+            f' {"--skip-initial-steps" if args.skip_initial_steps else ""}'
         )
         print(command)
 

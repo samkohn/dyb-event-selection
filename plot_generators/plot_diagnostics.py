@@ -11,6 +11,8 @@ import numpy as np
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('database')
+    parser.add_argument('--label')
+    parser.add_argument('--rates-label')
     choices = ('all', 'singles', 'muons', 'delayed-fit',
             'delayed-eff-unc', 'DT-eff', 'acc-DT-eff',
             'singles-within-run')
@@ -48,9 +50,24 @@ if __name__ == '__main__':
         print('Retrieving and plotting singles data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
-            cursor.execute('''SELECT RunNo, Hall, DetNo, Start_time, Rate_Hz, Rate_Hz_error
-                FROM singles_rates INNER JOIN runs USING (RunNo)
-                ORDER BY RunNo''')
+            cursor.execute('''
+                SELECT
+                    RunNo,
+                    Hall,
+                    DetNo,
+                    Start_time,
+                    Rate_Hz,
+                    Rate_Hz_error
+                FROM
+                    singles_rates
+                INNER JOIN
+                    runs
+                USING (RunNo)
+                WHERE Label = ?
+                ORDER BY RunNo
+                ''',
+                (args.rates_label,)
+            )
             data = np.array(cursor.fetchall())
         # All
         fig, ax = plt.subplots()
@@ -126,9 +143,23 @@ if __name__ == '__main__':
         print('Retrieving and plotting muon data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
-            cursor.execute('''SELECT RunNo, Hall, DetNo, Start_time, Efficiency
-                FROM muon_rates INNER JOIN runs USING (RunNo)
-                ORDER BY RunNo''')
+            cursor.execute('''
+                SELECT
+                    RunNo,
+                    Hall,
+                    DetNo,
+                    Start_time,
+                    Efficiency
+                FROM
+                    muon_rates
+                INNER JOIN
+                    runs
+                USING (RunNo)
+                WHERE Label = ?
+                ORDER BY RunNo
+                ''',
+                (args.rates_label,)
+            )
             data = np.array(cursor.fetchall())
 
         #EH1, EH2
@@ -181,16 +212,22 @@ if __name__ == '__main__':
         print('Retrieving and plotting delayed energy fit data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
-            raise RuntimeError("Double check the Source in DB query below!")
-            cursor.execute('''SELECT Hall, DetNo, Peak, Peak_error,
-            Resolution, Resolution_error,
-            ExpScale, ExpScale_error,
-            PeakFraction, PeakFraction_error,
-            Normalization, Normalization_error
-            FROM delayed_energy_fits
-            WHERE
-                Source = "adtime"
-            ORDER BY Hall, DetNo''')
+            cursor.execute('''
+                SELECT
+                    Hall, DetNo, Peak, Peak_error,
+                    Resolution, Resolution_error,
+                    ExpScale, ExpScale_error,
+                    PeakFraction, PeakFraction_error,
+                    Normalization, Normalization_error
+                FROM delayed_energy_fits
+                WHERE
+                    Source = ?
+                ORDER BY
+                    Hall,
+                    DetNo
+                ''',
+                (args.label,)
+            )
             data = np.array(cursor.fetchall())
 
         # Peak locations
@@ -290,8 +327,22 @@ if __name__ == '__main__':
         print('Retrieving and plotting delayed energy eff. uncertainty data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
-            cursor.execute('''SELECT Hall, DetNo, RelativeDeviation, StatError
-                FROM delayed_energy_uncertainty_1 ORDER BY Hall, DetNo''')
+            cursor.execute('''
+                SELECT
+                    Hall,
+                    DetNo,
+                    RelativeDeviation,
+                    StatError
+                FROM
+                    delayed_energy_uncertainty_1
+                WHERE
+                    Label = ?
+                ORDER BY
+                    Hall,
+                    DetNo
+                ''',
+                (args.label,)
+            )
             data = np.array(cursor.fetchall())
 
         fig, ax = plt.subplots(figsize=(9, 5.8))
@@ -306,11 +357,22 @@ if __name__ == '__main__':
         print('Retrieving and plotting distance-time (DT) efficiency data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
-            raise RuntimeError("Double check the Source in DB query below!")
-            cursor.execute('''SELECT Hall, DetNo, Efficiency, StatError
-                FROM distance_time_cut_efficiency
-                WHERE Source = "nominal"
-                ORDER BY Hall, DetNo''')
+            cursor.execute('''
+                SELECT
+                    Hall,
+                    DetNo,
+                    Efficiency,
+                    StatError
+                FROM
+                    distance_time_cut_efficiency
+                WHERE
+                    Source = ?
+                ORDER BY
+                    Hall,
+                    DetNo
+                ''',
+                (args.label,)
+            )
             data = np.array(cursor.fetchall())
 
         fig, ax = plt.subplots()
@@ -321,22 +383,22 @@ if __name__ == '__main__':
         fig.tight_layout()
         fig.savefig('distance_time_cut_efficiency_nominal.pdf')
 
-        raise RuntimeError("Double check the Source in DB query below!")
-        with sqlite3.Connection(database) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''SELECT Hall, DetNo, Efficiency, StatError
-                FROM distance_time_cut_efficiency
-                WHERE Source = "adtime"
-                ORDER BY Hall, DetNo''')
-            data = np.array(cursor.fetchall())
+        #raise RuntimeError("Double check the Source in DB query below!")
+        #with sqlite3.Connection(database) as conn:
+            #cursor = conn.cursor()
+            #cursor.execute('''SELECT Hall, DetNo, Efficiency, StatError
+                #FROM distance_time_cut_efficiency
+                #WHERE Source = "adtime"
+                #ORDER BY Hall, DetNo''')
+            #data = np.array(cursor.fetchall())
 
-        fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
-        ax.set_title('Distance-time (DT) cut efficiency')
-        ax.set_ylabel('Efficiency')
-        ax.grid()
-        fig.tight_layout()
-        fig.savefig('distance_time_cut_efficiency_adtime.pdf')
+        #fig, ax = plt.subplots()
+        #ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
+        #ax.set_title('Distance-time (DT) cut efficiency')
+        #ax.set_ylabel('Efficiency')
+        #ax.grid()
+        #fig.tight_layout()
+        #fig.savefig('distance_time_cut_efficiency_adtime.pdf')
 
     if plot_all or ('acc-DT-eff' in plot_types):
         print('Retrieving and plotting accidentals DT efficiency data...')

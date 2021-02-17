@@ -34,13 +34,27 @@ import subtract_accidentals
 
 NUM_MULTIPROCESSING = 64
 
-NOMINAL_LABEL = "reject_resid_flash_nominal"
-ADTIME_LABEL = "reject_resid_flash_adtime"
-GENERAL_LABEL = "reject_resid_flash"
+#NOMINAL_LABEL = "reject_resid_flash_nominal"
+#ADTIME_LABEL = "reject_resid_flash_adtime"
+#GENERAL_LABEL = "reject_resid_flash"
+#NUM_COINCS_LABELS = {
+    #"adsimple": "reject resid flashers 2/4/2021",
+    #"adtime": "reject resid flashers adtime 2/4/2021",
+#}
+NOMINAL_LABEL = "nominal correct EMAX"
+ADTIME_LABEL = "adtime correct EMAX"
+GENERAL_LABEL = "allow_resid_flashers correct EMAX"
 NUM_COINCS_LABELS = {
-    "adsimple": "reject resid flashers 2/3/2021",
-    "adtime": "reject resid flashers adtime 2/3/2021",
+    "adsimple": "adsimple 2/4/2021",
+    "adtime": "adtime 2/4/2021",
 }
+#NOMINAL_LABEL = "nominal DT < 300mm"
+#ADTIME_LABEL = "adtime DT < 300mm"
+#GENERAL_LABEL = "allow_resid_flashers correct EMAX"
+#NUM_COINCS_LABELS = {
+    #"adsimple": "adsimple DT < 300mm 2/9/2021",
+    #"adtime": "adtime DT < 300mm 2/9/2021",
+#}
 
 def time_execution(func):
     """Convention that first arg is always the run number"""

@@ -91,13 +91,14 @@ def main(file_template, database, label, update_db):
         bin_width_changes = bin_width_error_integral/all_integral
         bin_width_error = (efficiency - bin_width_changes)/2
 
-        print(f'EH{site}-AD{det}')
-        print(f'Nominal: {100*efficiency:.02f}%')
-        print(f'Deviation due to 0.005MeV bin width: {100*bin_width_error:.03f}%')
-        print(f'Statistical error: {100*stat_error:.03f}%')
-        print(f'N(passes): {cut_integral} +/- {cut_error.real}')
-        print(f'N(fails):  {only_excluded_integral} +/- {only_excluded_error.real}')
-        print(f'N(total):  {all_integral}')
+        if not update_db:
+            print(f'EH{site}-AD{det}')
+            print(f'Nominal: {100*efficiency:.02f}%')
+            print(f'Deviation due to 0.005MeV bin width: {100*bin_width_error:.03f}%')
+            print(f'Statistical error: {100*stat_error:.03f}%')
+            print(f'N(passes): {cut_integral} +/- {cut_error.real}')
+            print(f'N(fails):  {only_excluded_integral} +/- {only_excluded_error.real}')
+            print(f'N(total):  {all_integral}')
         infile.Close()
 
         effs[site, det] = efficiency

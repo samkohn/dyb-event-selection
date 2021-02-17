@@ -91,8 +91,9 @@ def main(file_template, database, label, pdf_output, update_db):
             model_value = y_intercept + slope * wide
             relative_deviation = 1 - model_value / nominal
             print(site, det, model_value, relative_deviation)
-    if pdf_output is not None:
+    if pdf_output:
         ROOT.gPad.Print(pdf_output)
+    ROOT.gPad.Close()
     return
 
 

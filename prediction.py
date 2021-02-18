@@ -123,6 +123,7 @@ class FitConstants:
     total_emitted_by_AD: dict
     total_emitted_by_week_AD: dict
     livetime_by_week_AD: dict
+    daq_livetimes: dict
     true_bins_spectrum: np.array
     input_osc_params: InputOscParams
     theta12_err: float
@@ -445,7 +446,11 @@ def load_constants(config_file):
             total_emitted_by_AD[key] /= livetime_by_AD_for_periods[halldet,
                     ad_period.name]
 
-    livetimes = livetime_by_week(database, time_bins)
+    livetimes_by_week = livetime_by_week(database, time_bins)
+    daq_livetimes = dict(zip(all_ads, compute_dataset_summary.daq_livetime_s(
+        database if not isinstance(config.muon_eff, str) else config.muon_eff,
+        config.muon_eff_label,
+    )))
     rebin_matrix = generate_bin_averaging_matrix(
             np.concatenate((true_bins_spectrum, [12])),
             true_bins_response
@@ -591,7 +596,8 @@ def load_constants(config_file):
             total_emitted_by_AD,
             #total_emitted_by_week_AD,
             None,
-            livetimes,
+            livetimes_by_week,
+            daq_livetimes,
             true_bins_spectrum,
             input_osc_params,
             theta12_rel_err,

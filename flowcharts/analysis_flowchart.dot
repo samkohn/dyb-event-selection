@@ -49,6 +49,7 @@ digraph G {
             DT_cut_3;
             DT_cut_4;
             DT_cut_5;
+            DT_cut_6;
         }
         {
             // Delayed energy cuts
@@ -70,7 +71,7 @@ digraph G {
 
     { rank=same; raw_data, MC_IBD_dataset }
     { rank=same; acc_counts, acc_spectrum, observed_prompt_counts_and_spectrum }
-    { rank=same; DT_cut_1, DT_cut_2, DT_cut_3, DT_cut_4, DT_cut_5 }
+    { rank=same; DT_cut_1, DT_cut_2, DT_cut_3, DT_cut_4, DT_cut_5, DT_cut_6 }
 
     raw_data -> muon_like;
     raw_data -> nominal_flasher_veto -> event_like -> resid_flasher_veto -> muon_veto;
@@ -102,7 +103,7 @@ digraph G {
     acc_base_rate_rss -> acc_counts;
     muon_adjusted_livetime -> acc_counts;
     eps_total_acc -> acc_counts;
-    singles_sample -> acc_spectrum;
+    synthetic_sample -> DT_cut_6 -> acc_spectrum;
     coincidence_groups:multiplicity2 -> DT_cut_3 -> delayed_energy_cut_2 -> observed_prompt_counts_and_spectrum;
 
     MC_IBD_dataset -> prompt_eff_corrections;

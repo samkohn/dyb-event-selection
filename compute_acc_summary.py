@@ -192,3 +192,20 @@ def dump_accidentals_json(database, label, general_label, filename):
     with open(filename, 'w') as fout:
         json.dump({'accidental': acc_dict}, fout, indent=2)
 
+def load_acc_counts_to_db(read_database, label, general_label, bg_database, bg_label):
+    """Compute the counts and errors and load them into the specifified db."""
+    acc_counts = counts(read_database, label, general_label)
+    acc_errors = count_errors(read_database, label, general_label)
+    with common.get_db(bg_database) as conn:
+        cursor = conn.cursor()
+        for halldet, count, error in zip(common.all_ads, acc_counts, acc_errors):
+            row = (bg_label, halldet[0], halldet[1], 'accidental', count, error)
+            cursor.execute('''
+                INSERT INTO
+                    bg_counts
+                VALUES
+                    (?, ?, ?, ?, ?, ?)
+                ''',
+                row
+            )
+    return

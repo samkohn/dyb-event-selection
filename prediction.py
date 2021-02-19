@@ -1226,7 +1226,7 @@ def efficiency_weighted_counts(constants, fit_params, halls='all'):
 
 
 def backgrounds_per_AD(
-    database, counts_source, spectra_source, return_zero=False, types=None
+    database, counts_source, spectra_sources, return_zero=False, types=None
 ):
     """Retrieve the number of predicted background events and rate errors in each AD.
 
@@ -1261,7 +1261,12 @@ def backgrounds_per_AD(
      - "alpha-n"
      - "rad-n" (radiogenic neutrons)
 
-     If types is None, then the default of all types is used.
+    If types is None, then the default of all types is used.
+
+    If spectra_sources is a str, use it for all types of background.
+    If it is a list, then for each type of background, try using
+    successive sources until the first one that has more than 0 entries.
+    So if one spectrum is updated, use spectra_sources = [newer, older, oldest].
     """
     if return_zero:
         if types is None:
@@ -1296,20 +1301,29 @@ def backgrounds_per_AD(
             acc_data = {}
             acc_errors = {}
             for hall, det in all_ads:
-                cursor.execute('''
-                    SELECT
-                        Spectrum
-                    FROM
-                        accidentals_spectrum
-                    WHERE
-                        Label = ?
-                        AND Hall = ?
-                        AND DetNo = ?
-                    ORDER BY BinIndex
-                    ''',
-                    (spectra_source, hall, det),
-                )
-                acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
+                for spectra_source in spectra_sources:
+                    cursor.execute('''
+                        SELECT
+                            Spectrum
+                        FROM
+                            accidentals_spectrum
+                        WHERE
+                            Label = ?
+                            AND Hall = ?
+                            AND DetNo = ?
+                        ORDER BY BinIndex
+                        ''',
+                        (spectra_source, hall, det),
+                    )
+                    acc_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)  # flatten
+                    if len(acc_data[hall, det]) == 0:
+                        continue
+                    else:
+                        break
+                else:  # nobreak
+                    raise ValueError('No valid sources given for accidentals: '
+                        + str(spectra_sources)
+                    )
                 cursor.execute('''
                 SELECT
                     Count, Error
@@ -1328,18 +1342,27 @@ def backgrounds_per_AD(
             result['accidental'] = acc_data
             errors['accidental'] = acc_errors
         if 'li9' in types:
-            cursor.execute('''
-                SELECT
-                    Spectrum
-                FROM
-                    li9_spectrum
-                WHERE
-                    Label = ?
-                ORDER BY BinIndex
-                ''',
-                (spectra_source,),
-            )
-            li9_spectrum = np.array(cursor.fetchall()).reshape(-1)
+            for spectra_source in spectra_sources:
+                cursor.execute('''
+                    SELECT
+                        Spectrum
+                    FROM
+                        li9_spectrum
+                    WHERE
+                        Label = ?
+                    ORDER BY BinIndex
+                    ''',
+                    (spectra_source,),
+                )
+                li9_spectrum = np.array(cursor.fetchall()).reshape(-1)
+                if len(li9_spectrum) == 0:
+                    continue
+                else:
+                    break
+            else:  # nobreak
+                raise ValueError('No valid sources given for li9: '
+                    + str(spectra_sources)
+                )
             li9_data = {}
             li9_errors = {}
             for hall, det in all_ads:
@@ -1361,18 +1384,27 @@ def backgrounds_per_AD(
             result['li9'] = li9_data
             errors['li9'] = li9_errors
         if 'fast-neutron' in types:
-            cursor.execute('''
-                SELECT
-                    Spectrum
-                FROM
-                    fast_neutron_spectrum
-                WHERE
-                    Label = ?
-                ORDER BY BinIndex
-                ''',
-                (spectra_source,),
-            )
-            fast_neutron_spectrum = np.array(cursor.fetchall()).reshape(-1)
+            for spectra_source in spectra_sources:
+                cursor.execute('''
+                    SELECT
+                        Spectrum
+                    FROM
+                        fast_neutron_spectrum
+                    WHERE
+                        Label = ?
+                    ORDER BY BinIndex
+                    ''',
+                    (spectra_source,),
+                )
+                fast_neutron_spectrum = np.array(cursor.fetchall()).reshape(-1)
+                if len(fast_neutron_spectrum) == 0:
+                    continue
+                else:
+                    break
+            else:  # nobreak
+                raise ValueError('No valid sources given for fast neutron: '
+                    + str(spectra_sources)
+                )
             fast_neutron_data = {}
             fast_neutron_errors = {}
             for hall, det in all_ads:
@@ -1394,18 +1426,27 @@ def backgrounds_per_AD(
             result['fast-neutron'] = fast_neutron_data
             errors['fast-neutron'] = fast_neutron_errors
         if 'amc' in types:
-            cursor.execute('''
-                SELECT
-                    Spectrum
-                FROM
-                    amc_spectrum
-                WHERE
-                    Label = ?
-                ORDER BY BinIndex
-                ''',
-                (spectra_source,),
-            )
-            amc_spectrum = np.array(cursor.fetchall()).reshape(-1)
+            for spectra_source in spectra_sources:
+                cursor.execute('''
+                    SELECT
+                        Spectrum
+                    FROM
+                        amc_spectrum
+                    WHERE
+                        Label = ?
+                    ORDER BY BinIndex
+                    ''',
+                    (spectra_source,),
+                )
+                amc_spectrum = np.array(cursor.fetchall()).reshape(-1)
+                if len(amc_spectrum) == 0:
+                    continue
+                else:
+                    break
+            else:  # nobreak
+                raise ValueError('No valid sources given for amc: '
+                    + str(spectra_sources)
+                )
             amc_data = {}
             amc_errors = {}
             for hall, det in all_ads:
@@ -1430,20 +1471,29 @@ def backgrounds_per_AD(
             alpha_n_data = {}
             alpha_n_errors = {}
             for hall, det in all_ads:
-                cursor.execute('''
-                    SELECT
-                        Spectrum
-                    FROM
-                        alpha_n_spectrum
-                    WHERE
-                        Label = ?
-                        AND Hall = ?
-                        AND DetNo = ?
-                    ORDER BY BinIndex
-                    ''',
-                    (spectra_source, hall, det),
-                )
-                alpha_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
+                for spectra_source in spectra_sources:
+                    cursor.execute('''
+                        SELECT
+                            Spectrum
+                        FROM
+                            alpha_n_spectrum
+                        WHERE
+                            Label = ?
+                            AND Hall = ?
+                            AND DetNo = ?
+                        ORDER BY BinIndex
+                        ''',
+                        (spectra_source, hall, det),
+                    )
+                    alpha_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
+                    if len(alpha_n_data[hall, det]) == 0:
+                        continue
+                    else:
+                        break
+                else:  # nobreak
+                    raise ValueError('No valid sources given for alpha-n: '
+                        + str(spectra_sources)
+                    )
                 cursor.execute('''
                 SELECT
                     Count, Error
@@ -1465,20 +1515,29 @@ def backgrounds_per_AD(
             rad_n_data = {}
             rad_n_errors = {}
             for hall, det in all_ads:
-                cursor.execute('''
-                    SELECT
-                        Spectrum
-                    FROM
-                        rad_n_spectrum
-                    WHERE
-                        Label = ?
-                        AND Hall = ?
-                        AND DetNo = ?
-                    ORDER BY BinIndex
-                    ''',
-                    (spectra_source, hall, det),
-                )
-                rad_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
+                for spectra_source in spectra_sources:
+                    cursor.execute('''
+                        SELECT
+                            Spectrum
+                        FROM
+                            rad_n_spectrum
+                        WHERE
+                            Label = ?
+                            AND Hall = ?
+                            AND DetNo = ?
+                        ORDER BY BinIndex
+                        ''',
+                        (spectra_source, hall, det),
+                    )
+                    rad_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
+                    if len(rad_n_data[hall, det]) == 0:
+                        continue
+                    else:
+                        break
+                else:  # nobreak
+                    raise ValueError('No valid sources given for rad-n: '
+                        + str(spectra_sources)
+                    )
                 cursor.execute('''
                 SELECT
                     Count, Error

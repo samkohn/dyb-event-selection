@@ -131,6 +131,7 @@ class FitConstants:
     m2_ee_err: float
     muon_eff: dict
     multiplicity_eff: dict
+    dist_time_eff: dict
     efficiency_err: float
     reactor_err: float
     rel_escale_err: float
@@ -342,6 +343,8 @@ class Config:
     mult_eff_label: str
     muon_eff: Any
     muon_eff_label: str
+    dist_time_eff: Any
+    dist_time_eff_label: str
     masses: Any
     num_coincs: Any
     num_coincs_source: str
@@ -558,6 +561,20 @@ def load_constants(config_file):
     else:
         raise ValueError(f"Invalid mult_eff specification: {config.mult_eff}")
 
+    # Parse dist_time_eff: Nominal, 1, hard-coded, or alternate database
+    if config.dist_time_eff is True:
+        dist_time_eff = distance_time_efficiency(database, config.mult_eff_label)
+    elif config.dist_time_eff is False:
+        dist_time_eff = ad_dict(1)
+    elif isinstance(config.dist_time_eff, list):
+        dist_time_eff = config.dist_time_eff
+    elif isinstance(config.dist_time_eff, str):
+        dist_time_eff = distance_time_efficiency(
+            config.dist_time_eff, config.dist_time_eff_label
+        )
+    else:
+        raise ValueError(f"Invalid dist_time_eff specification: {config.dist_time_eff}")
+
     masses = dict(zip(all_ads, config.masses))
 
     cross_sec = cross_section(database)
@@ -605,6 +622,7 @@ def load_constants(config_file):
             config.m2_ee_relative_error,
             muon_eff,
             multiplicity_eff,
+            dist_time_eff,
             config.efficiency_error,
             config.reactor_error,
             config.rel_escale_error,
@@ -696,6 +714,26 @@ def multiplicity_efficiency(database):
         efficiency = np.average(by_run[:, 2], weights=total_livetime_ns)
         to_return[hall, det] = efficiency
     return to_return
+
+def distance_time_efficiency(database, source):
+    """Retrieve the distance-time (DT) efficiency."""
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                Efficiency
+            FROM
+                distance_time_cut_efficiency
+            WHERE
+                Source = ?
+            ORDER BY
+                Hall,
+                DetNo
+            ''',
+            (source,)
+        )
+        result = np.array(cursor.fetchall()).reshape(-1)
+    return dict(zip(all_ads, result))
 
 def rel_escale_parameters(database, source):
     """Load the shape distortion parameters for the relative energy scale.
@@ -1197,12 +1235,14 @@ def efficiency_weighted_counts(constants, fit_params, halls='all'):
     num_coincidences = num_bg_subtracted_IBDs_per_AD(constants, fit_params, halls=halls)
     mult_effs = constants.multiplicity_eff
     muon_effs = constants.muon_eff
+    dist_time_effs = constants.dist_time_eff
     mass_effs = constants.masses
     pull_near_stat = fit_params.pull_near_stat
     to_return = {}
     for halldet, coincidences in num_coincidences.items():
         mult_eff = mult_effs[halldet]
         muon_eff = muon_effs[halldet]
+        dist_time_eff = dist_time_effs[halldet]
         mass_eff = mass_effs[halldet] / constants.standard_mass
         pull_eff = fit_params.pull_efficiency[halldet]
         pull_rel_escale = fit_params.pull_rel_escale[halldet]
@@ -1213,7 +1253,7 @@ def efficiency_weighted_counts(constants, fit_params, halls='all'):
             rel_escale_params = constants.rel_escale_parameters[hall][:, 1]
         # NB: combined_eff has a bin dependence due to rel_escale_params
         combined_eff = (
-            mult_eff * muon_eff * mass_eff * (1 + pull_eff)
+            mult_eff * muon_eff * dist_time_eff * mass_eff * (1 + pull_eff)
             * (1 + pull_rel_escale * rel_escale_params)
         )
         # Account for near hall statistics pull parameter
@@ -1877,10 +1917,12 @@ def predict_ad_to_ad_obs(constants, fit_params):
     results = f_ki.copy()
     muon_effs = constants.muon_eff
     mult_effs = constants.multiplicity_eff
+    dist_time_effs = constants.dist_time_eff
     masses = constants.masses
     for (far_halldet, near_halldet), result in results.items():
         muon_eff = muon_effs[far_halldet]
         mult_eff = mult_effs[far_halldet]
+        dist_time_eff = dist_time_effs[far_halldet]
         pull_eff = fit_params.pull_efficiency[far_halldet]
         mass_far = masses[far_halldet]
         mass_eff = mass_far / constants.standard_mass
@@ -1892,7 +1934,7 @@ def predict_ad_to_ad_obs(constants, fit_params):
             rel_escale_params = constants.rel_escale_parameters[hall][:, 1]
         # NB: combined_eff has a bin dependence due to rel_escale_params
         combined_eff = (
-            mult_eff * muon_eff * mass_eff * (1 + pull_eff)
+            mult_eff * muon_eff * dist_time_eff * mass_eff * (1 + pull_eff)
             * (1 + pull_rel_escale * rel_escale_params)
         )
         results[far_halldet, near_halldet] = (

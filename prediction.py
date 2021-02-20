@@ -1333,6 +1333,8 @@ def backgrounds_per_AD(
                 {bg: ad_dict(0) for bg in types},
                 {bg: 1 for bg in types},
             )
+    if isinstance(spectra_sources, str):
+        spectra_sources = [spectra_sources]
     result = {}
     errors = {}
     with common.get_db(database) as conn:

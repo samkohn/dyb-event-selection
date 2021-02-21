@@ -62,8 +62,8 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     all_acc_pairs = accfile.Get('all_pairs')
     acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
     acc_spectrum.Sumw2()
-    all_acc_pairs.Draw('energy[1]:energy[0] >> acc_spectrum', DT_CUT, 'goff')
-    all_acc_pairs.Draw('energy[0]:energy[1] >>+acc_spectrum', DT_CUT, 'goff')
+    all_acc_pairs.Draw('energy[1]:energy[0] >> acc_spectrum', DT_CUT_LITERAL, 'goff')
+    all_acc_pairs.Draw('energy[0]:energy[1] >>+acc_spectrum', DT_CUT_LITERAL, 'goff')
     num_acc_events = acc_spectrum.GetEntries()
     DT_cut_fails = accfile.Get('DT_cut_fails')
     eps_distance = num_acc_events/(

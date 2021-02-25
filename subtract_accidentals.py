@@ -60,16 +60,15 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             'goff')
     accfile = ROOT.TFile(accfilename, 'READ')
     all_acc_pairs = accfile.Get('all_pairs')
+    num_total_pairs = all_acc_pairs.GetEntries()
     acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
     acc_spectrum.Sumw2()
     all_acc_pairs.Draw('energy[1]:energy[0] >> acc_spectrum', DT_CUT_LITERAL, 'goff')
+    num_passing_cut = acc_spectrum.GetEntries()
     all_acc_pairs.Draw('energy[0]:energy[1] >>+acc_spectrum', DT_CUT_LITERAL, 'goff')
-    num_acc_events = acc_spectrum.GetEntries()
-    DT_cut_fails = accfile.Get('DT_cut_fails')
-    eps_distance = num_acc_events/(
-            DT_cut_fails.GetEntries() + num_acc_events)
+    eps_distance = num_passing_cut/num_total_pairs
     outfile = ROOT.TFile(outfilename, 'RECREATE')
-    if num_acc_events == 0:
+    if num_passing_cut == 0:
         logging.info('Found run with 0 acc events passing DT cut: Run %d, %s', run_number, accfilename)
         if database is not None:
             with common.get_db(database, timeout=0.5) as conn:
@@ -91,13 +90,14 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     final_spectrum = ROOT.TH2F('final', 'final', *hist_parameters)
     final_spectrum.Sumw2()
     datafile.cd()
-    final_spectrum.Add(raw_spectrum, acc_spectrum, 1,
-        -base_rate*eps_distance*livetime/num_acc_events)
+    # normalize by 2*num_passing_cut because the spectrum was filled twice
+    scale_factor = base_rate * eps_distance * livetime / (2 * num_passing_cut)
+    final_spectrum.Add(raw_spectrum, acc_spectrum, 1, -scale_factor)
     final_spectrum.Rebin2D(2, 2)
     print(base_rate)
     print(eps_distance)
     print(livetime)
-    print(num_acc_events)
+    print(num_passing_cut)
     print(raw_spectrum.GetEntries())
     outfile.cd()
     distance_axis_parameters = (100, 0, 5000)
@@ -138,7 +138,6 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             *distance_axis_parameters, *energy_axis_parameters)
     ad_events.Draw(f'{DR_VALUE} >> dr_data', 'multiplicity == 2 && '
             f'{EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
-    scale_factor = base_rate * eps_distance * livetime / num_acc_events
     bg_pairs = accfile.Get('all_pairs')
     bg_pairs.Draw(f'{DR_VALUE_LITERAL} >> dr_bg', (str(scale_factor) +
             f' * 2 * ({DR_VALUE_LITERAL} < 5000 && ' +
@@ -167,13 +166,11 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     bg_pairs.Draw(f'energy[0]:{DR_VALUE_LITERAL} >> ed_dr_bg',
             f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
             f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ep_vs_dr_sub.Add(ep_vs_dr_actual, ep_vs_dr_bg, 1,
-            -base_rate*eps_distance*livetime/num_acc_events)
+    ep_vs_dr_sub.Add(ep_vs_dr_actual, ep_vs_dr_bg, 1, -scale_factor)
     bg_pairs.Draw(f'energy[1]:{DR_VALUE_LITERAL} >> ed_dr_bg',
             f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
             f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1,
-            -base_rate*eps_distance*livetime/num_acc_events)
+    ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1, -scale_factor)
     ad_events.Draw(f'energy[1]:{DT_VALUE} >> ed_DT_data',
             f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
             'goff')
@@ -183,13 +180,11 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     bg_pairs.Draw(f'energy[0]:{DT_VALUE_LITERAL} >> ed_DT_bg',
             f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
             f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ep_vs_DT_sub.Add(ep_vs_DT_actual, ep_vs_DT_bg, 1,
-            -base_rate*eps_distance*livetime/num_acc_events)
+    ep_vs_DT_sub.Add(ep_vs_DT_actual, ep_vs_DT_bg, 1, -scale_factor)
     bg_pairs.Draw(f'energy[1]:{DT_VALUE_LITERAL} >> ed_DT_bg',
             f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
             f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ed_vs_DT_sub.Add(ed_vs_DT_actual, ed_vs_DT_bg, 1,
-            -base_rate*eps_distance*livetime/num_acc_events)
+    ed_vs_DT_sub.Add(ed_vs_DT_actual, ed_vs_DT_bg, 1, -scale_factor)
     outfile.Write()
     datafile.Close()
     if database is not None:

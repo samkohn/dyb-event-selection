@@ -100,7 +100,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     print(num_passing_cut)
     print(raw_spectrum.GetEntries())
     outfile.cd()
-    distance_axis_parameters = (100, 0, 5000)
+    distance_axis_parameters = (200, 0, 10000)
     energy_axis_parameters = (2100, 1.5, 12)
     dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', *distance_axis_parameters)
     dr_spectrum_actual.Sumw2()
@@ -136,55 +136,77 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
             *energy_axis_parameters)
     ed_vs_DT_sub = ROOT.TH2F('ed_DT_sub', 'ed_DT_sub',
             *distance_axis_parameters, *energy_axis_parameters)
-    ad_events.Draw(f'{DR_VALUE} >> dr_data', 'multiplicity == 2 && '
-            f'{EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0', 'goff')
     bg_pairs = accfile.Get('all_pairs')
-    bg_pairs.Draw(f'{DR_VALUE_LITERAL} >> dr_bg', (str(scale_factor) +
-            f' * 2 * ({DR_VALUE_LITERAL} < 5000 && ' +
-            f'{DR_VALUE_LITERAL} >= 0)'), 'same goff')
+    def draw_data(value_str, dest_name):
+        ad_events.Draw(
+            f'{value_str} >> {dest_name}',
+            f'multiplicity == 2 && {EMAX_CUT}',
+            'goff'
+        )
+        return
+    def draw_bg_scaled_double(value_str, dest_name, dest_hist_obj):
+        bg_pairs.Draw(f'{value_str} >> {dest_name}', '', 'goff')
+        dest_hist_obj.Scale(2 * scale_factor)
+        return
+    def draw_bg_scaled_flip(value_first_str, value_second_str, dest_name, dest_hist_obj):
+        bg_pairs.Draw(f'{value_first_str} >> {dest_name}', '', 'goff')
+        bg_pairs.Draw(f'{value_second_str} >>+{dest_name}', '', 'goff')
+        dest_hist_obj.Scale(scale_factor)
+        return
+
+
+    draw_data(DR_VALUE, 'dr_data')
+    draw_bg_scaled_double(DR_VALUE_LITERAL, 'dr_bg', dr_spectrum_bg)
     dr_spectrum_sub.Add(dr_spectrum_actual, dr_spectrum_bg, 1, -1)
-    ad_events.Draw(f'{DT_VALUE} >> DT_data',
-        f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
-        'goff')
-    bg_pairs.Draw(f'{DT_VALUE_LITERAL} >> DT_bg',
-        f'{scale_factor} * 2 * ({DT_VALUE_LITERAL} < 5000 && {DR_VALUE_LITERAL} >= 0)', 'goff')
+
+    draw_data(DT_VALUE, 'DT_data')
+    draw_bg_scaled_double(DT_VALUE_LITERAL, 'DT_bg', DT_spectrum_bg)
     DT_spectrum_sub.Add(DT_spectrum_actual, DT_spectrum_bg, 1, -1)
     if database is not None:
         # Then do the fit to get the parameters for the database
         fit_result = dr_spectrum_sub.Fit('pol0', 'QN0S', '', 2000, 5000)
         distance_cross_check_value = fit_result.Parameter(0)
         distance_cross_check_error = fit_result.ParError(0)
-        fit_result = DT_spectrum_sub.Fit('pol0', 'QN0S', '', 2000, 5000)
+        fit_result = DT_spectrum_sub.Fit('pol0', 'QN0S', '', 3000, 7000)
         DT_cross_check_value = fit_result.Parameter(0)
         DT_cross_check_error = fit_result.ParError(0)
-    ad_events.Draw(f'energy[1]:{DR_VALUE} >> ed_dr_data',
-            f'multiplicity == 2 && {EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
-            'goff')
-    ad_events.Draw(f'energy[0]:{DR_VALUE} >> ep_dr_data',
-            f'multiplicity == 2 && {EMAX_CUT} && {DR_VALUE} < 5000 && {DR_VALUE} >= 0',
-            'goff')
-    bg_pairs.Draw(f'energy[0]:{DR_VALUE_LITERAL} >> ed_dr_bg',
-            f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
-            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ep_vs_dr_sub.Add(ep_vs_dr_actual, ep_vs_dr_bg, 1, -scale_factor)
-    bg_pairs.Draw(f'energy[1]:{DR_VALUE_LITERAL} >> ed_dr_bg',
-            f'2 * ({DR_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
-            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1, -scale_factor)
-    ad_events.Draw(f'energy[1]:{DT_VALUE} >> ed_DT_data',
-            f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
-            'goff')
-    ad_events.Draw(f'energy[0]:{DT_VALUE} >> ep_DT_data',
-            f'multiplicity == 2 && {EMAX_CUT} && {DT_VALUE} < 5000 && {DR_VALUE} >= 0',
-            'goff')
-    bg_pairs.Draw(f'energy[0]:{DT_VALUE_LITERAL} >> ed_DT_bg',
-            f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
-            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ep_vs_DT_sub.Add(ep_vs_DT_actual, ep_vs_DT_bg, 1, -scale_factor)
-    bg_pairs.Draw(f'energy[1]:{DT_VALUE_LITERAL} >> ed_DT_bg',
-            f'2 * ({DT_VALUE_LITERAL} < 5000 && multiplicity == 2 && '
-            f'{DR_VALUE_LITERAL} >= 0)', 'goff')
-    ed_vs_DT_sub.Add(ed_vs_DT_actual, ed_vs_DT_bg, 1, -scale_factor)
+
+    draw_data(f'energy[0]:{DR_VALUE}', 'ep_dr_data')
+    draw_bg_scaled_flip(
+        f'energy[0]:{DR_VALUE_LITERAL}',
+        f'energy[1]:{DR_VALUE_LITERAL}',
+        'ep_dr_bg',
+        ep_vs_dr_bg,
+    )
+    ep_vs_dr_sub.Add(ep_vs_dr_actual, ep_vs_dr_bg, 1, -1)
+
+    draw_data(f'energy[1]:{DR_VALUE}', 'ed_dr_data')
+    draw_bg_scaled_flip(
+        f'energy[1]:{DR_VALUE_LITERAL}',
+        f'energy[0]:{DR_VALUE_LITERAL}',
+        'ed_dr_bg',
+        ed_vs_dr_bg,
+    )
+    ed_vs_dr_sub.Add(ed_vs_dr_actual, ed_vs_dr_bg, 1, -1)
+
+    draw_data(f'energy[0]:{DT_VALUE}', 'ep_DT_data')
+    draw_bg_scaled_flip(
+        f'energy[0]:{DT_VALUE_LITERAL}',
+        f'energy[1]:{DT_VALUE_LITERAL}',
+        'ep_DT_bg',
+        ep_vs_DT_bg,
+    )
+    ep_vs_DT_sub.Add(ep_vs_DT_actual, ep_vs_DT_bg, 1, -1)
+
+    draw_data(f'energy[1]:{DT_VALUE}', 'ed_DT_data')
+    draw_bg_scaled_flip(
+        f'energy[1]:{DT_VALUE_LITERAL}',
+        f'energy[0]:{DT_VALUE_LITERAL}',
+        'ed_DT_bg',
+        ed_vs_DT_bg,
+    )
+    ed_vs_DT_sub.Add(ed_vs_DT_actual, ed_vs_DT_bg, 1, -1)
+
     outfile.Write()
     datafile.Close()
     if database is not None:

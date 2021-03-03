@@ -5,36 +5,11 @@ import sqlite3
 
 import common
 
-def get_stat_error(n_passes_cut, n_fails_cut, error_passes, error_fails):
-    """Compute the statistical error on the efficiency.
-
-    This function performs error propagation on the expression:
-
-        Efficiency = N(passes DT cut) / N(total)
-
-    including the partial correlation between the numerator and the
-    denominator. This is accomplished by assigning:
-
-        N(total) = N(passes) + N(fails)
-
-    Then rewriting the expression as:
-
-        Efficiency = 1 / (1 + N(fails) / N(passes))
-
-    This expression now has no hidden statistical correlations due to the same
-    histogram bin being counted twice, which the original expression does have.
-    The final mathematical expression is:
-
-        Error = ...
-            N(fails)/N(passes) * Error(N(fails)/N(passes)) / (1 + fails/passes)^2
-    """
-    value_ratio = n_fails_cut / n_passes_cut
-    passes_relative_error_sq = pow(error_passes / n_passes_cut, 2)
-    fails_relative_error_sq = pow(error_fails / n_fails_cut, 2)
-    quotient_propagation = math.sqrt(passes_relative_error_sq +
-            fails_relative_error_sq)
-    power_term = pow(1 + value_ratio, 2)
-    return value_ratio * quotient_propagation/power_term
+def get_stat_error(n_passes_cut, n_total):
+    """Binomial error = sqrt(p_passes * p_fails/n_total)."""
+    p_passes = n_passes_cut/n_total
+    p_fails = 1 - p_passes
+    return math.sqrt(p_passes * p_fails / n_total)
 
 def main(file_template, database, label, update_db):
     import ROOT
@@ -80,11 +55,7 @@ def main(file_template, database, label, update_db):
                 energy_low_bin, energy_up_bin, cut_error)
         all_integral = delayed_vs_DT.Integral(DT_LOW_BIN, DT_ALL_UP_BIN,
                 energy_low_bin, energy_up_bin)
-        only_excluded_integral = delayed_vs_DT.IntegralAndError(DT_CUT_UP_BIN+1,
-                DT_ALL_UP_BIN, energy_low_bin, energy_up_bin,
-                only_excluded_error)
-        stat_error = get_stat_error(cut_integral, only_excluded_integral,
-                cut_error.real, only_excluded_error.real)
+        stat_error = get_stat_error(cut_integral, all_integral)
         bin_width_error_integral = delayed_vs_DT.Integral(DT_LOW_BIN,
                 DT_CUT_UP_BIN, energy_low_bin+1, energy_up_bin-1)
         efficiency = cut_integral/all_integral
@@ -96,8 +67,7 @@ def main(file_template, database, label, update_db):
             print(f'Nominal: {100*efficiency:.02f}%')
             print(f'Deviation due to 0.005MeV bin width: {100*bin_width_error:.03f}%')
             print(f'Statistical error: {100*stat_error:.03f}%')
-            print(f'N(passes): {cut_integral} +/- {cut_error.real}')
-            print(f'N(fails):  {only_excluded_integral} +/- {only_excluded_error.real}')
+            print(f'N(passes): {cut_integral} +/- {stat_error * cut_integral}')
             print(f'N(total):  {all_integral}')
         infile.Close()
 

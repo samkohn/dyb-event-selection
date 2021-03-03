@@ -11,7 +11,7 @@ def get_stat_error(n_passes_cut, n_total):
     p_fails = 1 - p_passes
     return math.sqrt(p_passes * p_fails / n_total)
 
-def main(file_template, database, label, run_crosscheck, update_db):
+def main(file_template, database, label, run_crosscheck, update_db, cut_bin=16):
     import ROOT
     with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
@@ -36,14 +36,14 @@ def main(file_template, database, label, run_crosscheck, update_db):
     effs = {}
     stat_errors = {}
     binning_errors = {}
-    DT_LOW_BIN = 1
-    DT_CUT_UP_BIN = 16  # 800mm
-    DT_ALL_UP_BIN = 60  # 3000mm
     for (site, det), cuts in cut_lookup.items():
         path = file_template.format(site=site, ad=det)
         print(path)
         infile = ROOT.TFile(path, 'READ')
         delayed_vs_DT = infile.Get('ed_DT_sub')
+        DT_LOW_BIN = 1
+        DT_CUT_UP_BIN = cut_bin
+        DT_ALL_UP_BIN = delayed_vs_DT.GetNbinsX()
         low_limit = cuts['Peak'] - 3 * cuts['Resolution']
         up_limit = cuts['Peak'] + 3 * cuts['Resolution']
         print(low_limit, up_limit)

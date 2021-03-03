@@ -11,7 +11,7 @@ def get_stat_error(n_passes_cut, n_total):
     p_fails = 1 - p_passes
     return math.sqrt(p_passes * p_fails / n_total)
 
-def main(file_template, database, label, update_db):
+def main(file_template, database, label, run_crosscheck, update_db):
     import ROOT
     with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
@@ -62,6 +62,38 @@ def main(file_template, database, label, update_db):
         bin_width_changes = bin_width_error_integral/all_integral
         bin_width_error = (efficiency - bin_width_changes)/2
 
+        if run_crosscheck:
+            DT_3m_bin = 61
+            DT_5m_bin = 100
+            crosscheck_error_with_Ed_cut = ROOT.Double()
+            crosscheck_error_without_Ed_cut = ROOT.Double()
+            crosscheck_with_Ed_cut = delayed_vs_DT.IntegralAndError(
+                DT_3m_bin, DT_5m_bin, energy_low_bin, energy_up_bin,
+                crosscheck_error_with_Ed_cut
+            )
+            crosscheck_without_Ed_cut = delayed_vs_DT.IntegralAndError(
+                DT_3m_bin, DT_5m_bin, 1, delayed_vs_DT.GetNbinsY(),
+                crosscheck_error_without_Ed_cut
+            )
+            print(f'EH{site}-AD{det}')
+            print(f'Delayed energy range: {low_limit:.4f} -> {up_limit:.4f} MeV')
+            print(f'Delayed range bins: {energy_low_bin} -> {energy_up_bin}')
+            print(f'Integral: 3m->5m, with Ed cut: {crosscheck_with_Ed_cut:.1f} +/- '
+                f'{crosscheck_error_with_Ed_cut:.1f}'
+            )
+            print(f'Integral: 3m->5m, without Ed cut: {crosscheck_without_Ed_cut:.1f} +/- '
+                f'{crosscheck_error_without_Ed_cut:.1f}'
+            )
+            DT_sub = infile.Get('DT_sub')
+            plain_DT_error = ROOT.Double()
+            plain_DT_integral = DT_sub.IntegralAndError(
+                DT_3m_bin, DT_5m_bin, plain_DT_error
+            )
+            print(f'DT distribution integral, 3m->5m: {plain_DT_integral:.1f} +/- '
+                f'{plain_DT_error:.1f}'
+            )
+
+
         if not update_db:
             print(f'EH{site}-AD{det}')
             print(f'Nominal: {100*efficiency:.02f}%')
@@ -91,5 +123,8 @@ if __name__ == '__main__':
     parser.add_argument('--label',
         help='database label for delayed fits and to store efficiency values'
     )
+    parser.add_argument('--crosscheck', action='store_true',
+        help='print cross-check value of integral from DT=3m to 5m'
+    )
     args = parser.parse_args()
-    main(args.file_template, args.database, args.label, args.update_db)
+    main(args.file_template, args.database, args.label, args.crosscheck, args.update_db)

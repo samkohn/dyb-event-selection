@@ -882,6 +882,8 @@ def run_baserate_uncertainty(database):
 
 def run_dist_time_eff(processed_output_path, database):
     """Compute the DT cut efficiency."""
+    run_crosscheck = False
+    cut_bin = 16  # 800mm
     update_db = True
     nominal_file_template = os.path.join(
         processed_output_path,
@@ -893,7 +895,9 @@ def run_dist_time_eff(processed_output_path, database):
         nominal_file_template,
         database,
         NOMINAL_LABEL,
+        run_crosscheck,
         update_db,
+        cut_bin,
     )
     adtime_file_template = os.path.join(
         processed_output_path,
@@ -905,7 +909,9 @@ def run_dist_time_eff(processed_output_path, database):
         adtime_file_template,
         database,
         ADTIME_LABEL,
+        run_crosscheck,
         update_db,
+        cut_bin,
     )
     return
 

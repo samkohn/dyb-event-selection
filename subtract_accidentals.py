@@ -52,7 +52,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     EMAX_CUT = f'(energy[0] < {_EMAX_THU} && energy[1] < {_EMAX_THU})'
     hist_parameters = (2100, 1.5, 12, 2100, 1.5, 12)
     datafile = ROOT.TFile(datafilename, 'READ')
-    raw_spectrum = ROOT.TH2F('raw_spec', 'raw_spec', *hist_parameters)
+    raw_spectrum = ROOT.TH2D('raw_spec', 'raw_spec', *hist_parameters)
     raw_spectrum.Sumw2()
     ad_events = datafile.Get('ad_events')
     ad_events.Draw('energy[1]:energy[0] >> raw_spec',
@@ -61,13 +61,15 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     accfile = ROOT.TFile(accfilename, 'READ')
     all_acc_pairs = accfile.Get('all_pairs')
     num_total_pairs = all_acc_pairs.GetEntries()
-    acc_spectrum = ROOT.TH2F('acc_spectrum', 'acc_spectrum', *hist_parameters)
+    acc_spectrum = ROOT.TH2D('acc_spectrum', 'acc_spectrum', *hist_parameters)
     acc_spectrum.Sumw2()
     all_acc_pairs.Draw('energy[1]:energy[0] >> acc_spectrum', DT_CUT_LITERAL, 'goff')
     num_passing_cut = acc_spectrum.GetEntries()
     all_acc_pairs.Draw('energy[0]:energy[1] >>+acc_spectrum', DT_CUT_LITERAL, 'goff')
     eps_distance = num_passing_cut/num_total_pairs
     outfile = ROOT.TFile(outfilename, 'RECREATE')
+    raw_spectrum.SetDirectory(outfile)
+    acc_spectrum.SetDirectory(outfile)
     if num_passing_cut == 0:
         logging.info('Found run with 0 acc events passing DT cut: Run %d, %s', run_number, accfilename)
         if database is not None:
@@ -87,7 +89,7 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
         outfile.Write()
         datafile.Close()
         return
-    final_spectrum = ROOT.TH2F('final', 'final', *hist_parameters)
+    final_spectrum = ROOT.TH2D('final', 'final', *hist_parameters)
     final_spectrum.Sumw2()
     datafile.cd()
     # normalize by 2*num_passing_cut because the spectrum was filled twice
@@ -102,39 +104,47 @@ def subtract(outfilename, datafilename, accfilename, ad, rs, rmu, livetime,
     outfile.cd()
     distance_axis_parameters = (200, 0, 10000)
     energy_axis_parameters = (2100, 1.5, 12)
-    dr_spectrum_actual = ROOT.TH1F('dr_data', 'dr_data', *distance_axis_parameters)
+    dr_spectrum_actual = ROOT.TH1D('dr_data', 'dr_data', *distance_axis_parameters)
     dr_spectrum_actual.Sumw2()
-    dr_spectrum_bg = ROOT.TH1F('dr_bg', 'dr_bg', *distance_axis_parameters)
+    dr_spectrum_bg = ROOT.TH1D('dr_bg', 'dr_bg', *distance_axis_parameters)
     dr_spectrum_bg.Sumw2()
-    dr_spectrum_sub = ROOT.TH1F('dr_sub', 'dr_sub', *distance_axis_parameters)
-    ed_vs_dr_actual = ROOT.TH2F('ed_dr_data', 'ed_dr_data',
+    dr_spectrum_sub = ROOT.TH1D('dr_sub', 'dr_sub', *distance_axis_parameters)
+    ed_vs_dr_actual = ROOT.TH2D('ed_dr_data', 'ed_dr_data',
             *distance_axis_parameters, *energy_axis_parameters)
-    ep_vs_dr_actual = ROOT.TH2F('ep_dr_data', 'ep_dr_data',
+    ed_vs_dr_actual.Sumw2()
+    ep_vs_dr_actual = ROOT.TH2D('ep_dr_data', 'ep_dr_data',
             *distance_axis_parameters, *energy_axis_parameters)
-    ep_vs_dr_bg = ROOT.TH2F('ep_dr_bg', 'ep_dr_bg', *distance_axis_parameters,
+    ep_vs_dr_actual.Sumw2()
+    ep_vs_dr_bg = ROOT.TH2D('ep_dr_bg', 'ep_dr_bg', *distance_axis_parameters,
             *energy_axis_parameters)
-    ep_vs_dr_sub = ROOT.TH2F('ep_dr_sub', 'ep_dr_sub', *distance_axis_parameters,
+    ep_vs_dr_bg.Sumw2()
+    ep_vs_dr_sub = ROOT.TH2D('ep_dr_sub', 'ep_dr_sub', *distance_axis_parameters,
             *energy_axis_parameters)
-    ed_vs_dr_bg = ROOT.TH2F('ed_dr_bg', 'ed_dr_bg', *distance_axis_parameters,
+    ed_vs_dr_bg = ROOT.TH2D('ed_dr_bg', 'ed_dr_bg', *distance_axis_parameters,
             *energy_axis_parameters)
-    ed_vs_dr_sub = ROOT.TH2F('ed_dr_sub', 'ed_dr_sub', *distance_axis_parameters,
+    ed_vs_dr_bg.Sumw2()
+    ed_vs_dr_sub = ROOT.TH2D('ed_dr_sub', 'ed_dr_sub', *distance_axis_parameters,
             *energy_axis_parameters)
-    DT_spectrum_actual = ROOT.TH1F('DT_data', 'DT_data', *distance_axis_parameters)
+    DT_spectrum_actual = ROOT.TH1D('DT_data', 'DT_data', *distance_axis_parameters)
     DT_spectrum_actual.Sumw2()
-    DT_spectrum_bg = ROOT.TH1F('DT_bg', 'DT_bg', *distance_axis_parameters)
+    DT_spectrum_bg = ROOT.TH1D('DT_bg', 'DT_bg', *distance_axis_parameters)
     DT_spectrum_bg.Sumw2()
-    DT_spectrum_sub = ROOT.TH1F('DT_sub', 'DT_sub', *distance_axis_parameters)
-    ed_vs_DT_actual = ROOT.TH2F('ed_DT_data', 'ed_DT_data',
+    DT_spectrum_sub = ROOT.TH1D('DT_sub', 'DT_sub', *distance_axis_parameters)
+    ed_vs_DT_actual = ROOT.TH2D('ed_DT_data', 'ed_DT_data',
             *distance_axis_parameters, *energy_axis_parameters)
-    ep_vs_DT_actual = ROOT.TH2F('ep_DT_data', 'ep_DT_data',
+    ed_vs_DT_actual.Sumw2()
+    ep_vs_DT_actual = ROOT.TH2D('ep_DT_data', 'ep_DT_data',
             *distance_axis_parameters, *energy_axis_parameters)
-    ep_vs_DT_bg = ROOT.TH2F('ep_DT_bg', 'ep_DT_bg', *distance_axis_parameters,
+    ep_vs_DT_actual.Sumw2()
+    ep_vs_DT_bg = ROOT.TH2D('ep_DT_bg', 'ep_DT_bg', *distance_axis_parameters,
             *energy_axis_parameters)
-    ep_vs_DT_sub = ROOT.TH2F('ep_DT_sub', 'ep_DT_sub',
+    ep_vs_DT_bg.Sumw2()
+    ep_vs_DT_sub = ROOT.TH2D('ep_DT_sub', 'ep_DT_sub',
             *distance_axis_parameters, *energy_axis_parameters)
-    ed_vs_DT_bg = ROOT.TH2F('ed_DT_bg', 'ed_DT_bg', *distance_axis_parameters,
+    ed_vs_DT_bg = ROOT.TH2D('ed_DT_bg', 'ed_DT_bg', *distance_axis_parameters,
             *energy_axis_parameters)
-    ed_vs_DT_sub = ROOT.TH2F('ed_DT_sub', 'ed_DT_sub',
+    ed_vs_DT_bg.Sumw2()
+    ed_vs_DT_sub = ROOT.TH2D('ed_DT_sub', 'ed_DT_sub',
             *distance_axis_parameters, *energy_axis_parameters)
     bg_pairs = accfile.Get('all_pairs')
     def draw_data(value_str, dest_name):

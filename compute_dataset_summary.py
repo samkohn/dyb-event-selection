@@ -108,12 +108,12 @@ def muon_total_counts(database, label):
             (label,)
         )
         muon_counts = np.array(cursor.fetchall()).reshape(-1)
-    return muon_effs
+    return muon_counts
 
 def muon_rate_Hz(database, label):
     """Return an array of muon rates from EH1-AD1 to EH3-AD4."""
     unvetoed_livetimes = unvetoed_livetime_s(database, label)
-    counts = muon_counts(database, label)
+    counts = muon_total_counts(database, label)
     return counts / unvetoed_livetimes
 
 def multiplicity_efficiency(database, label):

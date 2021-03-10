@@ -346,6 +346,7 @@ class Config:
     dist_time_eff: Any
     dist_time_eff_label: str
     masses: Any
+    masses_label: str
     num_coincs: Any
     num_coincs_source: str
     num_coincs_format_version: int
@@ -575,7 +576,24 @@ def load_constants(config_file):
     else:
         raise ValueError(f"Invalid dist_time_eff specification: {config.dist_time_eff}")
 
-    masses = dict(zip(all_ads, config.masses))
+    # Parse masses: Nominal, 1, hard-coded, or alternate database
+    if config.masses is True:
+        masses = dict(zip(
+            all_ads,
+            compute_dataset_summary.target_protons(database, config.masses_label)[:, 0]
+        ))
+    elif config.masses is False:
+        masses = ad_dict(1)
+    elif isinstance(config.masses, list):
+        masses = dict(zip(all_ads, config.masses))
+    elif isinstance(config.masses, str):
+        masses = dict(zip(
+            compute_dataset_summary.target_protons(
+                config.masses, config.masses_label
+            )[:, 0]
+        ))
+    else:
+        raise ValueError(f"Invalid masses specification: {config.dist_time_eff}")
 
     cross_sec = cross_section(database)
 

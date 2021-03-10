@@ -219,3 +219,56 @@ def coincidences_rates(database, label, general_label):
     rates = counts / mult_effs / muon_effs / daq_livetimes
     return rates
 
+def target_protons(database, label):
+    """Return a 2D array of target protons (x1e25) and uncertainties from EH1-AD1 to EH3-AD4."""
+    with common.get_db(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT
+                GdLS_kg,
+                GdLS_err_kg,
+                LS_kg,
+                LS_err_kg,
+                Acrylic_kg,
+                Acrylic_err_kg
+            FROM
+                target_mass
+            ORDER BY
+                Hall,
+                DetNo
+            '''
+        )
+        masses = np.array(cursor.fetchall())
+        cursor.execute('''
+            SELECT
+                GdLS_density,
+                GdLS_err,
+                LS_density,
+                LS_err,
+                Acrylic_density,
+                Acrylic_err
+            FROM
+                proton_densities
+            WHERE
+                Source = ?
+            ''',
+            (label,)
+        )
+        densities = np.array(cursor.fetchall()).reshape(-1)
+    num_protons_GdLS = masses[:, 0] * densities[0]
+    num_protons_LS = masses[:, 2] * densities[2]
+    num_protons_acrylic = masses[:, 4] * densities[4]
+    num_protons_total = num_protons_GdLS + num_protons_LS + num_protons_acrylic
+    err_GdLS = num_protons_GdLS * np.sqrt(
+        (masses[:, 1]/masses[:, 0])**2 + (densities[1]/densities[0])**2
+    )
+    err_LS = num_protons_LS * np.sqrt(
+        (masses[:, 3]/masses[:, 2])**2 + (densities[3]/densities[2])**2
+    )
+    err_acrylic = num_protons_acrylic * np.sqrt(
+        (masses[:, 5]/masses[:, 4])**2 + (densities[5]/densities[4])**2
+    )
+    err_total = np.sqrt(err_GdLS**2 + err_LS**2 + err_acrylic**2)
+    return np.stack((num_protons_total, err_total), axis=-1)
+
+

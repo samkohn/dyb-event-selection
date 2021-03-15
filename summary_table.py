@@ -256,7 +256,7 @@ class SummaryTable:
         ))
         to_return_parts.append(create_ad_columns(
             r'$\Delta N_{\text{p}}$ [\%]',
-            map_str_n_decimals(self.relative_num_target_protons * 100, 2),
+            map_str_n_decimals(np.array(self.relative_num_target_protons) * 100, 2),
         ))
         to_return_parts.append(create_ad_columns(
             r'$\varepsilon_{\mu}$',

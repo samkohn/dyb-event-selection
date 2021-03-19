@@ -537,7 +537,20 @@ def load_result(database, id_or_description):
                 real_index = index.start + offset
                 param_list[real_index] = row['ParamValue']
         fit_params = pred.FitParams.from_list(param_list)
-        return fit_params, fit_info
+        cursor.execute('''
+            SELECT
+                Contents
+            FROM
+                fit_configs
+            WHERE
+                Id = ?
+            ''',
+            (fit_info['FitConfigId'],)
+        )
+        fit_config_str = cursor.fetchone()[0]
+        constants = pred.load_constants(fit_config_str, json_str=True)
+
+        return fit_params, constants, fit_info
 
 def grid_result_to_plus_minus(
     theta13_values,

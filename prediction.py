@@ -413,10 +413,13 @@ ad_periods = {
 }
 
 
-def load_constants(config_file):
-    with open(config_file, 'r') as f:
-        config_dict = json.load(f)
-        config = Config(**config_dict)
+def load_constants(config_file, json_str=False):
+    if json_str:
+        config_dict = json.loads(config_file)
+    else:
+        with open(config_file, 'r') as f:
+            config_dict = json.load(f)
+    config = Config(**config_dict)
     database = config.database
     ad_period = ad_periods[config.period]
     source_det_resp = config.det_response_source

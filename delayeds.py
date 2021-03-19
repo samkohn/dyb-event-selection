@@ -80,8 +80,7 @@ _NH_THU_DR_MAX = 500
 _NH_THU_MAX_TIME = int(1500e3)
 _NH_THU_MIN_TIME = int(1e3)
 _NH_THU_DIST_TIME_MAX = 800  # Known as phi or DT cut
-#_NH_THU_DIST_TIME_MAX = 300  # Temporary value for DT study
-#warnings.warn(f'Using DT_max = {_NH_THU_DIST_TIME_MAX} mm')
+warnings.warn(f'Using DT_max = {_NH_THU_DIST_TIME_MAX} mm')
 _NH_THU_DIST_TIME_CONST = 1000/600e3  # Constant for converting time to distance
 _NH_THU_DIST_TIME_STR = (f'(dr_to_prompt[1] + {_NH_THU_DIST_TIME_CONST} *'
     'dt_to_prompt[1])')

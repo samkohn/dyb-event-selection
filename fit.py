@@ -539,6 +539,36 @@ def load_result(database, id_or_description):
         fit_params = pred.FitParams.from_list(param_list)
         return fit_params, fit_info
 
+def grid_result_to_plus_minus(
+    theta13_values,
+    m2_ee_values,
+    delta_chi2,
+    min_chi2,
+    best_theta13,
+    grid_result
+):
+    chi2_plus_delta = min_chi2 + delta_chi2
+    parameter_grid = np.array(list(itertools.product(theta13_values, m2_ee_values)))
+    # Find the highest theta13 below the best fit with chi2 above the new bound
+    # and the lowest theta13 above the best fit with chi2 above the new bound
+    grid_result = np.array(grid_result)
+    allowed_region = parameter_grid[grid_result < chi2_plus_delta]
+    min_allowed_theta13 = min(allowed_region[:, 0])
+    max_allowed_theta13 = max(allowed_region[:, 0])
+    min_allowed_index = list(theta13_values).index(min_allowed_theta13)
+    max_allowed_index = list(theta13_values).index(max_allowed_theta13)
+    lower_bound = theta13_values[max(0, min_allowed_index - 1)]
+    upper_bound = theta13_values[min(len(theta13_values) - 1, max_allowed_index + 1)]
+    lower_sin2 = np.sin(2 * lower_bound)**2
+    upper_sin2 = np.sin(2 * upper_bound)**2
+    best_sin2 = np.sin(2 * best_theta13)**2
+    return {
+        'theta13': (lower_bound - best_theta13, upper_bound - best_theta13),
+        'theta13_bounds': (lower_bound, upper_bound),
+        'sin2': (lower_sin2 - best_sin2, upper_sin2 - best_sin2),
+        'sin2_bounds': (lower_sin2, upper_sin2),
+    }
+
 
 def grid(
     theta13_values,

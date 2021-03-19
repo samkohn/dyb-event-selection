@@ -77,7 +77,7 @@ def main(database, sub_file_template, label, new_label, update_db):
         with common.get_db(database) as conn:
             cursor = conn.cursor()
             cursor.executemany('''
-                INSERT INTO
+                INSERT OR REPLACE INTO
                     distance_time_cut_efficiency
                 VALUES
                     (?, ?, ?, ?, ?, ?)

@@ -94,7 +94,7 @@ def main(
             rows.append((new_bg_source, hall, det, name, corr_count, corr_err))
         print(rows)
         cursor.executemany('''
-            INSERT INTO
+            INSERT OR REPLACE INTO
                 bg_counts
             VALUES
                 (?, ?, ?, ?, ?, ?)

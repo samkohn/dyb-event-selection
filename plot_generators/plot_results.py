@@ -32,6 +32,15 @@ def _plot_line_hist(ax, bin_edges, vals, endpoints=True, **kwargs):
         vals = np.concatenate((vals, [vals[-1]]))
     return ax.plot(bin_edges, vals, drawstyle='steps-post', **kwargs)
 
+def _plot_shaded_errors_hist(ax, indexes, central_vals, errs, **kwargs):
+    heights = 2 * np.array(errs)
+    bottoms = np.array(central_vals) - errs
+    width = 1
+    color = '#D0D0D0'
+    return ax.bar(
+        indexes, heights, width, bottoms, align='center', color=color, **kwargs
+    )
+
 def _plot_point_hist(ax, bin_edges, vals, **kwargs):
     """Plot a "step" histogram with no vertical lines connecting the bins.
 
@@ -42,12 +51,48 @@ def _plot_point_hist(ax, bin_edges, vals, **kwargs):
     bin_centers = bin_edges[:-1] + 0.5 * np.diff(bin_edges)
     X = np.c_[bin_edges[:-1], bin_centers, bin_edges[1:], bin_edges[1:]].flatten()
     Y = np.c_[vals, vals, vals, np.zeros_like(bin_edges[:-1])*np.nan].flatten()
+    if 'marker' in kwargs:
+        kwargs['markevery'] = (1, 4)
     if 'yerr' in kwargs:
         plain_err = kwargs.pop('yerr')
         err = np.c_[plain_err, plain_err, plain_err, np.zeros_like(bin_edges[:-1])].flatten()
         return ax.errorbar(X, Y, yerr=err, errorevery=(1, 4), **kwargs)
     else:
         return ax.plot(X, Y, **kwargs)
+
+def _plot_pulls(ax, best_fit_pulls, errors, keys, labels, title):
+    num_pulls = len(best_fit_pulls)
+    indexes = np.arange(num_pulls)
+    pretend_AD_bins = np.arange(num_pulls + 1) - 0.5
+    _plot_shaded_errors_hist(
+        ax,
+        indexes,
+        0,
+        [errors[key] for key in keys],
+        label=r'$1\sigma$ constraint',
+    )
+    _plot_line_hist(
+        ax,
+        pretend_AD_bins,
+        np.zeros((num_pulls,)),
+        label='Expected',
+        endpoints=False,
+        linestyle='--',
+    )
+    _plot_point_hist(
+        ax,
+        pretend_AD_bins,
+        [best_fit_pulls[key] for key in keys],
+        label='Best fit pull parameters',
+        marker='o',
+    )
+    ax.xaxis.set_major_locator(mpl.ticker.FixedLocator(np.arange(num_pulls)))
+    ax.xaxis.set_major_formatter(mpl.ticker.FixedFormatter(labels))
+    if len(labels) > 6:
+        ax.tick_params(axis='x', labelsize=8)
+    ax.set_title(title, y=0.8)
+    return
+
 
 def _spectrum_ratio_plot(
     bin_edges,
@@ -166,15 +211,14 @@ def plot_subtracted_prompt_spectrum(constants, fit_params):
     )
     return fig
 
-def plot_fitted_points(constants, fit_params):
-    """Plot the individual terms in the chi-square."""
+def plot_data_fit_points(constants, fit_params):
+    """Plot the "observation" and "prediction" used in the chi-square."""
     far_best_fits_ad_by_ad = prediction.predict_ad_to_ad_obs(constants, fit_params)
     far_best_fits = _average_near_hall_predictions(far_best_fits_ad_by_ad)
     data = constants.observed_candidates
-    names = [f'EH{hall}\nAD{det}' for hall, det in prediction.far_ads]
+    far_names = [f'EH{hall}\nAD{det}' for hall, det in prediction.far_ads]
     pretend_AD_bins = np.linspace(-0.5, 3.5, 5, endpoint=True)
-    fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [1, 3]})
-    ax = axs[0]
+    fig, ax = plt.subplots()
     _plot_line_hist(
         ax,
         pretend_AD_bins,
@@ -191,17 +235,89 @@ def plot_fitted_points(constants, fit_params):
         yerr=[np.sqrt(data[halldet].sum()) for halldet in prediction.far_ads],
     )
     ax.xaxis.set_major_locator(mpl.ticker.FixedLocator([0, 1, 2, 3]))
-    ax.xaxis.set_major_formatter(mpl.ticker.FixedFormatter(names))
-
-    ax = axs[1]
-    pull_contributions = fit.chi_square(
-        constants, fit_params, return_array=True, rate_only=True, avg_near=True
-    )[4:]
-    ax.plot(pull_contributions, '.')
-    ax.set_yscale('log')
-
+    ax.xaxis.set_major_formatter(mpl.ticker.FixedFormatter(far_names))
+    ax.legend(fontsize=12)
     return fig
 
+
+def plot_pulls(constants, fit_params):
+    """Plot the pull parameter best-fits."""
+    far_names = [f'EH{hall}\nAD{det}' for hall, det in prediction.far_ads]
+    all_names = [f'EH{hall}\nAD{det}' for hall, det in prediction.all_ads]
+    fig, axs_deep = plt.subplots(4, 2)
+    axs = axs_deep.flatten()
+    _plot_pulls(
+        axs[1],
+        fit_params.pull_accidental,
+        constants.bg_errors['accidental'],
+        prediction.all_ads,
+        all_names,
+        'Accidentals'
+    )
+    _plot_pulls(
+        axs[2],
+        fit_params.pull_reactor,
+        {i: constants.reactor_err for i in range(1, 7)},
+        range(1, 7),
+        [f'D{i}' if i <= 2 else f'L{i-2}' for i in range(1, 7)],
+        'Reactor power',
+    )
+    _plot_pulls(
+        axs[3],
+        fit_params.pull_efficiency,
+        {halldet: constants.efficiency_err for halldet in prediction.all_ads},
+        prediction.all_ads,
+        all_names,
+        'Detection efficiency',
+    )
+    _plot_pulls(
+        axs[4],
+        fit_params.pull_rel_escale,
+        {halldet: constants.rel_escale_err for halldet in prediction.all_ads},
+        prediction.all_ads,
+        all_names,
+        'Relative energy scale',
+    )
+    li9_amc_pulls = fit_params.pull_li9.copy()
+    li9_amc_pulls['amc'] = fit_params.pull_amc
+    li9_amc_errors = {hall: constants.bg_errors['li9'][hall, 1] for hall in [1, 2, 3]}
+    li9_amc_errors['amc'] = constants.bg_errors['amc'][1, 1]
+    _plot_pulls(
+        axs[5],
+        li9_amc_pulls,
+        li9_amc_errors,
+        [1, 2, 3, 'amc'],
+        [r'${}^9$Li ' f'EH{i}' for i in [1, 2, 3]] + ['AmC'],
+        r'${}^9$Li/${}^8$He and AmC',
+    )
+    _plot_pulls(
+        axs[6],
+        fit_params.pull_fast_neutron,
+        {hall: constants.bg_errors['fast-neutron'][hall, 1] for hall in [1, 2, 3]},
+        [1, 2, 3],
+        [f'EH{i}' for i in [1, 2, 3]],
+        'Fast neutrons',
+    )
+    _plot_pulls(
+        axs[7],
+        {
+            'theta12': fit_params.pull_theta12,
+            'm2_21': fit_params.pull_m2_21,
+            'm2_ee': fit_params.pull_m2_ee,
+        },
+        {
+            'theta12': constants.theta12_err,
+            'm2_21': constants.m2_21_err,
+            'm2_ee': constants.m2_ee_err,
+        },
+        ['theta12', 'm2_21', 'm2_ee'],
+        [r'$\theta_{12}$', r'$\Delta m^2_{21}$', r'$\Delta m^2_{ee}$'],
+        'Input oscillation parameters',
+    )
+
+
+
+    return fig
 
 
 def main(database, fit_id):
@@ -210,7 +326,9 @@ def main(database, fit_id):
     #plt.show()
     #fig = plot_subtracted_prompt_spectrum(constants, fit_params)
     #plt.show()
-    fig = plot_fitted_points(constants, fit_params)
+    #fig = plot_data_fit_points(constants, fit_params)
+    #plt.show()
+    fig = plot_pulls(constants, fit_params)
     plt.show()
 
 

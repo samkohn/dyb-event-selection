@@ -129,6 +129,7 @@ def _spectrum_ratio_plot(
         ax.tick_params(axis='both', which='major', labelsize=14)
         #ax.text(0.82, 0.95, name, fontsize=12, transform=ax.transAxes,
             #verticalalignment='top')
+        ax.set_ylabel('Number of events', fontsize=16)
         ax.legend(
             fontsize=12,
             loc='upper right',
@@ -150,6 +151,7 @@ def _spectrum_ratio_plot(
         ax.set_ylim(ratio_ylim)
         ax.grid()
         ax.set_xlabel('Prompt energy [MeV]', fontsize=16)
+        ax.set_ylabel('Ratio to no osc.', fontsize=12)
         ax.tick_params(axis='both', which='major', labelsize=14)
     return fig
 
@@ -219,13 +221,13 @@ def plot_data_fit_points(constants, fit_params):
     far_names = [f'EH{hall}\nAD{det}' for hall, det in prediction.far_ads]
     pretend_AD_bins = np.linspace(-0.5, 3.5, 5, endpoint=True)
     fig, ax = plt.subplots()
-    _plot_line_hist(
+    _plot_point_hist(
         ax,
         pretend_AD_bins,
         [far_best_fits[halldet].sum() for halldet in prediction.far_ads],
         label='Best fit',
-        endpoints=False,
         linestyle='--',
+        linewidth=3,
     )
     _plot_point_hist(
         ax,
@@ -233,10 +235,14 @@ def plot_data_fit_points(constants, fit_params):
         [data[halldet].sum() for halldet in prediction.far_ads],
         label='Data',
         yerr=[np.sqrt(data[halldet].sum()) for halldet in prediction.far_ads],
+        linewidth=3,
     )
     ax.xaxis.set_major_locator(mpl.ticker.FixedLocator([0, 1, 2, 3]))
     ax.xaxis.set_major_formatter(mpl.ticker.FixedFormatter(far_names))
     ax.legend(fontsize=12)
+    ax.set_ylabel('Number of events', fontsize=16)
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    ax.grid()
     return fig
 
 
@@ -246,6 +252,7 @@ def plot_pulls(constants, fit_params):
     all_names = [f'EH{hall}\nAD{det}' for hall, det in prediction.all_ads]
     fig, axs_deep = plt.subplots(4, 2)
     axs = axs_deep.flatten()
+    axs[2].set_ylabel('Fractional variation', fontsize=14)
     _plot_pulls(
         axs[1],
         fit_params.pull_accidental,
@@ -322,13 +329,10 @@ def plot_pulls(constants, fit_params):
 
 def main(database, fit_id):
     fit_params, constants, fit_info = fit.load_result(database, fit_id)
-    #fig = plot_prompt_spectrum(constants, fit_params)
-    #plt.show()
-    #fig = plot_subtracted_prompt_spectrum(constants, fit_params)
-    #plt.show()
-    #fig = plot_data_fit_points(constants, fit_params)
-    #plt.show()
-    fig = plot_pulls(constants, fit_params)
+    fig_prompt = plot_prompt_spectrum(constants, fit_params)
+    fig_prompt_sub = plot_subtracted_prompt_spectrum(constants, fit_params)
+    fig_rate_only_data = plot_data_fit_points(constants, fit_params)
+    fig_pulls = plot_pulls(constants, fit_params)
     plt.show()
 
 

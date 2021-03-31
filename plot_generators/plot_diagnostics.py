@@ -8,11 +8,16 @@ from matplotlib import gridspec
 from scipy.ndimage.filters import uniform_filter1d
 import numpy as np
 
+from plot_results import _plot_point_hist
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('database')
     parser.add_argument('--label')
     parser.add_argument('--rates-label')
+    parser.add_argument('--fig-titles', action='store_true',
+        help='Include a title in the figure')
     choices = ('all', 'singles', 'muons', 'delayed-fit',
             'delayed-eff-unc', 'DT-eff', 'acc-DT-eff',
             'singles-within-run')
@@ -22,11 +27,26 @@ if __name__ == '__main__':
     database = args.database
     plot_types = args.types
     plot_all = 'all' in plot_types
-    mpl.rcParams['font.size'] = 18
-    mpl.rcParams['figure.figsize'] = (8, 8)
-    mpl.rcParams['lines.linewidth'] = 3
-    mpl.rcParams['lines.markersize'] = 10
-    mpl.rcParams['errorbar.capsize'] = 5
+    mpl.rcParams['font.size'] = 14
+    mpl.rcParams['figure.figsize'] = (5, 5)
+    mpl.rcParams['lines.linewidth'] = 2
+    mpl.rcParams['lines.markersize'] = 5
+    mpl.rcParams['axes.grid'] = True
+    mpl.rcParams['axes.linewidth'] = 1.5
+    mpl.rcParams['axes.labelsize'] = 14
+    mpl.rcParams['xtick.direction'] = 'in'
+    mpl.rcParams['xtick.top'] = True
+    mpl.rcParams['xtick.major.size'] = 6
+    mpl.rcParams['xtick.major.width'] = 1.5
+    mpl.rcParams['xtick.labelsize'] = 12
+    mpl.rcParams['ytick.direction'] = 'in'
+    mpl.rcParams['ytick.right'] = True
+    mpl.rcParams['ytick.major.size'] = 6
+    mpl.rcParams['ytick.major.width'] = 1.5
+    mpl.rcParams['ytick.labelsize'] = 12
+    mpl.rcParams['legend.frameon'] = True
+    mpl.rcParams['legend.fontsize'] = 12
+    mpl.rcParams['legend.markerscale'] = 2
     wide_fig = (16, 8)
     big_fig = (16, 10)
     colors = mpl.rcParams['axes.prop_cycle'].by_key()['color']
@@ -45,6 +65,24 @@ if __name__ == '__main__':
             in ads]
     near_names = [name(hall, det) for hall, det in near_ads]
     far_names = [name(hall, det) for hall, det in far_ads]
+
+    def plot_ad_points(ax, y, **kwargs):
+        """Plot the specified y values (and yerr if specified).
+
+        Uses the "point histogram" style where the y-error, if any,
+        is a vertical line with no "cap,"
+        and the "x error bar" represents the bin width.
+        """
+        pretend_AD_bins = np.arange(9) - 0.5
+        _plot_point_hist(
+            ax,
+            pretend_AD_bins,
+            y,
+            **kwargs,
+        )
+        ax.xaxis.set_major_locator(mpl.ticker.FixedLocator(np.arange(8)))
+        ax.xaxis.set_major_formatter(mpl.ticker.FixedFormatter(ad_names_2line))
+        return
 
     if plot_all or ('singles' in plot_types):
         print('Retrieving and plotting singles data...')
@@ -75,7 +113,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot(ad_data[:, 0], ad_data[:, 4], '.')
         ax.legend(ad_names, fontsize=12)
-        ax.set_title('All ADs')
+        if args.fig_titles:
+            ax.set_title('All ADs')
         ax.set_xlabel('Run number')
         ax.set_ylabel('Singles rate [Hz]')
         fig.tight_layout()
@@ -86,7 +125,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 4], '.')
         ax.legend(ad_names, fontsize=12)
-        ax.set_title('All ADs')
+        if args.fig_titles:
+            ax.set_title('All ADs')
         ax.set_xlabel('Start time')
         ax.set_ylabel('Singles rate [Hz]')
         fig.tight_layout()
@@ -99,7 +139,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot(ad_data[:, 0], ad_data[:, 4], '.')
         ax.legend(near_names, fontsize=12)
-        ax.set_title('Near halls')
+        if args.fig_titles:
+            ax.set_title('Near halls')
         ax.set_xlabel('Run number')
         ax.set_ylabel('Singles rate [Hz]')
         fig.tight_layout()
@@ -110,7 +151,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 4], '.')
         ax.legend(near_names, fontsize=12)
-        ax.set_title('Near halls')
+        if args.fig_titles:
+            ax.set_title('Near halls')
         ax.set_xlabel('Start time')
         ax.set_ylabel('Singles rate [Hz]')
         fig.tight_layout()
@@ -122,7 +164,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot(ad_data[:, 0], ad_data[:, 4], '.')
         ax.legend(far_names, fontsize=12)
-        ax.set_title('Far hall')
+        if args.fig_titles:
+            ax.set_title('Far hall')
         ax.set_xlabel('Run number')
         ax.set_ylabel('Singles rate [Hz]')
         fig.tight_layout()
@@ -133,7 +176,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 4], '.')
         ax.legend(far_names, fontsize=12)
-        ax.set_title('Far hall')
+        if args.fig_titles:
+            ax.set_title('Far hall')
         ax.set_xlabel('Start time')
         ax.set_ylabel('Singles rate [Hz]')
         fig.tight_layout()
@@ -168,7 +212,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot(ad_data[:, 0], ad_data[:, 4], '.')
         ax.legend(near_names, fontsize=12)
-        ax.set_title('Near halls')
+        if args.fig_titles:
+            ax.set_title('Near halls')
         ax.set_xlabel('Run number')
         ax.set_ylabel('Muon efficiency')
         fig.tight_layout()
@@ -179,7 +224,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 4], '.')
         ax.legend(near_names, fontsize=12)
-        ax.set_title('Near halls')
+        if args.fig_titles:
+            ax.set_title('Near halls')
         ax.set_xlabel('Start time')
         ax.set_ylabel('Muon efficiency')
         fig.tight_layout()
@@ -191,7 +237,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot(ad_data[:, 0], ad_data[:, 4], '.')
         ax.legend(far_names, fontsize=12)
-        ax.set_title('Far hall')
+        if args.fig_titles:
+            ax.set_title('Far hall')
         ax.set_xlabel('Run number')
         ax.set_ylabel('Muon efficiency')
         fig.tight_layout()
@@ -202,7 +249,8 @@ if __name__ == '__main__':
             ad_data = get_ad_data(hall, det, data)
             ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 4], '.')
         ax.legend(far_names, fontsize=12)
-        ax.set_title('Far hall')
+        if args.fig_titles:
+            ax.set_title('Far hall')
         ax.set_xlabel('Start time')
         ax.set_ylabel('Muon efficiency')
         fig.tight_layout()
@@ -232,94 +280,92 @@ if __name__ == '__main__':
 
         # Peak locations
         fig = plt.figure()
-        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1], hspace=0)
         ax1 = plt.subplot(spacing[0])
-        ax1.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
-        ax1.set_title('Delayed energy peak & fit error')
+        plot_ad_points(ax1, data[:, 2], yerr=data[:, 3])
+        if args.fig_titles:
+            ax1.set_title('Delayed energy peak & fit error')
         ax1.set_ylabel('Delayed energy peak value [MeV]')
         plt.setp(ax1.get_xticklabels(), visible=False)
-        ax1.grid()
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 2], weights=data[:4, 3]**(-2))
         rel_deviations = (data[:, 2] - near_hall_avg)/near_hall_avg
         rel_errors = data[:, 3]/near_hall_avg
-        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
-                fmt='.')
+        plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         ax2.set_ylim([-0.007, 0.007])
-        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_peak.pdf')
 
         # Resolution
         fig = plt.figure()
-        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1], hspace=0)
         ax1 = plt.subplot(spacing[0])
-        ax1.errorbar(ad_names_2line, data[:, 4], yerr=data[:, 5], fmt='o')
-        ax1.set_title('Delayed energy "resolution/width" & fit error')
+        plot_ad_points(ax1, data[:, 4], yerr=data[:, 5])
+        if args.fig_titles:
+            ax1.set_title('Delayed energy "resolution/width" & fit error')
         ax1.set_ylabel('Delayed energy peak width [MeV]')
         plt.setp(ax1.get_xticklabels(), visible=False)
-        ax1.grid()
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 4], weights=data[:4, 5]**(-2))
         rel_deviations = (data[:, 4] - near_hall_avg)/near_hall_avg
         rel_errors = data[:, 5]/near_hall_avg
-        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
-                fmt='.')
+        plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         ax2.set_ylim([-0.025, 0.025])
-        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_width.pdf')
 
 
         # Exponential scale
         fig = plt.figure()
-        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1], hspace=0)
         ax1 = plt.subplot(spacing[0])
-        ax1.errorbar(ad_names_2line, data[:, 6], yerr=data[:, 7], fmt='o')
-        ax1.set_title('Delayed energy tail slope & fit error')
+        plot_ad_points(ax1, data[:, 6], yerr=data[:, 7])
+        if args.fig_titles:
+            ax1.set_title('Delayed energy tail slope & fit error')
         ax1.set_ylabel('Delayed energy tail slope [1/MeV]')
         plt.setp(ax1.get_xticklabels(), visible=False)
-        ax1.grid()
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 6], weights=data[:4, 7]**(-2))
         rel_deviations = (data[:, 6] - near_hall_avg)/near_hall_avg
         rel_errors = data[:, 7]/near_hall_avg
-        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
-                fmt='.')
-        ax2.grid()
+        plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         fig.tight_layout()
         fig.savefig('delayed_energy_expo_scale.pdf')
 
         # Peak fraction
         fig = plt.figure()
-        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1])
+        spacing = gridspec.GridSpec(2, 1, height_ratios=[3, 1], hspace=0)
         ax1 = plt.subplot(spacing[0])
-        ax1.errorbar(ad_names_2line, data[:, 8], yerr=data[:, 9], fmt='o')
-        ax1.set_title('Delayed energy peak fraction & fit error')
+        plot_ad_points(ax1, data[:, 8], yerr=data[:, 9])
+        if args.fig_titles:
+            ax1.set_title('Delayed energy peak fraction & fit error')
         ax1.set_ylabel('Delayed energy peak fraction')
         plt.setp(ax1.get_xticklabels(), visible=False)
-        ax1.grid()
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 8], weights=data[:4, 9]**(-2))
         rel_deviations = (data[:, 8] - near_hall_avg)/near_hall_avg
         rel_errors = data[:, 9]/near_hall_avg
-        ax2.errorbar(ad_names_2line, rel_deviations, yerr=rel_errors,
-                fmt='.')
+        plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         ax2.set_ylim([-0.035, 0.035])
-        ax2.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_peak_frac.pdf')
 
         # Upper and lower fit bounds
-        fig, axs = plt.subplots(2, 1, sharex=True, figsize=(9, 6.8))
-        axs[0].errorbar(ad_names_2line, data[:, 2] + 3 * data[:, 4],
-                yerr=np.hypot(data[:, 3], data[:, 5]), fmt='o')
+        fig, axs = plt.subplots(2, 1, sharex=True)
+        plot_ad_points(
+            axs[0],
+            data[:, 2] + 3 * data[:, 4],
+            yerr=np.hypot(data[:, 3], data[:, 5]),
+        )
         axs[0].set_ylabel('Upper bound [MeV]')
-        axs[0].grid()
-        axs[1].errorbar(ad_names_2line, data[:, 2] - 3 * data[:, 4],
-                yerr=np.hypot(data[:, 3], data[:, 5]), fmt='o')
+        axs[0].yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.005))
+        plot_ad_points(
+            axs[1],
+            data[:, 2] - 3 * data[:, 4],
+            yerr=np.hypot(data[:, 3], data[:, 5]),
+        )
         axs[1].set_ylabel('Lower bound [MeV]')
-        axs[1].grid()
+        axs[1].yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.005))
         fig.tight_layout()
         fig.savefig('delayed_energy_bounds.pdf')
 
@@ -345,11 +391,11 @@ if __name__ == '__main__':
             )
             data = np.array(cursor.fetchall())
 
-        fig, ax = plt.subplots(figsize=(9, 5.8))
-        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
-        ax.set_title('Delayed energy efficiency uncertainty')
+        fig, ax = plt.subplots()
+        plot_ad_points(ax, data[:, 2], yerr=data[:, 3])
+        if args.fig_titles:
+            ax.set_title('Delayed energy efficiency uncertainty')
         ax.set_ylabel('Relative deviation from fit model')
-        ax.grid()
         fig.tight_layout()
         fig.savefig('delayed_energy_uncertainty_method1.pdf')
 
@@ -376,12 +422,13 @@ if __name__ == '__main__':
             data = np.array(cursor.fetchall())
 
         fig, ax = plt.subplots()
-        ax.errorbar(ad_names_2line, data[:, 2], yerr=data[:, 3], fmt='o')
-        ax.set_title('Distance-time (DT) cut efficiency')
+        plot_ad_points(ax, data[:, 2], yerr=data[:, 3])
+        if args.fig_titles:
+            ax.set_title('Distance-time (DT) cut efficiency')
         ax.set_ylabel('Efficiency')
-        ax.grid()
+        ax.grid(False, axis='x')
         fig.tight_layout()
-        fig.savefig('distance_time_cut_efficiency_nominal.pdf')
+        fig.savefig('distance_time_cut_efficiency.pdf')
 
         #raise RuntimeError("Double check the Source in DB query below!")
         #with sqlite3.Connection(database) as conn:
@@ -400,7 +447,7 @@ if __name__ == '__main__':
         #fig.tight_layout()
         #fig.savefig('distance_time_cut_efficiency_adtime.pdf')
 
-    if plot_all or ('acc-DT-eff' in plot_types):
+    if 'acc-DT-eff' in plot_types:  # don't count in "all"
         print('Retrieving and plotting accidentals DT efficiency data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()
@@ -499,7 +546,7 @@ if __name__ == '__main__':
         fig.tight_layout()
         fig.savefig('acc_DT_eff_far_bydate.pdf')
 
-    if plot_all or ('singles-within-run' in plot_types):
+    if 'singles-within-run' in plot_types:
         print('Retrieving and plotting accidentals DT efficiency data...')
         with sqlite3.Connection(database) as conn:
             cursor = conn.cursor()

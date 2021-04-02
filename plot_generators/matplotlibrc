@@ -1,0 +1,26 @@
+font.size: 14
+
+figure.figsize: 5, 5
+
+lines.linewidth: 2
+lines.markersize: 5
+
+axes.grid: True
+axes.linewidth: 1.5
+axes.labelsize: 14
+
+xtick.direction: in
+xtick.top: True
+xtick.major.size: 6
+xtick.major.width: 1.5
+xtick.labelsize: 12
+
+ytick.direction: in
+ytick.right: True
+ytick.major.size: 6
+ytick.major.width: 1.5
+ytick.labelsize: 12
+
+legend.frameon: True
+legend.fontsize: 12
+legend.markerscale: 2

@@ -295,58 +295,6 @@ def fit_lsq_frozen(starting_params, constants, frozen_params, near_ads, rate_onl
     else:
         return fit_params
 
-
-def sigma_searcher(fit_params, constants, side='both'):
-    """Find the +/- 1-sigma values given the best fit parameters.
-
-    ``side`` could be 'upper', 'lower', or 'both'
-
-    Returns the value(s) of theta13 at the error boundary/ies in a list
-    of length 1 or 2.
-
-    If side is 'both', the 2 entries are always returned [upper, lower]
-    """
-    best_theta13 = fit_params.theta13
-    best_sin2 = fit_params.sin2_2theta13
-    guess_1sigma_sin2 = 0.0045
-    guess_upper_sin2 = best_sin2 + guess_1sigma_sin2
-    guess_lower_sin2 = best_sin2 - guess_1sigma_sin2
-    guess_upper = 0.5 * np.arcsin(np.sqrt(guess_upper_sin2))
-    guess_lower = 0.5 * np.arcsin(np.sqrt(guess_lower_sin2))
-    near_ads = None
-    min_chi2 = chi_square(constants, fit_params, near_ads=near_ads)
-    to_return = []
-    if side in ('upper', 'both'):
-        result = least_squares(sigma_search_resid, guess_upper,
-                args=(constants, min_chi2), method='trf', xtol=1e-3)
-        upper_limit = result.x[0]
-        to_return.append(upper_limit)
-    if side in ('lower', 'both'):
-        result = least_squares(sigma_search_resid, guess_lower,
-                args=(constants, min_chi2), method='trf', xtol=1e-3)
-        lower_limit = result.x[0]
-        to_return.append(lower_limit)
-    return to_return
-
-def sigma_search_resid(x, constants, min_chi2):
-    """Return the difference between the delta chi-square and 1.
-
-    x is just [theta13_search]
-    """
-    print('Running fit')
-    starting_params = pred.FitParams(
-            x[0],
-            pred.ad_dict(0),
-            pred.ad_dict(0, halls='near'),
-            pred.core_dict(0),
-            pred.ad_dict(0),
-    )
-    fit_result = fit_lsq_frozen(starting_params, constants, range(9), None)
-    chi2 = np.power(fit_result.fun, 2).sum()
-    print(f'Trial chi2 = {chi2:.5f}')
-    return chi2 - min_chi2 - 1
-
-
 def chi_square_grid(starting_params, constants, theta13_values):
     """Return a grid of optimal chi-square values for the given parameter grid.
     """
@@ -795,6 +743,7 @@ if __name__ == "__main__":
                 near_ads=near_ads, rate_only=rate_only, avg_near=args.avg_near,
                 raw_result=True)
         #print(repr(result.x))
+        print('theta13 = ', fit_params.theta13)
         print('sin22theta13 =', fit_params.sin2_2theta13)
         print('dm2_ee = ', fit_params.m2_ee)
         print(f'Num function evals: {result.nfev}')

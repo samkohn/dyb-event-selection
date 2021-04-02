@@ -186,11 +186,12 @@ $\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
     if args.sin2:
         summary_ax.hist(sin2_fits/param_pairs[:, 0] - 1, histtype='step', linewidth=3)
         legend_labels.append(r'$\sin^{2}2\theta_{13}$')
+        print(f'Mean bias: {np.mean(sin2_fits/param_pairs[:, 0] - 1)}')
     if args.dm2:
         summary_ax.hist(dm2_fits/param_pairs[:, 1] - 1, histtype='step', linewidth=3)
         legend_labels.append(r'$\Delta m^{2}_{ee}$')
     summary_ax.legend(legend_labels, fontsize=12)
-    summary_ax.set_xlabel('Relative error from mean of 1000 trials', fontsize=12)
+    summary_ax.set_xlabel(f'Relative bias from mean of {len(data)} trials', fontsize=12)
     summary_ax.set_ylabel('Number of grid points (parameters)', fontsize=12)
     #summary_ax.plot(param_pairs[:, 1], param_pairs[:, 0], '.')
     #summary_ax.errorbar(dm2_fits, sin2_fits, xerr=dm2_errs, yerr=sin2_errs, fmt='none',

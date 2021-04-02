@@ -38,22 +38,36 @@ NUM_MULTIPROCESSING = 64
 #ADTIME_LABEL = "reject_resid_flash_adtime"
 #GENERAL_LABEL = "reject_resid_flash"
 #NUM_COINCS_LABELS = {
-    #"adsimple": "reject resid flashers 2/4/2021",
-    #"adtime": "reject resid flashers adtime 2/4/2021",
+    #"adsimple": "reject resid flashers 3/4/2021",
+    #"adtime": "reject resid flashers adtime 3/4/2021",
 #}
-NOMINAL_LABEL = "nominal correct EMAX"
-ADTIME_LABEL = "adtime correct EMAX"
-GENERAL_LABEL = "allow_resid_flashers correct EMAX"
-NUM_COINCS_LABELS = {
-    "adsimple": "adsimple 2/4/2021",
-    "adtime": "adtime 2/4/2021",
-}
-#NOMINAL_LABEL = "nominal DT < 300mm"
-#ADTIME_LABEL = "adtime DT < 300mm"
+#NOMINAL_LABEL = "nominal correct EMAX"
+#ADTIME_LABEL = "adtime correct EMAX"
 #GENERAL_LABEL = "allow_resid_flashers correct EMAX"
 #NUM_COINCS_LABELS = {
-    #"adsimple": "adsimple DT < 300mm 2/9/2021",
-    #"adtime": "adtime DT < 300mm 2/9/2021",
+    #"adsimple": "adsimple 2/4/2021",
+    #"adtime": "adtime 2/4/2021",
+#}
+#NOMINAL_LABEL = "nominal DT < 300mm"
+#ADTIME_LABEL = "adtime DT < 300mm"
+#GENERAL_LABEL = "reject_resid_flash"
+#NUM_COINCS_LABELS = {
+    #"adsimple": "adsimple DT < 300mm 2/22/2021",
+    #"adtime": "adtime DT < 300mm 2/22/2021",
+#}
+NOMINAL_LABEL = "nominal DT < 1000mm"
+ADTIME_LABEL = "adtime DT < 1000mm"
+GENERAL_LABEL = "reject_resid_flash"
+NUM_COINCS_LABELS = {
+    "adsimple": "adsimple DT < 1000mm 3/15/2021",
+    "adtime": "adtime DT < 1000mm 3/15/2021",
+}
+#NOMINAL_LABEL = "nominal DT < 500mm"
+#ADTIME_LABEL = "adtime DT < 500mm"
+#GENERAL_LABEL = "reject_resid_flash"
+#NUM_COINCS_LABELS = {
+    #"adsimple": "adsimple DT < 500mm 3/15/2021",
+    #"adtime": "adtime DT < 500mm 3/15/2021",
 #}
 
 def time_execution(func):

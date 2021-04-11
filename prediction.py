@@ -1586,11 +1586,9 @@ def backgrounds_per_AD(
                             rad_n_spectrum
                         WHERE
                             Label = ?
-                            AND Hall = ?
-                            AND DetNo = ?
                         ORDER BY BinIndex
                         ''',
-                        (spectra_source, hall, det),
+                        (spectra_source,),
                     )
                     rad_n_data[hall, det] = np.array(cursor.fetchall()).reshape(-1)
                     if len(rad_n_data[hall, det]) == 0:

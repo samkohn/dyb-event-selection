@@ -117,6 +117,14 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
             chi_square += numerator/denominator
             return_array_values[term_index] = numerator/denominator
             term_index += 1
+    if 'rad-n' in constants.nominal_bgs:
+        rad_n_errors = constants.bg_errors['rad-n']
+        for halldet, pull in fit_params.pull_rad_n.items():
+            numerator = pull*pull
+            denominator = rad_n_errors[halldet]**2
+            chi_square += numerator/denominator
+            return_array_values[term_index] = numerator/denominator
+            term_index += 1
     for halldet, pull in fit_params.pull_near_stat.items():
         numerator = pull * pull
         denominator = 1 / constants.observed_candidates[halldet]

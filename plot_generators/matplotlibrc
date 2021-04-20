@@ -5,6 +5,9 @@ figure.figsize: 5, 5
 lines.linewidth: 2
 lines.markersize: 5
 
+# hist plotting uses patch.linewidth
+patch.linewidth: 2
+
 axes.grid: True
 axes.linewidth: 1.5
 axes.labelsize: 14
@@ -22,5 +25,5 @@ ytick.major.width: 1.5
 ytick.labelsize: 12
 
 legend.frameon: True
-legend.fontsize: 12
+legend.fontsize: 8
 legend.markerscale: 2

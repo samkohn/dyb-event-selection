@@ -106,7 +106,7 @@ def hardcode_plot_sam_results(base_dir):
         other_filenames.keys(),
         legend=False,
     )
-    ax.set_xlim([0.0, 0.135])
+    ax.set_xlim([0.0, 0.14])
     ax.set_ylim([0, 50])
     ax.set_xlabel(r'$\sin^22\theta_{13}$')
     ax.set_ylabel(r'$\chi^2$')
@@ -132,31 +132,31 @@ def hardcode_plot_sam_results(base_dir):
         ),
     )
     ax.annotate(
-        xy=(0.094, 50),
+        xy=(0.099, 50),
         text='Stat. only',
         xytext=xytext,
         **annotate_kwargs,
     )
     ax.annotate(
-        xy=(0.0273, 50),
+        xy=(0.031, 50),
         text='Efficiency',
         xytext=xytext,
         **annotate_kwargs,
     )
     ax.annotate(
-        xy=(0.1252, 50),
+        xy=(0.1304, 50),
         text='Corr. bkg.',
         xytext=xytext,
         **annotate_kwargs,
     )
     ax.annotate(
-        xy=(0.001, 50),
+        xy=(0.0067, 50),
         text='All',
         xytext=(0, 21),
         **annotate_kwargs,
     )
     ax.annotate(
-        xy=(0.0036, 50),
+        xy=(0.009, 50),
         text='Other',
         xytext=xytext,
         **annotate_kwargs,

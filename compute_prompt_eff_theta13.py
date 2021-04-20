@@ -213,7 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--multiprocessing', action='store_true')
     args = parser.parse_args()
     if args.multiprocessing:
-        with multiprocessing.Pool(10) as pool:
+        with multiprocessing.Pool(15) as pool:
             pool.starmap(main, [(
                 args.database,
                 args.binning_id,
@@ -226,15 +226,15 @@ if __name__ == '__main__':
                 args.update_db,
             ) for sin2, dm2 in itertools.product(args.sin2_values, args.dm2_values)
             ])
-
-    main(
-        args.database,
-        args.binning_id,
-        args.mc_infile,
-        args.source,
-        args.dm2_values,
-        args.sin2_values,
-        args.no_osc_eff,
-        args.toymc_npy,
-        args.update_db
-    )
+    else:
+        main(
+            args.database,
+            args.binning_id,
+            args.mc_infile,
+            args.source,
+            args.dm2_values,
+            args.sin2_values,
+            args.no_osc_eff,
+            args.toymc_npy,
+            args.update_db
+        )

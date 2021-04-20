@@ -9,7 +9,7 @@ import common
 NORMALIZATION_BIN_LOW = 61  # 3m
 NORMALIZATION_BIN_UP = 200  # 10m
 
-def main(database, sub_file_template, label, new_label, update_db):
+def main(database, sub_file_template, label, new_label, update_db, outfilename):
     import ROOT
     with common.get_db(database) as conn:
         conn.row_factory = sqlite3.Row
@@ -31,6 +31,8 @@ def main(database, sub_file_template, label, new_label, update_db):
         )
         results = cursor.fetchall()
     cut_lookup = {(row['Hall'], row['DetNo']): row for row in results}
+    if outfilename:
+        outfile = ROOT.TFile(outfilename, 'RECREATE')
     rows = []
     for (site, ad), cuts in cut_lookup.items():
         infilename = sub_file_template.format(site=site, ad=ad)
@@ -73,6 +75,12 @@ def main(database, sub_file_template, label, new_label, update_db):
         q = 1 - p
         n = all_integral
         rows.append((site, ad, new_label, efficiency, math.sqrt(p*q/n), None))
+        if outfilename:
+            ed_DT_sub.SetName(f'ed_DT_sub_EH{site}_AD{ad}')
+            ed_DT_sub.SetTitle(f'ed_DT_sub_EH{site}_AD{ad}')
+            ed_DT_sub.SetDirectory(outfile)
+            outfile.Write()
+        infile.Close()
     if update_db:
         with common.get_db(database) as conn:
             cursor = conn.cursor()
@@ -84,6 +92,8 @@ def main(database, sub_file_template, label, new_label, update_db):
                 ''',
                 rows,
             )
+    if outfilename:
+        outfile.Close()
 
 
 
@@ -94,5 +104,7 @@ if __name__ == '__main__':
     parser.add_argument('--label')
     parser.add_argument('--update-db', action='store_true')
     parser.add_argument('--db-new-label')
+    parser.add_argument('-o', '--output')
     args = parser.parse_args()
-    main(args.database, args.sub_template, args.label, args.db_new_label, args.update_db)
+    main(args.database, args.sub_template, args.label, args.db_new_label, args.update_db,
+            args.output)

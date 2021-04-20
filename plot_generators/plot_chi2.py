@@ -69,14 +69,21 @@ def plot_many(
         name = os.path.splitext(os.path.basename(filename))[0]
         other_values[name] = load_file(filename)
     fig, ax = plt.subplots()
-    ax.plot(sin2_values_all, chi2_values_all, 'k', label='Full uncertainties')
-    ax.plot(sin2_values_stat, chi2_values_stat, 'k', label='Stat. only')
+    stat_handle, = ax.plot(sin2_values_stat, chi2_values_stat, 'k', label='Stat. only')
     if other_labels is None:
         other_labels = other_values.keys()
-    for label, (_, sin2, chi2) in zip(other_labels, other_values.values()):
-        ax.plot(sin2, chi2, 'k', linewidth=2, label=label)
+    other_handles = []
+    linestyles = ['--', ':' ,'-.'] * 5
+    for label, (_, sin2, chi2), style in zip(
+        other_labels,
+        other_values.values(),
+        linestyles,
+    ):
+        other_handle, = ax.plot(sin2, chi2, 'k', linestyle=style, linewidth=2, label=label)
+        other_handles.append(other_handle)
+    all_handle, = ax.plot(sin2_values_all, chi2_values_all, 'k', label='Full uncertainties')
     if legend:
-        ax.legend()
+        ax.legend([all_handle, stat_handle] + other_handles)
     ax.grid()
     return fig, ax
 

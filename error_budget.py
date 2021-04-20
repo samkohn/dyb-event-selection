@@ -157,7 +157,6 @@ def main(fit_config_filename, m2_ee, rate_only, avg_near):
     constants = pred.load_constants(fit_config_filename)
     starting_params = pred.FitParams(0.1, m2_ee)
     near_ads = None
-    # Ordinary fit to get best-fit params
     frozen_params = fit.get_frozen_params(['all'], False, 'pulled')
     print('----Performing initial fit----')
     labels = [
@@ -171,6 +170,7 @@ def main(fit_config_filename, m2_ee, rate_only, avg_near):
         'Li9/He8',
         'Fast neutrons',
         'AmC',
+        'Radiogenic neutrons',
         'Input mixing parameters',
     ]
     pulls = set(fit.pull_choices)
@@ -185,6 +185,7 @@ def main(fit_config_filename, m2_ee, rate_only, avg_near):
         fit.get_frozen_params(pulls - {'li9'}, True, 'frozen'),
         fit.get_frozen_params(pulls - {'fast-neutron'}, True, 'frozen'),
         fit.get_frozen_params(pulls - {'amc'}, True, 'frozen'),
+        fit.get_frozen_params(pulls - {'rad-n'}, True, 'frozen'),
         fit.get_frozen_params(pulls - {'theta12', 'm2_21'}, True, 'pulled'),
     ]
     args_list = []
@@ -214,7 +215,7 @@ def main(fit_config_filename, m2_ee, rate_only, avg_near):
         print(found_bounds_list)
     # 1 row per scan: [[lower, upper], [lower, upper], ...]
     shaped_bounds = found_bounds_list.flatten().reshape((-1, 2))
-    np.save('chi2_scan_error_budget_bounds.npy', shaped_bounds)
+    np.save('chi2_scan_error_budget_bounds_w_radn.npy', shaped_bounds)
     all_error_sq = effective_error(*shaped_bounds[0])**2
     stat_error_sq = effective_error(*shaped_bounds[1])**2
     sq_errors = {
@@ -229,6 +230,26 @@ def main(fit_config_filename, m2_ee, rate_only, avg_near):
     }
     pprint(frac_errors)
 
+def get_simple_plus_minus(theta13, lower_bound, upper_bound, verbose=False):
+    """Convert theta13 and the 68% CL bounds into xyz +abc -def for theta13 and sin2."""
+    sin2 = np.sin(2 * theta13)**2
+    sin2_lower = np.sin(2 * lower_bound)**2
+    sin2_upper = np.sin(2 * upper_bound)**2
+    theta13_pm = np.diff([lower_bound, theta13, upper_bound])
+    theta13_pm[0] *= -1
+    sin2_pm = np.diff([sin2_lower, sin2, sin2_upper])
+    sin2_pm[0] *= -1
+    if verbose:
+        print(f'theta13 = {theta13}^{{+{theta13_pm[1]}}}_{{{theta13_pm[0]}}}')
+        print(f'sin2(2theta13) = {sin2}^{{+{sin2_pm[1]}}}_{{{sin2_pm[0]}}}')
+    return {
+        'theta13': theta13,
+        'theta13_pm': theta13_pm.tolist(),
+        'theta13_CL': [lower_bound, upper_bound],
+        'sin2': sin2,
+        'sin2_pm': sin2_pm.tolist(),
+        'sin2_CL': [sin2_lower, sin2_upper],
+    }
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

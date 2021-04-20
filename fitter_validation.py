@@ -367,7 +367,7 @@ def run_validation_on_experiment(label, toyfilename, entry, index, database,
             def freeze(name):
                 if name in ('theta12', 'm2_21'):
                     name = 'pull_' + name
-                    pull_slice = index_map[name]
+                pull_slice = index_map[name]
                 if isinstance(pull_slice, slice):  # range of values
                     indices = list(range(pull_slice.start, pull_slice.stop))
                     frozen_params.extend(indices)

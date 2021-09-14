@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--fig-titles', action='store_true',
         help='Include a title in the figure')
     choices = ('all', 'singles', 'muons', 'delayed-fit',
-            'delayed-eff-unc', 'DT-eff', 'acc-DT-eff',
+            'delayed-eff-unc', 'DT-eff', 'corr-rate', 'acc-DT-eff',
             'singles-within-run')
     parser.add_argument('--types', nargs='+', choices=choices, default='all',
             metavar='PLOT_TYPE', help=f'Choices: {choices}')
@@ -29,6 +29,7 @@ if __name__ == '__main__':
     plot_all = 'all' in plot_types
     wide_fig = (16, 8)
     big_fig = (16, 10)
+    mpl.rc_file('~/dyb-event-selection-dev/plot_generators/matplotlibrc')
     colors = mpl.rcParams['axes.prop_cycle'].by_key()['color']
     dateconv = np.vectorize(datetime.fromtimestamp)
     def get_dates(timestamp_ns_array):
@@ -173,7 +174,8 @@ if __name__ == '__main__':
                     Hall,
                     DetNo,
                     Start_time,
-                    Efficiency
+                    Efficiency,
+                    Rate_Hz
                 FROM
                     muon_rates
                 INNER JOIN
@@ -211,6 +213,30 @@ if __name__ == '__main__':
         fig.tight_layout()
         fig.savefig('muon_eff_near_bydate.pdf')
 
+        fig, ax = plt.subplots()
+        for hall, det in near_ads:
+            ad_data = get_ad_data(hall, det, data)
+            ax.plot(ad_data[:, 0], ad_data[:, 5], '.')
+        ax.legend(near_names, fontsize=12)
+        if args.fig_titles:
+            ax.set_title('Near halls')
+        ax.set_xlabel('Run number')
+        ax.set_ylabel('Effective muon rate [Hz]')
+        fig.tight_layout()
+        fig.savefig('muon_rate_near_byrun.pdf')
+
+        fig, ax = plt.subplots()
+        for hall, det in near_ads:
+            ad_data = get_ad_data(hall, det, data)
+            ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 5], '.')
+        ax.legend(near_names, fontsize=12)
+        if args.fig_titles:
+            ax.set_title('Near halls')
+        ax.set_xlabel('Start time')
+        ax.set_ylabel('Effective muon rate [Hz]')
+        fig.tight_layout()
+        fig.savefig('muon_rate_near_bydate.pdf')
+
         #EH3
         fig, ax = plt.subplots()
         for hall, det in far_ads:
@@ -236,6 +262,31 @@ if __name__ == '__main__':
         fig.tight_layout()
         fig.savefig('muon_eff_far_bydate.pdf')
 
+        fig, ax = plt.subplots()
+        for hall, det in far_ads:
+            ad_data = get_ad_data(hall, det, data)
+            ax.plot(ad_data[:, 0], ad_data[:, 5], '.')
+        ax.legend(far_names, fontsize=12)
+        if args.fig_titles:
+            ax.set_title('Far hall')
+        ax.set_xlabel('Run number')
+        ax.set_ylabel('Effective muon rate [Hz]')
+        fig.tight_layout()
+        fig.savefig('muon_rate_far_byrun.pdf')
+
+        fig, ax = plt.subplots()
+        for hall, det in far_ads:
+            ad_data = get_ad_data(hall, det, data)
+            ax.plot_date(get_dates(ad_data[:, 3]), ad_data[:, 5], '.')
+        ax.legend(far_names, fontsize=12)
+        if args.fig_titles:
+            ax.set_title('Far hall')
+        ax.set_xlabel('Start time')
+        ax.set_ylabel('Effective muon rate [Hz]')
+        fig.tight_layout()
+        fig.savefig('muon_rate_far_bydate.pdf')
+
+    mpl.rcParams['axes.prop_cycle'] = "cycler('color', ['000000'])"
     if plot_all or ('delayed-fit' in plot_types):
         print('Retrieving and plotting delayed energy fit data...')
         with sqlite3.Connection(database) as conn:
@@ -265,7 +316,7 @@ if __name__ == '__main__':
         plot_ad_points(ax1, data[:, 2], yerr=data[:, 3])
         if args.fig_titles:
             ax1.set_title('Delayed energy peak & fit error')
-        ax1.set_ylabel('Delayed energy peak value [MeV]')
+        ax1.set_ylabel('Peak energy [MeV]')
         plt.setp(ax1.get_xticklabels(), visible=False)
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 2], weights=data[:4, 3]**(-2))
@@ -273,6 +324,7 @@ if __name__ == '__main__':
         rel_errors = data[:, 3]/near_hall_avg
         plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         ax2.set_ylim([-0.007, 0.007])
+        ax2.set_ylabel('Peak / near avg.')
         fig.tight_layout()
         fig.savefig('delayed_energy_peak.pdf')
 
@@ -283,7 +335,7 @@ if __name__ == '__main__':
         plot_ad_points(ax1, data[:, 4], yerr=data[:, 5])
         if args.fig_titles:
             ax1.set_title('Delayed energy "resolution/width" & fit error')
-        ax1.set_ylabel('Delayed energy peak width [MeV]')
+        ax1.set_ylabel('Peak width [MeV]')
         plt.setp(ax1.get_xticklabels(), visible=False)
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 4], weights=data[:4, 5]**(-2))
@@ -291,6 +343,7 @@ if __name__ == '__main__':
         rel_errors = data[:, 5]/near_hall_avg
         plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         ax2.set_ylim([-0.025, 0.025])
+        ax2.set_ylabel('Width / near avg.')
         fig.tight_layout()
         fig.savefig('delayed_energy_width.pdf')
 
@@ -302,13 +355,14 @@ if __name__ == '__main__':
         plot_ad_points(ax1, data[:, 6], yerr=data[:, 7])
         if args.fig_titles:
             ax1.set_title('Delayed energy tail slope & fit error')
-        ax1.set_ylabel('Delayed energy tail slope [1/MeV]')
+        ax1.set_ylabel('Tail slope [1/MeV]')
         plt.setp(ax1.get_xticklabels(), visible=False)
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 6], weights=data[:4, 7]**(-2))
         rel_deviations = (data[:, 6] - near_hall_avg)/near_hall_avg
         rel_errors = data[:, 7]/near_hall_avg
         plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
+        ax2.set_ylabel('Slope / near avg.')
         fig.tight_layout()
         fig.savefig('delayed_energy_expo_scale.pdf')
 
@@ -319,7 +373,7 @@ if __name__ == '__main__':
         plot_ad_points(ax1, data[:, 8], yerr=data[:, 9])
         if args.fig_titles:
             ax1.set_title('Delayed energy peak fraction & fit error')
-        ax1.set_ylabel('Delayed energy peak fraction')
+        ax1.set_ylabel('Peak fraction')
         plt.setp(ax1.get_xticklabels(), visible=False)
         ax2 = plt.subplot(spacing[1], sharex=ax1)
         near_hall_avg = np.average(data[:4, 8], weights=data[:4, 9]**(-2))
@@ -327,6 +381,7 @@ if __name__ == '__main__':
         rel_errors = data[:, 9]/near_hall_avg
         plot_ad_points(ax2, rel_deviations, yerr=rel_errors)
         ax2.set_ylim([-0.035, 0.035])
+        ax2.set_ylabel('Fraction / near avg.')
         fig.tight_layout()
         fig.savefig('delayed_energy_peak_frac.pdf')
 
@@ -407,6 +462,7 @@ if __name__ == '__main__':
             ax.set_title('Distance-time (DT) cut efficiency')
         ax.set_ylabel('Efficiency')
         ax.grid(False, axis='x')
+        ax.grid(True, axis='y')
         fig.tight_layout()
         fig.savefig('distance_time_cut_efficiency.pdf')
 
@@ -426,6 +482,34 @@ if __name__ == '__main__':
         #ax.grid()
         #fig.tight_layout()
         #fig.savefig('distance_time_cut_efficiency_adtime.pdf')
+
+    if plot_all or 'corr-rate' in plot_types:
+        print('Retrieving and plotting correlated event rate data...')
+        with sqlite3.Connection(database) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT
+                    RunNo,
+                    Hall,
+                    DetNo,
+                    NumCoincidences
+                FROM
+                    num_coincidences_by_run
+                NATURAL JOIN
+                    runs
+                WHERE
+                    Label = ?
+                ORDER BY
+                    Hall,
+                    DetNo,
+                    RunNo
+                ''',
+                (args.label,)
+            )
+            data = np.array(cursor.fetchall())
+
+        fig, ax = plt.subplots()
+        #TODO
 
     if 'acc-DT-eff' in plot_types:  # don't count in "all"
         print('Retrieving and plotting accidentals DT efficiency data...')

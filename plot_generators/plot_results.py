@@ -103,8 +103,8 @@ def _spectrum_ratio_plot(
     errorbar_labels,
 ):
     fig, axs_deep = plt.subplots(
-        4, 2, gridspec_kw={'height_ratios': [3, 1, 3, 1], 'hspace': 0},
-        sharex=True
+        4, 2, gridspec_kw={'height_ratios': [3, 1, 3, 1], 'hspace': 0, 'wspace': 0},
+        sharex=True, sharey='row'
     )
     axs_flat = axs_deep.T.flatten()
     bin_centers = bin_edges[:-1] + 0.5 * np.diff(bin_edges)
@@ -124,18 +124,29 @@ def _spectrum_ratio_plot(
                 #bin_centers, obs, yerr=err, fmt='_', elinewidth=2, markersize=5,
                 #label=label
             #)
-        ax.set_ylim([0, ax.get_ylim()[1]])
         ax.grid()
         ax.tick_params(axis='both', which='major', labelsize=14)
         #ax.text(0.82, 0.95, name, fontsize=12, transform=ax.transAxes,
             #verticalalignment='top')
-        ax.set_ylabel('Number of events', fontsize=16)
-        ax.legend(
-            fontsize=12,
-            loc='upper right',
-            title=name,
-            title_fontsize=14
-        )
+        if ax_index_main in (0, 2):
+            ax.set_ylim([0, ax.get_ylim()[1]*1.1])
+            ax.set_ylabel('Number of events', fontsize=16)
+        if ax_index_main == 0:
+            ax.legend(
+                fontsize=12,
+                loc='upper right',
+                title=name,
+                title_fontsize=14,
+                frameon=False,
+            )
+        else:
+            ax.legend(
+                [],
+                title=name,
+                title_fontsize=14,
+                loc='upper right',
+                frameon=False,
+            )
         ax = axs_flat[ax_index_ratio]
         denominator = line_hist_dicts[0]
         for line_hist_dict in line_hist_dicts:
@@ -148,10 +159,11 @@ def _spectrum_ratio_plot(
             err = errs[halldet]/denominator[halldet]
             _plot_point_hist(ax, bin_edges, obs, yerr=err, elinewidth=2, label=label)
             #ax.errorbar(bin_centers, obs, yerr=err, fmt='_', elinewidth=2, markersize=5)
-        ax.set_ylim(ratio_ylim)
+        if ax_index_main in (0, 2):
+            ax.set_ylim(ratio_ylim)
+            ax.set_ylabel('Ratio to no osc.', fontsize=12)
         ax.grid()
         ax.set_xlabel('Prompt energy [MeV]', fontsize=16)
-        ax.set_ylabel('Ratio to no osc.', fontsize=12)
         ax.tick_params(axis='both', which='major', labelsize=14)
     return fig
 
@@ -242,7 +254,128 @@ def plot_data_fit_points(constants, fit_params):
     ax.legend(fontsize=12)
     ax.set_ylabel('Number of events', fontsize=16)
     ax.tick_params(axis='both', which='major', labelsize=14)
-    ax.grid()
+    ax.grid(True)
+    return fig
+
+def _other_contrib_labels():
+    """Generate a list of labels for all chi-square return array entries
+    that aren't statistics.
+    """
+    acc = [f'Acc. EH{hall}-AD{det}' for hall, det in common.all_ads]
+    li9 = [f'Li9 EH{hall}' for hall in (1, 2, 3)]
+    fastn = [f'Fast neutrons EH{hall}' for hall in (1, 2, 3)]
+    amc = ['Am-C']
+    radn = [f'Rad. neutrons EH{hall}-AD{det}' for hall, det in common.all_ads]
+    reactor = [f'Reactor power {core}' for core in ['D1', 'D2', 'L1', 'L2', 'L3', 'L4']]
+    efficiency = [f'Efficiency EH{hall}-AD{det}' for hall, det in common.all_ads]
+    rel_escale = [f'Rel. E scale EH{hall}-AD{det}' for hall, det in common.all_ads]
+    osc = [r'$\theta_{12}$', r'$\Delta m^2_{21}$', r'$\Delta m^2_{32}$']
+    return acc + li9 + fastn + amc + radn + reactor + efficiency + rel_escale + osc
+
+#def _stats_contrib_labels(reco_bins):
+    #"""Generate a list of labels for all statistics chi-square return array entries."""
+    #far = [f'EH{hall}-AD{det}' for hall, det in prediction.far_ads]
+    #near = [f'{reco_bins[i]}-{reco_bins[i+1]} MeV, EH{hall}-AD{det}'
+            #for hall, det in prediction.near_ads
+            #for i in range(len(reco_bins) - 1)
+        #]
+    #return far + near
+
+def _far_stats_contrib_labels():
+    """Generate a list of labels for the far hall statistics."""
+    return [f'Data EH{hall}-AD{det}' for hall, det in common.far_ads]
+
+def _near_stats_contrib_labels():
+    """Generate a list of labels for the near hall statistics."""
+    return [f'Near stats EH{hall}-AD{det}' for hall, det in common.near_ads]
+
+def plot_chi2_contrib(constants, fit_params):
+    """Plot each term's contributions to the chi-square,
+    except for the near stat pulls.
+    """
+    rate_only = True
+    avg_near = True
+    contribs = fit.chi_square(
+        constants,
+        fit_params,
+        return_array=True,
+        rate_only=rate_only,
+        avg_near=avg_near,
+    )[:-8]  # hack because there are 8 extra 0's due to no alpha-n
+    far_stat_contribs = contribs[:4]
+    near_stat_contribs_binned = contribs[27 : 27 + 4 * 34]
+    near_stat_contribs_total = np.empty((4,))
+    for i, halldet in enumerate(common.near_ads):
+        near_stat_contribs_total[i] = sum(near_stat_contribs_binned[i*34 : (i+1)*34])
+    other_contribs = np.concatenate((contribs[4:27], contribs[27 + 4 * 34 :]))
+
+    fig, ax = plt.subplots(figsize=(6, 7))
+    ax.invert_yaxis()
+    syst_handle = ax.barh(_other_contrib_labels(), other_contribs, log=True, height=1,
+        linewidth=1, edgecolor='w')
+    near_handle = ax.barh(_near_stats_contrib_labels(), near_stat_contribs_total,
+        log=True, height=1, linewidth=1, edgecolor='w')
+    far_handle = ax.barh(_far_stats_contrib_labels(), far_stat_contribs, log=True,
+        height=1, linewidth=1, edgecolor='w')
+    ax.grid(False)
+    ax.grid(True, axis='x', color='w')
+    ax.tick_params(axis='y', labelsize=6)
+    ax.tick_params(axis='x', labelsize=8)
+    ax.tick_params(axis='y', right=False, left=False)
+    ax.tick_params(axis='x', which='minor', labelbottom=False, length=3, width=1)
+    ax.set_ylim([
+        len(other_contribs)
+        + len(far_stat_contribs)
+        + len(near_stat_contribs_total),
+        -1,
+    ])
+    ax.set_xlim([3e-11, 2e-1])
+    ax.set_xlabel(r'$\delta\chi^2$', fontsize=9)
+    fig.tight_layout()
+    ax.legend(
+        [syst_handle, near_handle, far_handle],
+        ['Systematics', 'Near hall stats', 'Data (Far hall stats)'],
+        frameon=False,
+        loc='upper right',
+        bbox_to_anchor=(1, 0.85),
+    )
+
+    #axs[1].invert_yaxis()
+    #axs[1].barh(_stats_contrib_labels(constants.reco_bins), stat_contribs, log=True,
+        #height=1, linewidth=1, edgecolor='w')
+    #axs[1].grid(False)
+    #axs[1].grid(True, axis='x', color='w')
+    #axs[1].xaxis.set_major_locator(mpl.ticker.LogLocator(base=10, numticks=6))
+    #axs[1].xaxis.set_minor_locator(mpl.ticker.LogLocator(base=10, numticks=18))
+    #axs[1].tick_params(axis='y', labelsize=6)
+    #axs[1].tick_params(axis='x', labelsize=8)
+    #axs[1].tick_params(axis='y', right=False, left=False)
+    #axs[1].tick_params(axis='x', which='minor', labelbottom=False, length=3, width=1)
+    #axs[1].set_ylim([-1, len(stat_contribs) + 1])
+    #for label in axs[1].xaxis.get_ticklabels()[1::2]:
+        #label.set_visible(False)
+    fig.savefig('test_pulls.pdf', bbox_inches='tight')
+    return fig
+
+def plot_near_stat_pulls(constants, fit_params):
+    rate_only = True
+    avg_near = True
+    contribs = fit.chi_square(
+        constants,
+        fit_params,
+        return_array=True,
+        rate_only=rate_only,
+        avg_near=avg_near,
+    )[:-8]  # hack because there are 8 extra 0's due to no alpha-n
+    near_stat_dict = {}
+    labels = [f'EH{hall}-AD{det}' for hall, det in common.near_ads]
+    fig, ax = plt.subplots()
+    for (halldet, near_stat_contrib), label in zip(near_stat_dict.items(), labels):
+        _plot_point_hist(ax, constants.reco_bins, near_stat_contrib, label=label)
+    ax.set_yscale('log')
+    ax.set_xlabel('Prompt energy [MeV]')
+    ax.set_ylabel(r'\delta\chi^2')
+    ax.legend()
     return fig
 
 
@@ -329,10 +462,13 @@ def plot_pulls(constants, fit_params):
 
 def main(database, fit_id):
     fit_params, constants, fit_info = fit.load_result(database, fit_id)
-    fig_prompt = plot_prompt_spectrum(constants, fit_params)
-    fig_prompt_sub = plot_subtracted_prompt_spectrum(constants, fit_params)
+    #fig_prompt = plot_prompt_spectrum(constants, fit_params)
+    #fig_prompt_sub = plot_subtracted_prompt_spectrum(constants, fit_params)
     fig_rate_only_data = plot_data_fit_points(constants, fit_params)
-    fig_pulls = plot_pulls(constants, fit_params)
+    fig_rate_only_data.tight_layout()
+    #fig_pulls = plot_pulls(constants, fit_params)
+    #fig_contribs = plot_chi2_contrib(constants, fit_params)
+    #fig_near_contrib = plot_near_stat_pulls(constants, fit_params)
     plt.show()
 
 

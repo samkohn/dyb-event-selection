@@ -1,23 +1,89 @@
-#for eh in 1 2; do for ad in 1 2; do python plot_hist.py \
-    #double_coincs_EH${eh}_AD${ad}.root double_coincidences --logz --colz \
-    #--rebin2d 5 5; done; done
+module load root
+conda activate dyb
+in_path=$1
+out_path=$2
+echo "Input path: " $in_path
+echo "Output path: " $out_path
+sleep 10
+for eh in 1 2; do for ad in 1 2; do
+    base_path=$in_path/EH${eh}/double_coincidences_ad${ad}
+    infile=$base_path/double_coincs_EH${eh}_AD${ad}.root
+    if [ ! -f $infile ]; then
+        hadd -f $infile $base_path/double_coincs_EH${eh}_AD${ad}*.root
+    fi
+    python plot_hist.py \
+        $infile double_coincidences \
+        --ehad ${eh} ${ad} --logz --colz --rebin2d 5 5 \
+        --xlabel "Prompt energy [MeV]" --ylabel "Delayed energy [MeV]" \
+        -o $out_path/double_coincs_EH${eh}_AD${ad}.pdf
+done; done
 
-#for ad in 1 2 3 4; do python plot_hist.py double_coincs_EH3_AD${ad}.root \
-    #double_coincidences --logz --colz --rebin2d 5 5; done
+for eh in 3; do for ad in 1 2 3 4; do
+    base_path=$in_path/EH${eh}/double_coincidences_ad${ad}
+    infile=$base_path/double_coincs_EH${eh}_AD${ad}.root
+    if [ ! -f $infile ]; then
+        hadd -f $infile $base_path/double_coincs_EH${eh}_AD${ad}*.root
+    fi
+    python plot_hist.py \
+        $infile double_coincidences \
+        --ehad ${eh} ${ad} --logz --colz --rebin2d 5 5 \
+        --xlabel "Prompt energy [MeV]" --ylabel "Delayed energy [MeV]" \
+        -o $out_path/double_coincs_EH${eh}_AD${ad}.pdf
+done; done
 
-for eh in 1 2; do for ad in 1 2; do python plot_hist.py \
-    post_DT_cut_EH${eh}_AD${ad}.root double_coincidences --logz --colz \
-    --rebin2d 5 5; done; done
+for eh in 1 2; do for ad in 1 2; do
+    base_path=$in_path/EH${eh}/post_DT_cut_ad${ad}
+    infile=$base_path/post_DT_cut_EH${eh}_AD${ad}.root
+    if [ ! -f $infile ]; then
+        hadd -f $infile $base_path/post_DT_cut_EH${eh}_AD${ad}*.root
+    fi
+    python plot_hist.py \
+        $infile double_coincidences \
+        --ehad ${eh} ${ad} --logz --colz --rebin2d 5 5 \
+        --xlabel "Prompt energy [MeV]" --ylabel "Delayed energy [MeV]" \
+        -o $out_path/post_DT_cut_EH${eh}_AD${ad}.pdf
+done; done
 
-for ad in 1 2 3 4; do python plot_hist.py post_DT_cut_EH3_AD${ad}.root \
-    double_coincidences --logz --colz --rebin2d 5 5; done
+for eh in 3; do for ad in 1 2 3 4; do
+    base_path=$in_path/EH${eh}/post_DT_cut_ad${ad}
+    infile=$base_path/post_DT_cut_EH${eh}_AD${ad}.root
+    if [ ! -f $infile ]; then
+        hadd -f $infile $base_path/post_DT_cut_EH${eh}_AD${ad}*.root
+    fi
+    python plot_hist.py \
+        $infile double_coincidences \
+        --ehad ${eh} ${ad} --logz --colz --rebin2d 5 5 \
+        --xlabel "Prompt energy [MeV]" --ylabel "Delayed energy [MeV]" \
+        -o $out_path/post_DT_cut_EH${eh}_AD${ad}.pdf
+done; done
 
-#for eh in 1 2; do for ad in 1 2; do python plot_hist.py \
-    #dr_vs_dt_EH${eh}_AD${ad}.root dr_vs_dt --logz --colz --rebin2d 2 1 \
-    #--xrange 0 600 --yrange 0 1.5; done; done
+for eh in 1 2; do for ad in 1 2; do
+    base_path=$in_path/EH${eh}/dr_vs_dt_ad${ad}
+    infile=$base_path/dr_vs_dt_EH${eh}_AD${ad}.root
+    if [ ! -f $infile ]; then
+        hadd -f $infile $base_path/dr_vs_dt_EH${eh}_AD${ad}*.root
+    fi
+    python plot_hist.py \
+        $infile dr_vs_dt \
+        --ehad ${eh} ${ad} --logz --colz --rebin2d 2 1 \
+        --xlabel 'Coincidence time [#mus]' --ylabel 'Coincidence distance [m]' \
+        --xrange 0 600 --yrange 0 1 \
+        -o $out_path/dr_vs_dt_EH${eh}_AD${ad}.pdf
+done; done
 
-#for ad in 1 2 3 4; do python plot_hist.py dr_vs_dt_EH3_AD${ad}.root dr_vs_dt \
-    #--logz --colz --rebin2d 2 1 --xrange 0 600 --yrange 0 1.5; done
+for eh in 3; do for ad in 1 2 3 4; do
+    base_path=$in_path/EH${eh}/dr_vs_dt_ad${ad}
+    infile=$base_path/dr_vs_dt_EH${eh}_AD${ad}.root
+    if [ ! -f $infile ]; then
+        hadd -f $infile $base_path/dr_vs_dt_EH${eh}_AD${ad}*.root
+    fi
+    python plot_hist.py \
+        $infile dr_vs_dt \
+        --ehad ${eh} ${ad} --logz --colz --rebin2d 2 1 \
+        --xlabel 'Coincidence time [#mus]' --ylabel 'Coincidence distance [m]' \
+        --xrange 0 600 --yrange 0 1 \
+        -o $out_path/dr_vs_dt_EH${eh}_AD${ad}.pdf
+done; done
 
 #for eh in 1 2 3
 #do

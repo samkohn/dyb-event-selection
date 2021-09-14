@@ -21,6 +21,10 @@ if __name__ == '__main__':
     parser.add_argument('--ylabel')
     parser.add_argument('--smallxnumbers', action='store_true')
     parser.add_argument('--invert', action='store_true', help='Reciprocal of all bins')
+    parser.add_argument('--mm-to-m-hack', action='store_true',
+        help='Xbins in mm, convert to m')
+    parser.add_argument('--errors', action='store_true',
+        help='If --mm-to-m-hack, also transfer bin errors')
     args = parser.parse_args()
     ROOT.gROOT.SetBatch(True)
 
@@ -45,18 +49,35 @@ if __name__ == '__main__':
                     value = hist.GetBinContent(global_bin)
                     hist.SetBinContent(global_bin, 1/value)
 
+    if args.mm_to_m_hack:
+        xaxis = hist.GetXaxis()
+        nbins = xaxis.GetNbins()
+        xmin = xaxis.GetBinLowEdge(1)
+        xmax = xaxis.GetBinLowEdge(nbins + 1)
+        new_hist = ROOT.TH1F("new_hist", "new_hist", nbins, xmin / 1000, xmax / 1000)
+        for bin_index in range(1, nbins+1):
+            bin_content = hist.GetBinContent(bin_index)
+            new_hist.SetBinContent(bin_index, bin_content)
+        if args.errors:
+            for bin_index in range(1, nbins+1):
+                bin_error = hist.GetBinError(bin_index)
+                new_hist.SetBinError(bin_index, bin_error)
+        hist = new_hist
+
     ROOT.gStyle.SetOptStat(0)
     ROOT.gStyle.SetOptTitle(0)
+    ROOT.gStyle.SetPalette(57)
     hist.SetTitle(args.infilename)
     hist.SetLabelSize(0.05, 'xy')
-    hist.SetLabelSize(0.05, 'z')
+    hist.SetLabelSize(0.03, 'z')
     hist.SetTitleSize(0.05, 'xyz')
     if args.smallxnumbers:
         hist.SetLabelSize(0.035, 'x')
-    #hist.SetTitleOffset(0.95, 'y')
+    hist.SetTitleOffset(1.9, 'y')
+    hist.SetLabelOffset(0.010, 'y')
     canvas = ROOT.TCanvas('c1', 'c1', 800, 800)
-    margin = 0.16
-    canvas.SetRightMargin(margin)
+    margin = 0.18
+    canvas.SetRightMargin(margin/2)
     canvas.SetLeftMargin(margin)
     canvas.SetTopMargin(margin)
     canvas.SetBottomMargin(margin)
@@ -64,6 +85,7 @@ if __name__ == '__main__':
 
     hist.Draw('colz' if args.colz else '')
     text = ROOT.TPaveText(0.58, 0.73, 0.85, 0.82, 'NB NDC')
+    #text = ROOT.TPaveText(0.63, 0.77, 0.87, 0.89, 'NB NDC')
     text.AddText(eh_ad_name)
     text.SetFillColorAlpha(0, 0.5)
     text.Draw()

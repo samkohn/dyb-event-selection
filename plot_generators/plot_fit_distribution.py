@@ -60,9 +60,10 @@ if __name__ == '__main__':
 
     param_pairs = np.unique(results[:, [0, 2]], axis=0)
     fig_index = 1
-    figsize=(18, 12)
+    figsize=(6.25, 7)
     if args.sin2:
-        fig, axs = plt.subplots(6, 6, figsize=figsize, sharey=True)
+        fig, axs = plt.subplots(3, 3, figsize=figsize, sharey=True, sharex=True,
+                gridspec_kw=dict(hspace=0, wspace=0))
         axs_flat = axs.flatten()
         sin2_fig_index = fig_index
         fig_index += 1
@@ -106,22 +107,23 @@ if __name__ == '__main__':
             fit_curve = gaus_model(curve_points, fitparams)
             ax.plot(curve_points, fit_curve)
             if sin2 < 0.08:
-                horiz_pos = 0.98
+                horiz_pos = 0.93
                 horiz_align = 'right'
             else:
-                horiz_pos = 0.02
+                horiz_pos = 0.07
                 horiz_align = 'left'
-            text =  rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.5f}
-Fit $\mu$: {fitparams.mean:.5f} $\pm$ {fitparams.stdev/np.sqrt(len(data[:, 1])):.5f}
-Fit $\sigma$: {fitparams.stdev:.5f}
-$\Delta m^{{2}}_{{ee}}$: {dm2:.2e} eV${{}}^2$
-Sample $\mu$: {data[:, 1].mean():.5f}
-Sample $\sigma$: {data[:, 1].std():.5f}
+            text =  (#rf'''True $\sin^{{2}}2\theta_{{13}}$: {sin2:.5f}
+#True $\Delta m^{{2}}_{{ee}}$: {dm2:.2e} eV${{}}^2$
+#Fit $\mu$: {fitparams.mean:.5f} $\pm$ {fitparams.stdev/np.sqrt(len(data[:, 1])):.5f}
+#Fit $\sigma$: {fitparams.stdev:.5f}
+            rf'''$\mu$: {data[:, 1].mean():.4f}({round(10000*data[:, 1].std()/np.sqrt(len(data[:, 1])))})
+$\sigma$: {data[:, 1].std():.4f}
 '''
+            )
             if args.verbose:
                 print(text)
-            ax.text(horiz_pos, 0.98, text,
-            fontsize=10,
+            ax.text(horiz_pos, 0.93, text,
+            fontsize=9,
             transform=ax.transAxes,
             horizontalalignment=horiz_align,
             verticalalignment='top')
@@ -170,11 +172,11 @@ $\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
         ax_index += 1
     hack_label_coords = (-0.09, 0)
     if args.sin2:
-        axs[-1, 1].set_xlabel(r'Fit $\sin^{2}2\theta_{13}$', fontsize=12)
+        axs[-1, 1].set_xlabel(r'Fit $\sin^{2}2\theta_{13}$')
         plt.figure(sin2_fig_index)
-        plt.tight_layout()
-        axs[2, 0].set_ylabel('Number of fake experiments', fontsize=12)
-        axs[2, 0].yaxis.set_label_coords(*hack_label_coords)
+        #plt.tight_layout()
+        axs[1, 0].set_ylabel('Number of fake experiments')
+        #axs[2, 0].yaxis.set_label_coords(*hack_label_coords)
     if args.dm2:
         axs_m2[-1, 1].set_xlabel(r'Fit $\Delta m^{2}_{ee}$ [$10^{-3}$ eV${}^2$]', fontsize=12)
         plt.figure(m2_fig_index)
@@ -190,7 +192,7 @@ $\sigma$: {fitparams_m2.stdev*1e-3:.3e} eV${{}}^2$
     if args.dm2:
         summary_ax.hist(dm2_fits/param_pairs[:, 1] - 1, histtype='step', linewidth=3)
         legend_labels.append(r'$\Delta m^{2}_{ee}$')
-    summary_ax.legend(legend_labels, fontsize=12)
+    #summary_ax.legend(legend_labels, fontsize=12)
     summary_ax.set_xlabel(f'Relative bias from mean of {len(data)} trials', fontsize=12)
     summary_ax.set_ylabel('Number of grid points (parameters)', fontsize=12)
     #summary_ax.plot(param_pairs[:, 1], param_pairs[:, 0], '.')

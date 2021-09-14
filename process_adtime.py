@@ -425,7 +425,16 @@ class MuonHelper:
         mu_data.GetEntry(self._muon_entry)
 
 
-def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
+def main_loop(
+    clusters,
+    muons,
+    outdata,
+    fill_buf,
+    resid_flashers,
+    resid_fill_buf,
+    debug,
+    limit
+):
     clusters.GetEntry(0)
     muons.GetEntry(0)
     # Start tracking DAQ and veto time after the "phantom muon" veto window
@@ -529,6 +538,19 @@ def main_loop(clusters, muons, outdata, fill_buf, debug, limit):
                     helper.in_coincidence_window = False
                     helper.multiplicity = 0
             clusters_index += 1
+            # Save residual flashers in separate file
+            if 'residual_flasher' in reasons and 'not_adevent' not in reasons:
+                # Check for muon veto
+                muon_helper.load(timestamp)  # can't hurt
+                if not muon_helper.isVetoed_strict():
+                    assign_event(clusters, resid_fill_buf, 0)
+                    assign_value(resid_fill_buf.multiplicity, 1)
+                    assign_value(resid_fill_buf.site, clusters.site)
+                    assign_value(resid_fill_buf.run, clusters.run)
+                    assign_value(resid_fill_buf.fileno, clusters.fileno)
+                    assign_value(resid_fill_buf.dt_cluster_to_prev_ADevent,
+                            clusters.timestamp - helper.last_ADevent_timestamp)
+                    resid_flashers.Fill()
     logging.debug(clusters_index)
     muon_helper.close(limit * 100)
     return tracker
@@ -574,10 +596,24 @@ def main(
     ttree_description = 'AD events by Sam Kohn (git: %s)'
     outdata, fill_buf = create_computed_TTree(ttree_name, outfile,
         ttree_description)
+    flashers_name = 'resid_flashers'
+    flashers_description = 'Residual flashers by Sam Kohn (git: %s)'
+    resid_flashers, resid_fill_buf = create_computed_TTree(
+        flashers_name, outfile, flashers_description,
+    )
 
     if entries == -1:
         entries = in_events.GetEntries()
-    tracker = main_loop(in_events, muons, outdata, fill_buf, debug, entries)
+    tracker = main_loop(
+        in_events,
+        muons,
+        outdata,
+        fill_buf,
+        resid_flashers,
+        resid_fill_buf,
+        debug,
+        entries,
+    )
     outfile.Write()
     outfile.Close()
     events_file.Close()

@@ -33,6 +33,8 @@ class SummaryTable:
     rate_fast_neutron_err: list
     rate_amc: list
     rate_amc_err: list
+    rate_rad_neutron: list
+    rate_rad_neutron_err: list
     rate_ibd: list
     rate_ibd_err: list
     relative_num_target_protons: list
@@ -124,8 +126,9 @@ class SummaryTable:
             'li9': 'li9',
             'fast-neutron': 'fast_neutron',
             'amc': 'amc',
+            'rad-n': 'rad_neutron',
         }
-        for bg_name in ('accidental', 'li9', 'fast-neutron', 'amc'):
+        for bg_name in lookup:
             counts = to_list(
                 {
                     halldet: sum(bg)
@@ -150,6 +153,7 @@ class SummaryTable:
             - values['rate_li9'] * effective_livetime_days
             - values['rate_fast_neutron'] * effective_livetime_days
             - values['rate_amc'] * effective_livetime_days
+            - values['rate_rad_neutron'] * effective_livetime_days
         )
         values['rate_ibd'] = (num_ibd/effective_livetime_days).tolist()
         num_ibd_err = np.sqrt(
@@ -158,6 +162,7 @@ class SummaryTable:
             + np.array(values['rate_li9_err'] * effective_livetime_days)**2
             + np.array(values['rate_fast_neutron_err'] * effective_livetime_days)**2
             + np.array(values['rate_amc_err'] * effective_livetime_days)**2
+            + np.array(values['rate_rad_neutron_err'] * effective_livetime_days)**2
         )
         values['rate_ibd_err'] = (num_ibd_err/effective_livetime_days).tolist()
         values['relative_num_target_protons'] = (
@@ -202,6 +207,8 @@ class SummaryTable:
         rate_table.append(self.rate_fast_neutron_err)
         rate_table.append(self.rate_amc)
         rate_table.append(self.rate_amc_err)
+        rate_table.append(self.rate_rad_neutron)
+        rate_table.append(self.rate_rad_neutron_err)
         rate_table.append(self.rate_ibd)
         rate_table.append(self.rate_ibd_err)
         rate_table.append(self.relative_num_target_protons)
@@ -223,7 +230,7 @@ class SummaryTable:
     def to_latex(self):
         def create_ad_columns(name, str_vals, prefix=' '*8):
             line = '&'.join(str_vals)
-            return prefix + name + '& ' + line + r' \\' + '\n\\hline\n'
+            return prefix + name + '& ' + line + r' \\' + '\n\\midrule\n'
         def add_errors(val_strs, err_strs):
             return [
                 '$' + val_str + r' \pm ' + err_str + '$'
@@ -242,10 +249,11 @@ class SummaryTable:
         per-mode=reciprocal
     }
     \begin{tabular}[t]{rrrrrrrrr}  % 1 label and 8 ADs
-        \hline
+        \toprule
         & \multicolumn{2}{c}{EH1}
         & \multicolumn{2}{c}{EH2}
-        & \multicolumn{4}{c}{EH3} \\''' + '\n'
+        & \multicolumn{4}{c}{EH3} \\
+        \cmidrule(l){2-3} \cmidrule(l){4-5} \cmidrule(l){6-9}''' + '\n'
         ]
         ad_names = [f'EH{hall}-AD{det}' for hall, det in prediction.all_ads]
         to_return_parts.append(create_ad_columns('', ad_names))
@@ -322,6 +330,13 @@ class SummaryTable:
             ),
         ))
         to_return_parts.append(create_ad_columns(
+            r'$R_{\text{RadN}}$ [\si{\per\day}]',
+            add_errors(
+                map_str_n_decimals(self.rate_rad_neutron, 2),
+                map_str_n_decimals(self.rate_rad_neutron_err, 2),
+            ),
+        ))
+        to_return_parts.append(create_ad_columns(
             r'$R_{\text{IBD}}$ [\si{\per\day}]',
             add_errors(
                 map_str_n_decimals(self.rate_ibd, 2),
@@ -334,21 +349,21 @@ class SummaryTable:
         def efficiency_row(name, uncertainty):
             label = '    ' + name + ' & '
             unc = f'{uncertainty*100:.2f}'
-            return label + unc + r'\\' + '\n'
+            return label + unc + r'\tabularnewline' + '\n'
         to_return_parts.append(
-            r'''\begin{table}[ht]
-    \caption{Caption goes here}
-    \label{tab:label_goes_here2}
-    \centering
-    \begin{tabular}[t]{rr}
-        \hline
-        & Uncertainty (\%) \\
-        \hline''' + '\n'
+            r'''\ctable[
+            cap = short caption,
+            caption = caption,
+            pos = ht
+            ]{rS}{
+                \tnote[a]{
+                    Prompt energy cut eff. was treated as an effect of the
+                    relative energy scale uncertainty,
+                    so was not included in the total AD-uncorrelated uncertainty.
+                }
+            }{\FL
+                & {Uncertainty (\%)} \ML''' + '\n'
         )
-        to_return_parts.append(efficiency_row(
-            'Relative energy scale uncertainty',
-            self.rel_escale_uncertainty,
-        ))
         to_return_parts.append(efficiency_row(
             'Prompt energy cut eff.',
             self.prompt_energy_efficiency_err,
@@ -361,21 +376,16 @@ class SummaryTable:
             'Distance-time (DT) cut eff.',
             self.distance_time_cut_efficiency_err,
         ))
-        to_return_parts.append(r'\hline' + '\n')
-        to_return_parts.append(efficiency_row(
-            'Combined cut eff.',
-            self.combined_efficiency_err,
-        ))
         to_return_parts.append(efficiency_row(
             'Target proton number',
             self.num_target_protons_err,
         ))
-        to_return_parts.append(r'\hline' + '\n')
+        to_return_parts.append(r'\addlinespace' + '\n')
         to_return_parts.append(efficiency_row(
-            'Total AD-uncorrelated uncertainty',
+            'Combined cut eff.',
             self.combined_ad_uncorr_err,
         ))
-        to_return_parts.append('    \\end{tabular}\n\\end{table}')
+        to_return_parts.append(r'\tabularnewline\bottomrule}')
         return ''.join(to_return_parts)
 
 

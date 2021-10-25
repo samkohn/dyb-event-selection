@@ -605,7 +605,9 @@ def load_constants(config_file, json_str=False):
 
     cross_sec = cross_section(database)
 
-    rel_escale_params = rel_escale_parameters(database, config.rel_escale_source)
+    rel_escale_params = rel_escale_parameters(
+        database, config.rel_escale_source, config.binning_id
+    )
 
     input_osc_params = default_osc_params
 
@@ -761,7 +763,7 @@ def distance_time_efficiency(database, source):
         result = np.array(cursor.fetchall()).reshape(-1)
     return dict(zip(all_ads, result))
 
-def rel_escale_parameters(database, source):
+def rel_escale_parameters(database, source, binning_id):
     """Load the shape distortion parameters for the relative energy scale.
 
     Return a dict keyed by hall
@@ -784,7 +786,7 @@ def rel_escale_parameters(database, source):
                 FROM
                     rel_energy_scale_shape
                 WHERE
-                        BinningId = 1
+                        BinningId = ?
                     AND
                         Hall = ?
                     AND
@@ -792,7 +794,7 @@ def rel_escale_parameters(database, source):
                 ORDER BY
                     BinIndex
                 ''',
-                (hall, source)
+                (binning_id, hall, source)
             )
             params = np.array(cursor.fetchall())
             result[hall] = params[:, :2]/params[:, 2:]  # divide by last column

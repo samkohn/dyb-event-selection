@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 
 import common
 from prediction import all_ads, near_ads, far_ads
@@ -12,6 +13,55 @@ def dump_to_db(database, rows):
         cursor.executemany('''INSERT OR REPLACE INTO num_coincidences
             VALUES (?, ?, ?, ?, ?)''', rows)
             #(hall, det, json.dumps(num_ibds_binned), json.dumps(binning), source))
+
+def create_db(database_name):
+    """Create a new database from scratch with the standard tables."""
+    # for BinningId = 0, aka nominal nGd bins (0.7, 1, 1.2, 1.4, ..., 7.8, 8, 12) MeV
+    bin_edges_keV = [700]
+    for edge in range(1000, 8001, 200):
+        bin_edges_keV.append(edge)
+    bin_edges_keV.append(12000)
+    rows = []
+    for i, edge in enumerate(bin_edges_keV):
+        rows.append((0, "nGd default (LBNL)", i, edge))
+    with common.get_db(database_name) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE
+                reco_binnings (
+                    Id INTEGER NOT NULL,
+                    Name TEXT,
+                    BinEdgeIndex INTEGER NOT NULL,
+                    BinEdgeEnergy_keV INTEGER,
+                    PRIMARY KEY(Id, BinEdgeIndex)
+                )
+            """
+        )
+        cursor.executemany("""
+            INSERT OR REPLACE
+            INTO
+                reco_binnings
+            VALUES
+                (?, ?, ?, ?)
+            """,
+            rows
+        )
+        cursor.execute("""
+            CREATE TABLE
+                num_coincidences (
+                    Hall INTEGER NOT NULL,
+                    DetNo INTEGER NOT NULL,
+                    BinningId INTEGER NOT NULL,
+                    NumCoincidences_binned TEXT,
+                    Source TEXT NOT NULL,
+                    PRIMARY KEY(Hall, DetNo, BinningId, Source),
+                    FOREIGN KEY(BinningId)
+                        REFERENCES reco_binnings(Id)
+                )
+            """
+        )
+    return
+
 
 def multiple(infilename, entries, update_db, sources, binning_type, nominal_near,
         nominal_far, stage_label):
@@ -163,7 +213,13 @@ if __name__ == '__main__':
     parser.add_argument('--nominal-near', action='store_true')
     parser.add_argument('--nominal-far', action='store_true')
     parser.add_argument('--stage', choices=('6ad', '7ad', '8ad'))
+    parser.add_argument('--create-db', action='store_true')
     args = parser.parse_args()
+
+    if args.create_db:
+        print(f"Creating new db at location \"{args.toy_output}\"")
+        create_db(args.toy_output)
+        sys.exit(0)
 
     rows = main(args.toy_output, args.entry_number, args.update_db, args.source, args.binning,
             args.nominal_near, args.nominal_far, args.stage)

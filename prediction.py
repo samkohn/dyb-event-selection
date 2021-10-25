@@ -456,10 +456,13 @@ def load_constants(config_file, json_str=False):
                     ad_period.name]
 
     livetimes_by_week = livetime_by_week(database, time_bins)
-    daq_livetimes = dict(zip(all_ads, compute_dataset_summary.daq_livetime_s(
-        database if not isinstance(config.muon_eff, str) else config.muon_eff,
-        config.muon_eff_label,
-    )))
+    if config.muon_eff_label is None:
+        daq_livetimes = ad_dict(None)
+    else:
+        daq_livetimes = dict(zip(all_ads, compute_dataset_summary.daq_livetime_s(
+            database if not isinstance(config.muon_eff, str) else config.muon_eff,
+            config.muon_eff_label,
+        )))
     rebin_matrix = generate_bin_averaging_matrix(
             np.concatenate((true_bins_spectrum, [12])),
             true_bins_response

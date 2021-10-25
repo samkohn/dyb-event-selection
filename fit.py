@@ -164,12 +164,13 @@ def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=
     chi_square += numerator/denominator
     return_array_values[term_index] = numerator/denominator
     term_index += 1
-    m2_ee_error = constants.m2_ee_err
-    numerator = fit_params.pull_m2_ee**2
-    denominator = m2_ee_error**2
-    chi_square += numerator/denominator
-    return_array_values[term_index] = numerator/denominator
-    term_index += 1
+    if rate_only:
+        m2_ee_error = constants.m2_ee_err
+        numerator = fit_params.pull_m2_ee**2
+        denominator = m2_ee_error**2
+        chi_square += numerator/denominator
+        return_array_values[term_index] = numerator/denominator
+        term_index += 1
     if return_array:
         return return_array_values
     else:

@@ -421,22 +421,24 @@ def load_constants(config_file, json_str=False):
             config_dict = json.load(f)
     config = Config(**config_dict)
     database = config.database
-    ad_period = ad_periods[config.period]
     source_det_resp = config.det_response_source
     matrix, true_bins_response, reco_bins_response = true_to_reco_energy_matrix(
             database, source_det_resp
     )
-    # total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
-            # database, slice(ad_period.start_week, ad_period.end_week+1)
-    # )
-    # Sum over all periods TODO
-    total_emitted_by_AD = defaultdict(int)
-    for period in ad_periods.values():
-        total_emitted_for_period, true_bins_spectrum = total_emitted_shortcut(
-            database, period.name
+    if config.period == "all":
+        # Sum over all periods TODO
+        total_emitted_by_AD = defaultdict(int)
+        for period in ad_periods.values():
+            total_emitted_for_period, true_bins_spectrum = total_emitted_shortcut(
+                database, period.name
+            )
+            for halldetcore, spec in total_emitted_for_period.items():
+                total_emitted_by_AD[halldetcore] += spec
+    else:
+        ad_period = ad_periods[config.period]
+        total_emitted_by_AD, true_bins_spectrum, total_emitted_by_week_AD = total_emitted(
+                database, slice(ad_period.start_week, ad_period.end_week+1)
         )
-        for halldetcore, spec in total_emitted_for_period.items():
-            total_emitted_by_AD[halldetcore] += spec
     _, time_bins, _ = reactor_spectrum(database, 1)
     # LBNL comparison removes the AD-to-AD livetime dependence from the reactor flux
     if config.lbnl_comparison:

@@ -8,8 +8,8 @@ import sys
 import numpy as np
 from scipy.optimize import least_squares
 
-import common
-import prediction as pred
+from dyb_analysis import common
+import dyb_analysis.fitter.prediction as pred
 
 def chi_square(constants, fit_params, return_array=False, debug=False, near_ads=None,
         rate_only=False, avg_near=False, variant='poisson'):

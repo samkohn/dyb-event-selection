@@ -6,10 +6,10 @@ import json
 
 import numpy as np
 
-import common
-import compute_dataset_summary
-import compute_acc_summary
-import prediction
+from dyb_analysis import common
+from dyb_analysis.event_selection import compute_dataset_summary
+from dyb_analysis.accidentals import compute_acc_summary
+from dyb_analysis.fitter import prediction
 
 
 @dataclass

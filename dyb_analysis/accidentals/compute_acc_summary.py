@@ -4,8 +4,8 @@ import json
 
 import numpy as np
 
-import common
-import compute_dataset_summary as summary
+from dyb_analysis import common
+import dyb_analysis.event_selection.compute_dataset_summary as summary
 
 ERROR_COEFFICIENT = 1.1
 

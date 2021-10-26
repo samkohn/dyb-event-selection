@@ -1,7 +1,7 @@
 """Compute total dataset muon and multiplicity efficiencies and livetime."""
 import numpy as np
 
-import common
+from dyb_analysis import common
 
 def daq_livetime_s(database, label):
     """Return an array of DAQ livetimes ordered from EH1-AD1 to EH3-AD4."""

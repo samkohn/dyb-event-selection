@@ -17,8 +17,8 @@ from typing import Any, ClassVar
 import numpy as np
 import scipy.interpolate
 
-import common
-import compute_dataset_summary
+from dyb_analysis import common
+from dyb_analysis.event_selection import compute_dataset_summary
 
 @dataclass
 class InputOscParams:

@@ -11,3 +11,4 @@ __*__
 *.prog
 *.db
 *.json_*
+*.egg-info
